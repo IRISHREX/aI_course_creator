@@ -14,7 +14,107 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      topic_progress: {
+        Row: {
+          attempts: number
+          best_quiz_score: number
+          id: string
+          passed: boolean
+          topic_id: string
+          updated_at: string
+          user_id: string
+          viewed: boolean
+        }
+        Insert: {
+          attempts?: number
+          best_quiz_score?: number
+          id?: string
+          passed?: boolean
+          topic_id: string
+          updated_at?: string
+          user_id: string
+          viewed?: boolean
+        }
+        Update: {
+          attempts?: number
+          best_quiz_score?: number
+          id?: string
+          passed?: boolean
+          topic_id?: string
+          updated_at?: string
+          user_id?: string
+          viewed?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_progress_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topics: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          order_index: number
+          quiz: Json
+          slug: string
+          summary: string
+          title: string
+          unit: number
+          updated_at: string
+          visualization: string | null
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          id?: string
+          order_index: number
+          quiz?: Json
+          slug: string
+          summary: string
+          title: string
+          unit: number
+          updated_at?: string
+          visualization?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          order_index?: number
+          quiz?: Json
+          slug?: string
+          summary?: string
+          title?: string
+          unit?: number
+          updated_at?: string
+          visualization?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
