@@ -28,7 +28,7 @@ export const useTopics = () => {
   useEffect(() => {
     let active = true;
     supabase.from("topics").select("*").order("unit").order("order_index").then(({ data }) => {
-      if (active) { setTopics((data as Topic[]) ?? []); setLoading(false); }
+      if (active) { setTopics(((data as unknown) as Topic[]) ?? []); setLoading(false); }
     });
     return () => { active = false; };
   }, []);
