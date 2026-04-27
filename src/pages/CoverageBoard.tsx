@@ -1,11 +1,15 @@
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useTopics, useProgress } from "@/hooks/useTopics";
+import { useCourseBySlug } from "@/hooks/useCourses";
 import { useAuth } from "@/hooks/useAuth";
-import { CheckCircle2, Circle, BarChart3 } from "lucide-react";
+import { CheckCircle2, Circle, BarChart3, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 export default function CoverageBoard() {
-  const { topics } = useTopics();
+  const { courseSlug } = useParams();
+  const { course } = useCourseBySlug(courseSlug);
+  const { topics } = useTopics(course?.id);
   const { progress } = useProgress();
   const { user } = useAuth();
 
@@ -16,10 +20,12 @@ export default function CoverageBoard() {
 
   return (
     <div className="container py-12">
+      <Button asChild variant="ghost" size="sm" className="mb-4">
+        <Link to={`/course/${courseSlug}`}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
+      </Button>
       <h1 className="font-display text-4xl md:text-5xl font-bold">Coverage <span className="text-gradient">Board</span></h1>
-      <p className="text-muted-foreground mt-2">Track every topic you've viewed and passed.</p>
+      <p className="text-muted-foreground mt-2">{course?.title} — track every topic.</p>
 
-      {/* Stats */}
       <div className="grid md:grid-cols-3 gap-4 mt-8">
         <div className="glass rounded-2xl p-6">
           <div className="text-xs font-mono text-muted-foreground">TOPICS PASSED</div>
@@ -44,7 +50,6 @@ export default function CoverageBoard() {
         </div>
       )}
 
-      {/* Table */}
       <div className="mt-10 glass rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted/30 text-xs font-mono text-muted-foreground uppercase">
@@ -64,7 +69,7 @@ export default function CoverageBoard() {
                     : <span className="inline-flex items-center gap-1 text-muted-foreground"><Circle className="h-4 w-4" /> Locked</span>}
                   </td>
                   <td className="p-4 font-mono">{p ? `${p.best_quiz_score}%` : "—"}</td>
-                  <td className="p-4 text-right"><Link to={`/topic/${t.slug}`} className="text-primary text-xs">Open →</Link></td>
+                  <td className="p-4 text-right"><Link to={`/course/${courseSlug}/topic/${t.slug}`} className="text-primary text-xs">Open →</Link></td>
                 </tr>
               );
             })}

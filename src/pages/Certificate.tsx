@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTopics, useProgress } from "@/hooks/useTopics";
+import { useCourseBySlug } from "@/hooks/useCourses";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Award, Download, Lock } from "lucide-react";
+import { Award, Download, Lock, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Certificate() {
+  const { courseSlug } = useParams();
+  const { course } = useCourseBySlug(courseSlug);
   const { user } = useAuth();
-  const { topics } = useTopics();
+  const { topics } = useTopics(course?.id);
   const { progress } = useProgress();
   const [name, setName] = useState("");
   const [editing, setEditing] = useState(false);
@@ -35,11 +38,10 @@ export default function Certificate() {
 
   const downloadPNG = async () => {
     if (!certRef.current) return;
-    // dynamic import to avoid bundling if unused
     const html2canvas = (await import("html2canvas")).default;
     const canvas = await html2canvas(certRef.current, { backgroundColor: "#0a0c1a", scale: 2 });
     const link = document.createElement("a");
-    link.download = `signal-mobile-computing-certificate-${Date.now()}.png`;
+    link.download = `${courseSlug}-certificate-${Date.now()}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
@@ -54,6 +56,9 @@ export default function Certificate() {
 
   return (
     <div className="container max-w-4xl py-12">
+      <Button asChild variant="ghost" size="sm" className="mb-4">
+        <Link to={`/course/${courseSlug}`}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
+      </Button>
       <h1 className="font-display text-4xl font-bold mb-2">Your <span className="text-gradient">Certificate</span></h1>
       <p className="text-muted-foreground mb-8">{allPassed ? "Congratulations — every topic passed." : `Pass all topics to unlock (${passed}/${total} done).`}</p>
 
@@ -70,12 +75,10 @@ export default function Certificate() {
         </Button>
       </div>
 
-      {/* Certificate canvas */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <div ref={certRef} className={`relative aspect-[1.4/1] rounded-3xl p-10 md:p-14 overflow-hidden border-2 ${allPassed ? "border-primary shadow-glow" : "border-border opacity-60"}`}
           style={{ background: "linear-gradient(135deg, hsl(232 40% 8%) 0%, hsl(270 30% 12%) 100%)" }}>
           <div className="absolute inset-0 grid-bg opacity-30" />
-          {/* corner ornaments */}
           <div className="absolute top-6 left-6 h-12 w-12 border-t-2 border-l-2 border-primary rounded-tl-2xl" />
           <div className="absolute top-6 right-6 h-12 w-12 border-t-2 border-r-2 border-primary rounded-tr-2xl" />
           <div className="absolute bottom-6 left-6 h-12 w-12 border-b-2 border-l-2 border-primary rounded-bl-2xl" />
@@ -90,8 +93,8 @@ export default function Certificate() {
             <div className="text-xs text-muted-foreground mt-4">This certifies that</div>
             <div className="font-display text-3xl md:text-5xl font-bold text-gradient mt-2">{name || "Your Name"}</div>
             <div className="text-xs text-muted-foreground mt-4 max-w-md">has successfully completed the interactive course</div>
-            <div className="font-display text-xl md:text-2xl font-semibold mt-2">Mobile Computing — Foundations to 5G</div>
-            <div className="text-xs text-muted-foreground mt-6">covering {total} topics across 5 units · {passed}/{total} passed</div>
+            <div className="font-display text-xl md:text-2xl font-semibold mt-2">{course?.title || "Course"}</div>
+            <div className="text-xs text-muted-foreground mt-6">covering {total} topics · {passed}/{total} passed</div>
             <div className="mt-8 flex gap-10 text-xs font-mono text-muted-foreground">
               <div>
                 <div className="text-foreground">{new Date().toLocaleDateString()}</div>
@@ -108,7 +111,7 @@ export default function Certificate() {
 
       {!allPassed && (
         <div className="mt-6 glass rounded-xl p-4 text-sm">
-          <strong className="text-warning">Locked:</strong> pass quizzes for {total - passed} more topic(s) to unlock the download.
+          <strong className="text-warning">Locked:</strong> pass quizzes for {total - passed} more topic(s) to unlock.
         </div>
       )}
     </div>

@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useAdmin";
 import type { Topic } from "@/hooks/useTopics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, FileText, Save, Sparkles } from "lucide-react";
+import { ArrowLeft, FileText, Lock, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export default function TopicEdit() {
-  const { slug } = useParams();
+  const { courseSlug, slug } = useParams();
   const nav = useNavigate();
-  const { user } = useAuth();
+  const { isAdmin, loading: aLoad } = useIsAdmin();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [contentJson, setContentJson] = useState("");
   const [quizJson, setQuizJson] = useState("");
@@ -30,10 +30,13 @@ export default function TopicEdit() {
     });
   }, [slug]);
 
-  if (!user) return (
+  if (aLoad) return <div className="container py-20 text-muted-foreground">Loading…</div>;
+  if (!isAdmin) return (
     <div className="container max-w-md py-20 text-center">
-      <p className="text-muted-foreground">Sign in to edit lessons.</p>
-      <Button asChild variant="hero" className="mt-4"><Link to="/auth">Sign in</Link></Button>
+      <Lock className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+      <h1 className="font-display text-2xl font-bold">Admins only</h1>
+      <p className="text-muted-foreground mt-2">Only administrators can edit lessons.</p>
+      <Button asChild variant="hero" className="mt-4"><Link to={`/course/${courseSlug}/topic/${slug}`}>Back</Link></Button>
     </div>
   );
   if (!topic) return <div className="container py-20 text-muted-foreground">Loading…</div>;
@@ -48,7 +51,7 @@ export default function TopicEdit() {
       }).eq("id", topic.id);
       if (error) throw error;
       toast.success("Lesson saved");
-      nav(`/topic/${topic.slug}`);
+      nav(`/course/${courseSlug}/topic/${topic.slug}`);
     } catch (e: any) {
       toast.error(e.message || "Save failed — check JSON syntax");
     } finally { setSaving(false); }
@@ -66,14 +69,14 @@ export default function TopicEdit() {
         toast.success("Imported and structured by AI");
       }
     } catch (e: any) {
-      toast.error(e.message || "Import failed. Make sure the doc is shared as 'Anyone with the link'.");
+      toast.error(e.message || "Import failed");
     } finally { setImporting(false); }
   };
 
   return (
     <div className="container max-w-4xl py-10">
       <Button asChild variant="ghost" size="sm" className="mb-4">
-        <Link to={`/topic/${topic.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to lesson</Link>
+        <Link to={`/course/${courseSlug}/topic/${topic.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to lesson</Link>
       </Button>
 
       <h1 className="font-display text-3xl font-bold mb-6">Edit Lesson</h1>
@@ -88,10 +91,9 @@ export default function TopicEdit() {
           <Textarea rows={2} value={topic.summary} onChange={e => setTopic({ ...topic, summary: e.target.value })} />
         </div>
 
-        {/* Google Docs import */}
         <div className="glass rounded-2xl p-5">
           <div className="font-display font-bold text-lg flex items-center gap-2 mb-1"><FileText className="h-5 w-5 text-primary" /> Import from Google Docs</div>
-          <p className="text-xs text-muted-foreground mb-3">Paste a public Google Docs link. AI will fetch and structure it into lesson content.</p>
+          <p className="text-xs text-muted-foreground mb-3">Paste a public Google Docs link. AI will fetch and structure it.</p>
           <div className="flex gap-2">
             <Input placeholder="https://docs.google.com/document/d/..." value={docsUrl} onChange={e => setDocsUrl(e.target.value)} />
             <Button onClick={importDoc} variant="neon" disabled={importing}>

@@ -9,8 +9,9 @@ import { Check, X, Trophy, RotateCw, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 export default function QuizPage() {
-  const { slug } = useParams();
+  const { courseSlug, slug } = useParams();
   const nav = useNavigate();
+  const linkPrefix = `/course/${courseSlug}`;
   const { user } = useAuth();
   const { recordQuiz } = useProgress();
   const [topic, setTopic] = useState<Topic | null>(null);
@@ -70,10 +71,10 @@ export default function QuizPage() {
           <p className="text-muted-foreground mt-2">{correctCount} of {total} correct</p>
           <div className="flex gap-3 justify-center mt-8">
             <Button variant="neon" onClick={reset}><RotateCw className="h-4 w-4 mr-1" /> Retry</Button>
-            <Button asChild variant="hero"><Link to="/map">Continue <ArrowRight className="h-4 w-4 ml-1" /></Link></Button>
+            <Button asChild variant="hero"><Link to={linkPrefix}>Continue <ArrowRight className="h-4 w-4 ml-1" /></Link></Button>
           </div>
           {result.passed && (
-            <Button asChild variant="ghost" className="mt-3"><Link to="/certificate">Check certificate progress</Link></Button>
+            <Button asChild variant="ghost" className="mt-3"><Link to={`${linkPrefix}/certificate`}>Check certificate progress</Link></Button>
           )}
         </motion.div>
       </div>

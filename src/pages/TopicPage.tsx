@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useAdmin";
 import { useProgress, type Topic } from "@/hooks/useTopics";
+import { useCourseBySlug } from "@/hooks/useCourses";
 import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain } from "lucide-react";
@@ -10,18 +12,20 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 
 export default function TopicPage() {
-  const { slug } = useParams();
+  const { courseSlug, slug } = useParams();
   const nav = useNavigate();
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
+  const { course } = useCourseBySlug(courseSlug);
   const { progress, markViewed } = useProgress();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [neighbors, setNeighbors] = useState<{ prev?: Topic; next?: Topic }>({});
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!slug || !course?.id) return;
     (async () => {
-      const { data: all } = await supabase.from("topics").select("*").order("unit").order("order_index");
+      const { data: all } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
       const list = (all as any as Topic[]) ?? [];
       const idx = list.findIndex(t => t.slug === slug);
       if (idx >= 0) {
@@ -29,7 +33,7 @@ export default function TopicPage() {
         setNeighbors({ prev: list[idx - 1], next: list[idx + 1] });
       }
     })();
-  }, [slug]);
+  }, [slug, course?.id]);
 
   useEffect(() => { if (topic && user) markViewed(topic.id); /* eslint-disable-next-line */ }, [topic?.id, user?.id]);
 
@@ -38,6 +42,7 @@ export default function TopicPage() {
   const p = progress[topic.id];
 
   const generateExtraQuiz = async () => {
+    if (!isAdmin) { toast.error("Only admins can modify quizzes"); return; }
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-quiz", {
@@ -56,16 +61,20 @@ export default function TopicPage() {
     } finally { setGenerating(false); }
   };
 
+  const linkPrefix = `/course/${courseSlug}`;
+
   return (
     <div className="container max-w-5xl py-10">
       <div className="flex items-center justify-between mb-6">
         <Button asChild variant="ghost" size="sm">
-          <Link to="/map"><ArrowLeft className="h-4 w-4 mr-1" /> Map</Link>
+          <Link to={linkPrefix}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
         </Button>
         <div className="flex gap-2">
-          <Button asChild variant="neon" size="sm">
-            <Link to={`/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Edit</Link>
-          </Button>
+          {isAdmin && (
+            <Button asChild variant="neon" size="sm">
+              <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Edit</Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -124,29 +133,31 @@ export default function TopicPage() {
         })}
       </div>
 
-      {/* Quiz CTA */}
-      <div className="mt-10 glass rounded-2xl p-6 flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <div className="font-display font-bold text-xl flex items-center gap-2"><Brain className="h-5 w-5 text-primary" /> Test yourself</div>
-          <div className="text-sm text-muted-foreground">{topic.quiz.length} questions · pass with 70%+ {p?.passed && <span className="text-success">· Passed at {p.best_quiz_score}%</span>}</div>
+      {topic.quiz.length > 0 && (
+        <div className="mt-10 glass rounded-2xl p-6 flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <div className="font-display font-bold text-xl flex items-center gap-2"><Brain className="h-5 w-5 text-primary" /> Test yourself</div>
+            <div className="text-sm text-muted-foreground">{topic.quiz.length} questions · pass with 70%+ {p?.passed && <span className="text-success">· Passed at {p.best_quiz_score}%</span>}</div>
+          </div>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Button variant="neon" size="sm" onClick={generateExtraQuiz} disabled={generating}>
+                <Sparkles className="h-4 w-4 mr-1" /> {generating ? "Generating…" : "AI: add questions"}
+              </Button>
+            )}
+            <Button variant="hero" size="lg" onClick={() => nav(`${linkPrefix}/topic/${topic.slug}/quiz`)}>
+              Start quiz <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="neon" size="sm" onClick={generateExtraQuiz} disabled={generating || !user}>
-            <Sparkles className="h-4 w-4 mr-1" /> {generating ? "Generating…" : "AI: add questions"}
-          </Button>
-          <Button variant="hero" size="lg" onClick={() => nav(`/topic/${topic.slug}/quiz`)}>
-            Start quiz <ArrowRight className="h-4 w-4 ml-1" />
-          </Button>
-        </div>
-      </div>
+      )}
 
-      {/* Prev / Next */}
       <div className="mt-8 flex justify-between gap-4">
         {neighbors.prev ? (
-          <Button asChild variant="ghost"><Link to={`/topic/${neighbors.prev.slug}`}><ArrowLeft className="h-4 w-4 mr-1" />{neighbors.prev.title}</Link></Button>
+          <Button asChild variant="ghost"><Link to={`${linkPrefix}/topic/${neighbors.prev.slug}`}><ArrowLeft className="h-4 w-4 mr-1" />{neighbors.prev.title}</Link></Button>
         ) : <span />}
         {neighbors.next && (
-          <Button asChild variant="ghost"><Link to={`/topic/${neighbors.next.slug}`}>{neighbors.next.title}<ArrowRight className="h-4 w-4 ml-1" /></Link></Button>
+          <Button asChild variant="ghost"><Link to={`${linkPrefix}/topic/${neighbors.next.slug}`}>{neighbors.next.title}<ArrowRight className="h-4 w-4 ml-1" /></Link></Button>
         )}
       </div>
     </div>
