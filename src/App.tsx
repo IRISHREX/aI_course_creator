@@ -7,7 +7,10 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { TopNav } from "@/components/TopNav";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
-import CourseMap from "./pages/CourseMap";
+import Courses from "./pages/Courses";
+import CourseDetail from "./pages/CourseDetail";
+import CourseEdit from "./pages/CourseEdit";
+import AdminUpload from "./pages/AdminUpload";
 import TopicPage from "./pages/TopicPage";
 import TopicEdit from "./pages/TopicEdit";
 import QuizPage from "./pages/QuizPage";
@@ -30,12 +33,15 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<Auth />} />
-                <Route path="/map" element={<CourseMap />} />
-                <Route path="/topic/:slug" element={<TopicPage />} />
-                <Route path="/topic/:slug/edit" element={<TopicEdit />} />
-                <Route path="/topic/:slug/quiz" element={<QuizPage />} />
-                <Route path="/board" element={<CoverageBoard />} />
-                <Route path="/certificate" element={<Certificate />} />
+                <Route path="/courses" element={<Courses />} />
+                <Route path="/admin/upload" element={<AdminUpload />} />
+                <Route path="/course/:courseSlug" element={<CourseDetail />} />
+                <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
+                <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
+                <Route path="/course/:courseSlug/certificate" element={<Certificate />} />
+                <Route path="/course/:courseSlug/topic/:slug" element={<TopicPage />} />
+                <Route path="/course/:courseSlug/topic/:slug/edit" element={<TopicEdit />} />
+                <Route path="/course/:courseSlug/topic/:slug/quiz" element={<QuizPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
