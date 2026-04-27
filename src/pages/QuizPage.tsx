@@ -9,8 +9,9 @@ import { Check, X, Trophy, RotateCw, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 export default function QuizPage() {
-  const { slug } = useParams();
+  const { courseSlug, slug } = useParams();
   const nav = useNavigate();
+  const linkPrefix = `/course/${courseSlug}`;
   const { user } = useAuth();
   const { recordQuiz } = useProgress();
   const [topic, setTopic] = useState<Topic | null>(null);
