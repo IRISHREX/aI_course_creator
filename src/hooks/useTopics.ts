@@ -5,6 +5,7 @@ import { useAuth } from "./useAuth";
 export interface QuizQ { q: string; options: string[]; answer: number }
 export interface Topic {
   id: string;
+  course_id: string;
   slug: string;
   unit: number;
   order_index: number;
@@ -22,16 +23,19 @@ export interface Progress {
   attempts: number;
 }
 
-export const useTopics = () => {
+export const useTopics = (courseId?: string) => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
-    supabase.from("topics").select("*").order("unit").order("order_index").then(({ data }) => {
+    setLoading(true);
+    let q = supabase.from("topics").select("*").order("unit").order("order_index");
+    if (courseId) q = q.eq("course_id", courseId);
+    q.then(({ data }) => {
       if (active) { setTopics(((data as unknown) as Topic[]) ?? []); setLoading(false); }
     });
     return () => { active = false; };
-  }, []);
+  }, [courseId]);
   return { topics, loading, setTopics };
 };
 
