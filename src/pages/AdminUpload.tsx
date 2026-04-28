@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, FileText, Sparkles, Upload, Lock } from "lucide-react";
+import { extractTextFromFile } from "@/lib/extractText";
 
 export default function AdminUpload() {
   const { isAdmin, loading } = useIsAdmin();
@@ -29,14 +30,14 @@ export default function AdminUpload() {
   );
 
   const handleFile = async (file: File) => {
-    if (file.type === "text/plain" || file.name.endsWith(".txt") || file.name.endsWith(".md")) {
-      setRawText(await file.text());
-    } else {
-      // For PDF/DOCX, send as base64 — server will extract text-ish
-      const buf = await file.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      setRawText(`__FILE__:${file.name}:${b64}`);
-      toast.info(`${file.name} attached. Click Generate to process.`);
+    try {
+      toast.info(`Reading ${file.name}…`);
+      const text = await extractTextFromFile(file);
+      if (!text.trim()) throw new Error("No text extracted");
+      setRawText(text);
+      toast.success(`Extracted ${text.length.toLocaleString()} characters from ${file.name}`);
+    } catch (e: any) {
+      toast.error(e.message || "Could not read file");
     }
   };
 
