@@ -104,7 +104,43 @@ export default function CourseEdit() {
     if (error) toast.error(error.message); else { toast.success("Deleted"); refreshTopics(); }
   };
 
-  const exportDocx = async () => {
+  const handleReFile = async (file: File) => {
+    try {
+      toast.info(`Reading ${file.name}…`);
+      const text = await extractTextFromFile(file);
+      if (!text.trim()) throw new Error("No text extracted");
+      setReRawText(text);
+      toast.success(`Extracted ${text.length.toLocaleString()} characters`);
+    } catch (e: any) {
+      toast.error(e.message || "Could not read file");
+    }
+  };
+
+  const reuploadSource = async () => {
+    if (!reDocsUrl.trim() && !reRawText.trim()) { toast.error("Provide a Google Docs URL, paste text, or upload a file"); return; }
+    setReUploading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("update-course-source", {
+        body: {
+          courseId: course.id,
+          docsUrl: reDocsUrl.trim() || undefined,
+          rawText: reRawText.trim() || undefined,
+          resetLessons,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Source updated (${data.sourceLength.toLocaleString()} chars${data.attempts > 1 ? `, ${data.attempts} attempts` : ""})`);
+      setReDocsUrl(""); setReRawText("");
+      await refreshTopics();
+      if (resetLessons) {
+        toast.info("Re-running generation for all lessons…");
+        await generateAllRemaining();
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Re-upload failed");
+    } finally { setReUploading(false); }
+  };
     try {
       const { data, error } = await supabase.functions.invoke("export-course", { body: { courseId: course.id } });
       if (error) throw error;
