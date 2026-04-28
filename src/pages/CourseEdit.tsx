@@ -201,10 +201,44 @@ export default function CourseEdit() {
         </div>
       </div>
 
+      {/* Re-upload source */}
+      <div className="glass rounded-2xl p-6 mb-8 border border-primary/20">
+        <div className="flex items-center gap-2 mb-1">
+          <RefreshCw className="h-5 w-5 text-primary" />
+          <div className="font-display font-bold text-lg">Re-upload source</div>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Replace this course's source material. Useful when the original Google Docs upload failed or the document changed. The function retries the fetch up to 3 times.
+        </p>
+
+        <Label className="text-xs flex items-center gap-1"><FileText className="h-3 w-3" /> Google Docs URL (shared as "Anyone with the link")</Label>
+        <Input value={reDocsUrl} onChange={e => setReDocsUrl(e.target.value)} placeholder="https://docs.google.com/document/d/..." className="mt-1" />
+
+        <div className="my-3 text-center text-xs text-muted-foreground">— or —</div>
+
+        <Label className="text-xs">Upload .txt / .md / .pdf / .docx</Label>
+        <Input type="file" accept=".txt,.md,.pdf,.docx" onChange={e => e.target.files?.[0] && handleReFile(e.target.files[0])} className="mt-1" />
+
+        <div className="my-3 text-center text-xs text-muted-foreground">— or —</div>
+
+        <Label className="text-xs">Paste raw text</Label>
+        <Textarea rows={5} value={reRawText} onChange={e => setReRawText(e.target.value)} placeholder="Paste new course material here…" className="mt-1 font-mono text-xs" />
+
+        <label className="flex items-center gap-2 mt-4 text-sm cursor-pointer">
+          <input type="checkbox" checked={resetLessons} onChange={e => setResetLessons(e.target.checked)} className="h-4 w-4 accent-primary" />
+          Reset all lessons and re-run AI generation with the new source
+        </label>
+
+        <Button onClick={reuploadSource} variant="hero" disabled={reUploading || batchRunning} className="w-full mt-4">
+          {reUploading ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Re-uploading…</> : <><Upload className="h-4 w-4 mr-1" /> Re-upload source{resetLessons ? " & regenerate" : ""}</>}
+        </Button>
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
         <Button onClick={addTopic} variant="neon"><Plus className="h-4 w-4 mr-1" /> Add lesson</Button>
       </div>
+
 
       <div className="glass rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
