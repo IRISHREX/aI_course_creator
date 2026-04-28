@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Edit3, Loader2, Lock, Plus, Save, Sparkles, Trash2, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Trash2, Upload, Zap } from "lucide-react";
+import { extractTextFromFile } from "@/lib/extractText";
 
 export default function CourseEdit() {
   const { courseSlug } = useParams();
@@ -23,6 +24,10 @@ export default function CourseEdit() {
   const [emoji, setEmoji] = useState("");
   const [generating, setGenerating] = useState<string | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
+  const [reDocsUrl, setReDocsUrl] = useState("");
+  const [reRawText, setReRawText] = useState("");
+  const [resetLessons, setResetLessons] = useState(true);
+  const [reUploading, setReUploading] = useState(false);
 
   useEffect(() => {
     if (course) { setTitle(course.title); setDescription(course.description); setEmoji(course.cover_emoji || "📘"); }
