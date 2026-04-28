@@ -141,6 +141,7 @@ export default function CourseEdit() {
       toast.error(e.message || "Re-upload failed");
     } finally { setReUploading(false); }
   };
+  const exportDocx = async () => {
     try {
       const { data, error } = await supabase.functions.invoke("export-course", { body: { courseId: course.id } });
       if (error) throw error;
