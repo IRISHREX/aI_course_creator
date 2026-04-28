@@ -19,7 +19,6 @@ Deno.serve(async (req) => {
   try {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
 
-    // Verify caller is admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Unauthorized");
     const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -36,10 +35,6 @@ Deno.serve(async (req) => {
     if (!title) throw new Error("title required");
 
     let source = (rawText || "").trim();
-    if (source.startsWith("__FILE__:")) {
-      // for binary uploads, just hand the AI the filename + warning to summarize generic outline
-      source = `(uploaded file: ${source.split(":")[1]} — please generate a generic course outline based on the title)`;
-    }
     if (!source && docsUrl) {
       const docId = extractDocId(docsUrl);
       if (!docId) throw new Error("Invalid Google Docs URL");
@@ -47,24 +42,25 @@ Deno.serve(async (req) => {
       if (!docRes.ok) throw new Error("Cannot fetch Google Doc — share as 'Anyone with the link'.");
       source = await docRes.text();
     }
-    if (!source) throw new Error("Provide source text, file, or Google Docs URL");
-    source = source.slice(0, 18000);
+    if (!source) throw new Error("Provide source text or Google Docs URL");
+    const fullSource = source;
+    const outlineSource = source.slice(0, 20000);
 
-    // Ask AI to produce a structured course
+    // Ask AI only for the OUTLINE — fast, reliable
     const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You are a curriculum designer. Convert raw study material into a structured interactive course. Always call the tool." },
-          { role: "user", content: `Course title: ${title}\n\nMaterial:\n${source}\n\nProduce a course with:\n- 1-sentence description\n- 6-15 lessons grouped into 2-5 units\n- each lesson: title, 1-line summary, 3-6 content blocks (text/list/highlight), and 4 multiple-choice quiz questions (4 options each, exactly one correct).\nKeep lessons focused and educational.` },
+          { role: "system", content: "You are a curriculum designer. Produce only a course outline (no content blocks, no quizzes). Always call the tool." },
+          { role: "user", content: `Course title: ${title}\n\nMaterial:\n${outlineSource}\n\nCreate a course outline with:\n- 1-sentence description\n- 6-15 lessons grouped into 2-5 units\n- each lesson: unit number, title, 1-line summary.` },
         ],
         tools: [{
           type: "function",
           function: {
-            name: "create_course",
-            description: "Structured course",
+            name: "create_outline",
+            description: "Course outline",
             parameters: {
               type: "object",
               properties: {
@@ -77,33 +73,8 @@ Deno.serve(async (req) => {
                       unit: { type: "integer", minimum: 1 },
                       title: { type: "string" },
                       summary: { type: "string" },
-                      content: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            type: { type: "string", enum: ["text", "list", "highlight"] },
-                            value: { type: "string" },
-                            title: { type: "string" },
-                            items: { type: "array", items: { type: "string" } },
-                          },
-                          required: ["type"],
-                        },
-                      },
-                      quiz: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            q: { type: "string" },
-                            options: { type: "array", items: { type: "string" } },
-                            answer: { type: "integer", minimum: 0, maximum: 3 },
-                          },
-                          required: ["q", "options", "answer"],
-                        },
-                      },
                     },
-                    required: ["unit", "title", "summary", "content", "quiz"],
+                    required: ["unit", "title", "summary"],
                   },
                 },
               },
@@ -111,7 +82,7 @@ Deno.serve(async (req) => {
             },
           },
         }],
-        tool_choice: { type: "function", function: { name: "create_course" } },
+        tool_choice: { type: "function", function: { name: "create_outline" } },
       }),
     });
     if (r.status === 429) return new Response(JSON.stringify({ error: "Rate limit — try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" }});
@@ -120,10 +91,9 @@ Deno.serve(async (req) => {
 
     const j = await r.json();
     const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!args) throw new Error("AI did not return structured output");
+    if (!args) throw new Error("AI did not return outline");
     const parsed = JSON.parse(args);
 
-    // Create course
     let baseSlug = slugify(title);
     let slug = baseSlug;
     let n = 1;
@@ -133,10 +103,12 @@ Deno.serve(async (req) => {
     const { data: course, error: cErr } = await admin.from("courses").insert({
       slug, title, description: parsed.description || "", cover_emoji: emoji || "📘",
       order_index: Date.now() % 1000,
+      source_text: fullSource.slice(0, 200000),
+      generation_status: "generating",
     }).select().single();
     if (cErr) throw cErr;
 
-    // Insert lessons with per-unit ordering
+    // Insert lesson stubs with generation_status='pending'
     const orderByUnit: Record<number, number> = {};
     const rows = parsed.lessons.map((l: any, i: number) => {
       const unit = Math.max(1, Math.min(10, l.unit || 1));
@@ -146,13 +118,14 @@ Deno.serve(async (req) => {
         slug: `${slug}-${slugify(l.title)}-${i}`,
         unit, order_index: orderByUnit[unit],
         title: l.title, summary: l.summary,
-        content: l.content || [], quiz: l.quiz || [],
+        content: [], quiz: [],
+        generation_status: "pending",
       };
     });
     const { error: tErr } = await admin.from("topics").insert(rows);
     if (tErr) throw tErr;
 
-    return new Response(JSON.stringify({ slug, topicCount: rows.length }), {
+    return new Response(JSON.stringify({ slug, courseId: course.id, topicCount: rows.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

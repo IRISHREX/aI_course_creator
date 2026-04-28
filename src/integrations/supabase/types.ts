@@ -19,9 +19,11 @@ export type Database = {
           cover_emoji: string | null
           created_at: string
           description: string
+          generation_status: string
           id: string
           order_index: number
           slug: string
+          source_text: string | null
           title: string
           updated_at: string
         }
@@ -29,9 +31,11 @@ export type Database = {
           cover_emoji?: string | null
           created_at?: string
           description?: string
+          generation_status?: string
           id?: string
           order_index?: number
           slug: string
+          source_text?: string | null
           title: string
           updated_at?: string
         }
@@ -39,9 +43,11 @@ export type Database = {
           cover_emoji?: string | null
           created_at?: string
           description?: string
+          generation_status?: string
           id?: string
           order_index?: number
           slug?: string
+          source_text?: string | null
           title?: string
           updated_at?: string
         }
@@ -111,6 +117,8 @@ export type Database = {
           content: Json
           course_id: string
           created_at: string
+          difficulty_level: number
+          generation_status: string
           id: string
           order_index: number
           quiz: Json
@@ -125,6 +133,8 @@ export type Database = {
           content?: Json
           course_id: string
           created_at?: string
+          difficulty_level?: number
+          generation_status?: string
           id?: string
           order_index: number
           quiz?: Json
@@ -139,6 +149,8 @@ export type Database = {
           content?: Json
           course_id?: string
           created_at?: string
+          difficulty_level?: number
+          generation_status?: string
           id?: string
           order_index?: number
           quiz?: Json
