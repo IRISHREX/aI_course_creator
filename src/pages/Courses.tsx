@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { useCourses } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Plus, Sparkles, Tag, Trash2, X } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Plus, Sparkles, Tag, Trash2, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -50,39 +52,65 @@ export default function Courses() {
       </div>
 
       {allTags.length > 0 && (
-        <div className="glass rounded-2xl p-4 mb-8">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="glass rounded-2xl p-4 mb-8 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
             <Tag className="h-4 w-4 text-primary" />
             <div className="text-sm font-display font-bold">Filter by tags</div>
-            {activeTags.length > 0 && (
-              <button onClick={() => setActiveTags([])} className="ml-auto text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-                <X className="h-3 w-3" /> Clear ({activeTags.length})
-              </button>
-            )}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {allTags.map(t => {
-              const active = activeTags.includes(t);
-              return (
-                <button
-                  key={t}
-                  onClick={() => toggleTag(t)}
-                  className={`px-3 py-1 rounded-full text-xs border transition-all ${
-                    active
-                      ? "bg-primary text-primary-foreground border-primary shadow-glow"
-                      : "bg-muted/40 text-muted-foreground border-border hover:border-primary/60 hover:text-foreground"
-                  }`}
-                >
-                  #{t}
-                </button>
-              );
-            })}
-          </div>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="min-w-[200px] justify-between">
+                <span className="truncate">
+                  {activeTags.length === 0
+                    ? "Select tags…"
+                    : `${activeTags.length} tag${activeTags.length > 1 ? "s" : ""} selected`}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-60 ml-2 shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search tags…" />
+                <CommandList>
+                  <CommandEmpty>No tags found.</CommandEmpty>
+                  <CommandGroup>
+                    {allTags.map(t => {
+                      const active = activeTags.includes(t);
+                      return (
+                        <CommandItem key={t} onSelect={() => toggleTag(t)} className="cursor-pointer">
+                          <div className={`mr-2 h-4 w-4 rounded border flex items-center justify-center ${active ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                            {active && <Check className="h-3 w-3 text-primary-foreground" />}
+                          </div>
+                          <span className="flex-1">#{t}</span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
           {activeTags.length > 0 && (
-            <p className="text-[11px] text-muted-foreground mt-3">
-              Showing {filteredCourses.length} of {courses.length} courses matching all selected tags.
-            </p>
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {activeTags.map(t => (
+                  <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/15 text-primary text-xs border border-primary/40">
+                    #{t}
+                    <button onClick={() => toggleTag(t)} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+              </div>
+              <button onClick={() => setActiveTags([])} className="ml-auto text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+                <X className="h-3 w-3" /> Clear all
+              </button>
+            </>
           )}
+
+          <span className="text-[11px] text-muted-foreground ml-auto">
+            {filteredCourses.length} of {courses.length} courses
+          </span>
         </div>
       )}
 
