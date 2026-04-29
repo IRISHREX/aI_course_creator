@@ -3,6 +3,7 @@ import { Radio, BookOpen, Upload, LogIn, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 export const TopNav = () => {
   const { user, signOut } = useAuth();
@@ -46,6 +47,7 @@ export const TopNav = () => {
         </nav>
 
         <div className="flex items-center gap-2">
+          <ThemeSwitcher />
           {user ? (
             <>
               <span className="hidden sm:inline text-xs text-muted-foreground font-mono">

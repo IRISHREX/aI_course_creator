@@ -56,6 +56,110 @@
     --background: 232 40% 6%;
     --foreground: 200 30% 96%;
   }
+
+  /* ============ THEME: LIGHT ============ */
+  [data-theme="light"] {
+    --background: 220 25% 98%;
+    --foreground: 232 40% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 232 40% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 232 40% 12%;
+    --primary: 220 90% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 220 90% 65%;
+    --secondary: 270 70% 55%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 15% 94%;
+    --muted-foreground: 232 15% 40%;
+    --accent: 270 70% 55%;
+    --accent-foreground: 0 0% 100%;
+    --border: 220 15% 88%;
+    --input: 220 15% 92%;
+    --ring: 220 90% 50%;
+    --gradient-primary: linear-gradient(135deg, hsl(220 90% 50%), hsl(270 70% 55%));
+    --gradient-hero: linear-gradient(180deg, hsl(220 25% 98%), hsl(220 25% 96%));
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100% / 0.95), hsl(220 25% 98% / 0.95));
+    --shadow-glow: 0 4px 20px hsl(220 90% 50% / 0.15);
+    --shadow-glow-purple: 0 4px 20px hsl(270 70% 55% / 0.15);
+    --shadow-elevated: 0 10px 40px -10px hsl(232 40% 20% / 0.15);
+  }
+
+  /* ============ THEME: PAPER (sepia / book) ============ */
+  [data-theme="paper"] {
+    --background: 38 40% 92%;
+    --foreground: 30 30% 18%;
+    --card: 38 50% 96%;
+    --card-foreground: 30 30% 18%;
+    --popover: 38 50% 96%;
+    --popover-foreground: 30 30% 18%;
+    --primary: 25 70% 40%;
+    --primary-foreground: 38 50% 96%;
+    --primary-glow: 25 70% 55%;
+    --secondary: 15 50% 35%;
+    --secondary-foreground: 38 50% 96%;
+    --muted: 38 30% 86%;
+    --muted-foreground: 30 25% 35%;
+    --accent: 25 60% 45%;
+    --accent-foreground: 38 50% 96%;
+    --border: 38 25% 78%;
+    --input: 38 30% 88%;
+    --ring: 25 70% 40%;
+    --gradient-primary: linear-gradient(135deg, hsl(25 70% 40%), hsl(15 50% 35%));
+    --gradient-hero: linear-gradient(180deg, hsl(38 40% 92%), hsl(38 35% 88%));
+    --gradient-card: linear-gradient(135deg, hsl(38 50% 96% / 0.95), hsl(38 45% 93% / 0.95));
+    --shadow-glow: 0 4px 16px hsl(25 70% 40% / 0.12);
+    --shadow-glow-purple: 0 4px 16px hsl(15 50% 35% / 0.12);
+    --shadow-elevated: 0 8px 30px -10px hsl(30 40% 25% / 0.2);
+  }
+  [data-theme="paper"] body {
+    font-family: 'Georgia', 'Cambria', 'Times New Roman', serif;
+  }
+  [data-theme="paper"] .grid-bg { background-image: none; }
+
+  /* ============ THEME: RETRO (CRT / terminal) ============ */
+  [data-theme="retro"] {
+    --background: 120 20% 4%;
+    --foreground: 120 90% 70%;
+    --card: 120 25% 7%;
+    --card-foreground: 120 90% 70%;
+    --popover: 120 25% 7%;
+    --popover-foreground: 120 90% 70%;
+    --primary: 120 100% 55%;
+    --primary-foreground: 120 20% 4%;
+    --primary-glow: 120 100% 70%;
+    --secondary: 60 100% 55%;
+    --secondary-foreground: 120 20% 4%;
+    --muted: 120 20% 12%;
+    --muted-foreground: 120 40% 55%;
+    --accent: 60 100% 55%;
+    --accent-foreground: 120 20% 4%;
+    --border: 120 50% 20%;
+    --input: 120 25% 10%;
+    --ring: 120 100% 55%;
+    --gradient-primary: linear-gradient(135deg, hsl(120 100% 45%), hsl(60 100% 50%));
+    --gradient-hero: radial-gradient(ellipse at center, hsl(120 50% 8%), hsl(120 20% 3%));
+    --gradient-card: linear-gradient(135deg, hsl(120 25% 7% / 0.95), hsl(120 25% 5% / 0.95));
+    --shadow-glow: 0 0 30px hsl(120 100% 55% / 0.4);
+    --shadow-glow-purple: 0 0 30px hsl(60 100% 55% / 0.4);
+    --shadow-elevated: 0 10px 40px -10px hsl(120 100% 30% / 0.4);
+  }
+  [data-theme="retro"] body,
+  [data-theme="retro"] .font-display,
+  [data-theme="retro"] .font-sans {
+    font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+  }
+  [data-theme="retro"] body::after {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 100;
+    background: repeating-linear-gradient(
+      0deg,
+      hsl(120 100% 50% / 0.04) 0px,
+      hsl(120 100% 50% / 0.04) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
 }
 
 @layer base {

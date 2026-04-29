@@ -7,6 +7,7 @@ import { useProgress, type Topic } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
+import { ReadMode, blocksToReadable } from "@/components/ReadMode";
 import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -69,7 +70,8 @@ export default function TopicPage() {
         <Button asChild variant="ghost" size="sm">
           <Link to={linkPrefix}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
         </Button>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <ReadMode text={blocksToReadable(topic.title, topic.summary, topic.content)} />
           {isAdmin && (
             <Button asChild variant="neon" size="sm">
               <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Edit</Link>
