@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { useCourses } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Plus, Sparkles, Tag, Trash2, X } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Plus, Sparkles, Tag, Trash2, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
