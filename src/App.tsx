@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { TopNav } from "@/components/TopNav";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -27,6 +28,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <ThemeProvider>
           <div className="min-h-screen flex flex-col">
             <TopNav />
             <main className="flex-1">
@@ -46,6 +48,7 @@ const App = () => (
               </Routes>
             </main>
           </div>
+          </ThemeProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
