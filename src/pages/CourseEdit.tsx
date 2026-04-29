@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Trash2, Upload, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
 export default function CourseEdit() {
@@ -22,6 +22,8 @@ export default function CourseEdit() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [emoji, setEmoji] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [generating, setGenerating] = useState<string | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [reDocsUrl, setReDocsUrl] = useState("");
@@ -30,7 +32,10 @@ export default function CourseEdit() {
   const [reUploading, setReUploading] = useState(false);
 
   useEffect(() => {
-    if (course) { setTitle(course.title); setDescription(course.description); setEmoji(course.cover_emoji || "📘"); }
+    if (course) {
+      setTitle(course.title); setDescription(course.description); setEmoji(course.cover_emoji || "📘");
+      setTags(((course as any).tags as string[]) || []);
+    }
   }, [course]);
 
   if (aLoad || cLoad) return <div className="container py-20 text-muted-foreground">Loading…</div>;
@@ -82,10 +87,19 @@ export default function CourseEdit() {
 
   const saveCourse = async () => {
     const { error } = await supabase.from("courses").update({
-      title, description, cover_emoji: emoji,
-    }).eq("id", course.id);
+      title, description, cover_emoji: emoji, tags,
+    } as any).eq("id", course.id);
     if (error) toast.error(error.message); else toast.success("Course updated");
   };
+
+  const addTag = () => {
+    const v = tagInput.trim().toLowerCase();
+    if (!v) return;
+    if (tags.includes(v)) { setTagInput(""); return; }
+    setTags([...tags, v]);
+    setTagInput("");
+  };
+  const removeTag = (t: string) => setTags(tags.filter(x => x !== t));
 
   const addTopic = async () => {
     const maxOrder = Math.max(0, ...topics.filter(t => t.unit === 1).map(t => t.order_index));
@@ -194,6 +208,28 @@ export default function CourseEdit() {
         <div>
           <Label>Description</Label>
           <Textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} />
+        </div>
+        <div>
+          <Label className="flex items-center gap-1"><Tag className="h-3 w-3" /> Tags</Label>
+          <div className="flex flex-wrap gap-1.5 mt-2 mb-2 min-h-[28px]">
+            {tags.length === 0 && <span className="text-xs text-muted-foreground">No tags yet. Add some below.</span>}
+            {tags.map(t => (
+              <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs border border-primary/30">
+                #{t}
+                <button onClick={() => removeTag(t)} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } }}
+              placeholder="Add a tag and press Enter (e.g. networking, beginner, ignou)"
+            />
+            <Button type="button" variant="neon" onClick={addTag}><Plus className="h-4 w-4" /></Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">Click Save course to persist tag changes.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button onClick={saveCourse} variant="hero"><Save className="h-4 w-4 mr-1" /> Save course</Button>

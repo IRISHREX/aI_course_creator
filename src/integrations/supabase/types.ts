@@ -24,6 +24,7 @@ export type Database = {
           order_index: number
           slug: string
           source_text: string | null
+          tags: string[]
           title: string
           updated_at: string
         }
@@ -36,6 +37,7 @@ export type Database = {
           order_index?: number
           slug: string
           source_text?: string | null
+          tags?: string[]
           title: string
           updated_at?: string
         }
@@ -48,6 +50,7 @@ export type Database = {
           order_index?: number
           slug?: string
           source_text?: string | null
+          tags?: string[]
           title?: string
           updated_at?: string
         }
