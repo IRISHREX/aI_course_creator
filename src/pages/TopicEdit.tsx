@@ -199,8 +199,36 @@ export default function TopicEdit() {
         </div>
 
         <div>
-          <Label>Content (JSON blocks: text, list, highlight, timeline)</Label>
-          <Textarea rows={12} value={contentJson} onChange={e => setContentJson(e.target.value)} className="font-mono text-xs" />
+          <Label>Content blocks</Label>
+          <Tabs defaultValue="editor" className="mt-2">
+            <TabsList>
+              <TabsTrigger value="editor">Editor</TabsTrigger>
+              <TabsTrigger value="json">JSON</TabsTrigger>
+            </TabsList>
+            <TabsContent value="editor" className="mt-3">
+              {(() => {
+                let parsed: Block[] = [];
+                let parseError: string | null = null;
+                try { parsed = JSON.parse(contentJson || "[]"); } catch (e: any) { parseError = e.message; }
+                if (parseError) return (
+                  <div className="glass rounded-xl p-4 text-sm text-destructive">
+                    JSON is invalid — fix it in the JSON tab to use the editor.
+                    <div className="font-mono text-xs mt-1 text-muted-foreground">{parseError}</div>
+                  </div>
+                );
+                return (
+                  <BlockEditor
+                    blocks={parsed}
+                    onChange={(b) => setContentJson(JSON.stringify(b, null, 2))}
+                  />
+                );
+              })()}
+            </TabsContent>
+            <TabsContent value="json" className="mt-3">
+              <Textarea rows={14} value={contentJson} onChange={e => setContentJson(e.target.value)} className="font-mono text-xs" />
+              <p className="text-xs text-muted-foreground mt-1">Block types: text, highlight, list, timeline</p>
+            </TabsContent>
+          </Tabs>
         </div>
 
         <div>
