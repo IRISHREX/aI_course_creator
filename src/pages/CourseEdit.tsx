@@ -87,10 +87,19 @@ export default function CourseEdit() {
 
   const saveCourse = async () => {
     const { error } = await supabase.from("courses").update({
-      title, description, cover_emoji: emoji,
-    }).eq("id", course.id);
+      title, description, cover_emoji: emoji, tags,
+    } as any).eq("id", course.id);
     if (error) toast.error(error.message); else toast.success("Course updated");
   };
+
+  const addTag = () => {
+    const v = tagInput.trim().toLowerCase();
+    if (!v) return;
+    if (tags.includes(v)) { setTagInput(""); return; }
+    setTags([...tags, v]);
+    setTagInput("");
+  };
+  const removeTag = (t: string) => setTags(tags.filter(x => x !== t));
 
   const addTopic = async () => {
     const maxOrder = Math.max(0, ...topics.filter(t => t.unit === 1).map(t => t.order_index));
