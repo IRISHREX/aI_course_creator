@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Trash2, Upload, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
 export default function CourseEdit() {
@@ -22,6 +22,8 @@ export default function CourseEdit() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [emoji, setEmoji] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [generating, setGenerating] = useState<string | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [reDocsUrl, setReDocsUrl] = useState("");
@@ -30,7 +32,10 @@ export default function CourseEdit() {
   const [reUploading, setReUploading] = useState(false);
 
   useEffect(() => {
-    if (course) { setTitle(course.title); setDescription(course.description); setEmoji(course.cover_emoji || "📘"); }
+    if (course) {
+      setTitle(course.title); setDescription(course.description); setEmoji(course.cover_emoji || "📘");
+      setTags(((course as any).tags as string[]) || []);
+    }
   }, [course]);
 
   if (aLoad || cLoad) return <div className="container py-20 text-muted-foreground">Loading…</div>;
