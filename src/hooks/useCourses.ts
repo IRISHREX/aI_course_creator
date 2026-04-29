@@ -8,6 +8,7 @@ export interface Course {
   description: string;
   cover_emoji: string | null;
   order_index: number;
+  tags?: string[] | null;
 }
 
 export const useCourses = () => {
