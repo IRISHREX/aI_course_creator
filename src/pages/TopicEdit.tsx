@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlockEditor, type Block } from "@/components/BlockEditor";
-import { ArrowLeft, FileText, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, Save, Sparkles, Wand2, Zap } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 type TransformAction = "simplify" | "expand" | "bullets" | "analogy" | "bigger" | "smaller" | "level";
