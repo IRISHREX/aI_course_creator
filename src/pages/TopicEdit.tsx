@@ -29,6 +29,8 @@ export default function TopicEdit() {
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(5);
   const [customInstruction, setCustomInstruction] = useState("");
+  const [versions, setVersions] = useState<any[]>([]);
+  const [vLoading, setVLoading] = useState(false);
 
   const reload = async () => {
     const { data } = await supabase.from("topics").select("*").eq("slug", slug!).maybeSingle();
