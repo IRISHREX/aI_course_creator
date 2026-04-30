@@ -161,9 +161,34 @@ export default function TopicEdit() {
 
   return (
     <div className="container max-w-4xl py-10">
-      <Button asChild variant="ghost" size="sm" className="mb-4">
-        <Link to={`/course/${courseSlug}/topic/${topic.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to lesson</Link>
-      </Button>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <Button asChild variant="ghost" size="sm">
+          <Link to={`/course/${courseSlug}/topic/${topic.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to lesson</Link>
+        </Button>
+        <Popover onOpenChange={(o) => o && loadVersions()}>
+          <PopoverTrigger asChild>
+            <Button variant="neon" size="sm"><History className="h-4 w-4 mr-1" /> History</Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-96 max-h-96 overflow-auto">
+            <div className="font-display font-bold mb-2">Saved versions</div>
+            {vLoading && <div className="text-xs text-muted-foreground">Loading…</div>}
+            {!vLoading && versions.length === 0 && <div className="text-xs text-muted-foreground">No history yet — versions are created on every save.</div>}
+            <div className="space-y-2">
+              {versions.map(v => (
+                <div key={v.id} className="flex items-center justify-between gap-2 border border-border/50 rounded-lg p-2">
+                  <div className="text-xs">
+                    <div className="font-mono">{new Date(v.created_at).toLocaleString()}</div>
+                    <div className="text-muted-foreground">{v.note}</div>
+                  </div>
+                  <Button size="sm" variant="hero" onClick={() => restoreVersion(v)}>
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" /> Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       <h1 className="font-display text-3xl font-bold mb-6">Edit Lesson</h1>
 
