@@ -4,10 +4,11 @@ import { useTopics, useProgress } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft } from "lucide-react";
+import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function CourseDetail() {
   const { courseSlug } = useParams();
