@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      course_pyq: {
+        Row: {
+          answer: string
+          course_id: string
+          created_at: string
+          id: string
+          marks: number | null
+          order_index: number
+          question: string
+          source: string | null
+          topic_id: string | null
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          answer?: string
+          course_id: string
+          created_at?: string
+          id?: string
+          marks?: number | null
+          order_index?: number
+          question: string
+          source?: string | null
+          topic_id?: string | null
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          answer?: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          marks?: number | null
+          order_index?: number
+          question?: string
+          source?: string | null
+          topic_id?: string | null
+          updated_at?: string
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_pyq_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_pyq_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           cover_emoji: string | null
@@ -21,11 +78,13 @@ export type Database = {
           description: string
           generation_status: string
           id: string
+          mindmap: Json | null
           order_index: number
           slug: string
           source_text: string | null
           tags: string[]
           title: string
+          toc: Json | null
           updated_at: string
         }
         Insert: {
@@ -34,11 +93,13 @@ export type Database = {
           description?: string
           generation_status?: string
           id?: string
+          mindmap?: Json | null
           order_index?: number
           slug: string
           source_text?: string | null
           tags?: string[]
           title: string
+          toc?: Json | null
           updated_at?: string
         }
         Update: {
@@ -47,11 +108,13 @@ export type Database = {
           description?: string
           generation_status?: string
           id?: string
+          mindmap?: Json | null
           order_index?: number
           slug?: string
           source_text?: string | null
           tags?: string[]
           title?: string
+          toc?: Json | null
           updated_at?: string
         }
         Relationships: []
@@ -115,6 +178,56 @@ export type Database = {
           },
         ]
       }
+      topic_versions: {
+        Row: {
+          content: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          mindmap: Json | null
+          note: string | null
+          quiz: Json
+          summary: string
+          title: string
+          topic_id: string
+          visualization: string | null
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          mindmap?: Json | null
+          note?: string | null
+          quiz?: Json
+          summary?: string
+          title: string
+          topic_id: string
+          visualization?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          mindmap?: Json | null
+          note?: string | null
+          quiz?: Json
+          summary?: string
+          title?: string
+          topic_id?: string
+          visualization?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_versions_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       topics: {
         Row: {
           content: Json
@@ -123,6 +236,7 @@ export type Database = {
           difficulty_level: number
           generation_status: string
           id: string
+          mindmap: Json | null
           order_index: number
           quiz: Json
           slug: string
@@ -139,6 +253,7 @@ export type Database = {
           difficulty_level?: number
           generation_status?: string
           id?: string
+          mindmap?: Json | null
           order_index: number
           quiz?: Json
           slug: string
@@ -155,6 +270,7 @@ export type Database = {
           difficulty_level?: number
           generation_status?: string
           id?: string
+          mindmap?: Json | null
           order_index?: number
           quiz?: Json
           slug?: string
