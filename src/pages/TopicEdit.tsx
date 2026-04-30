@@ -283,6 +283,7 @@ export default function TopicEdit() {
                 return (
                   <BlockEditor
                     blocks={parsed}
+                    topicId={topic.id}
                     onChange={(b) => setContentJson(JSON.stringify(b, null, 2))}
                   />
                 );
