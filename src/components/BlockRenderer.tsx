@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { MermaidDiagram } from "./Mindmap";
-import { ChartContainer } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
 
 const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--success))", "hsl(var(--warning))", "hsl(var(--destructive))"];
