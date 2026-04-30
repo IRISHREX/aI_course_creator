@@ -159,6 +159,23 @@ export default function CourseDetail() {
           })}
         </div>
       )}
+
+      {topics.length > 0 && (
+        <div className="mt-12 glass rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="font-display font-bold text-xl flex items-center gap-2"><Brain className="h-5 w-5 text-primary" /> Course Mind Map</div>
+            {isAdmin && (
+              <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMM}>
+                {genMM ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                {mindmap ? "Regenerate" : "Generate"} mind map
+              </Button>
+            )}
+          </div>
+          {mindmap ? <Mindmap data={mindmap} /> : (
+            <p className="text-sm text-muted-foreground">No course mind map yet{isAdmin ? " — click generate." : "."}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
