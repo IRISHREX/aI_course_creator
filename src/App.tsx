@@ -17,6 +17,7 @@ import TopicEdit from "./pages/TopicEdit";
 import QuizPage from "./pages/QuizPage";
 import CoverageBoard from "./pages/CoverageBoard";
 import Certificate from "./pages/Certificate";
+import CoursePYQ from "./pages/CoursePYQ";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
                 <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
                 <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
                 <Route path="/course/:courseSlug/certificate" element={<Certificate />} />
+                <Route path="/course/:courseSlug/pyq" element={<CoursePYQ />} />
                 <Route path="/course/:courseSlug/topic/:slug" element={<TopicPage />} />
                 <Route path="/course/:courseSlug/topic/:slug/edit" element={<TopicEdit />} />
                 <Route path="/course/:courseSlug/topic/:slug/quiz" element={<QuizPage />} />

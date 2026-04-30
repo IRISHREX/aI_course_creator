@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlockEditor, type Block } from "@/components/BlockEditor";
-import { ArrowLeft, FileText, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, Save, Sparkles, Wand2, Zap } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 type TransformAction = "simplify" | "expand" | "bullets" | "analogy" | "bigger" | "smaller" | "level";
@@ -28,6 +29,8 @@ export default function TopicEdit() {
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(5);
   const [customInstruction, setCustomInstruction] = useState("");
+  const [versions, setVersions] = useState<any[]>([]);
+  const [vLoading, setVLoading] = useState(false);
 
   const reload = async () => {
     const { data } = await supabase.from("topics").select("*").eq("slug", slug!).maybeSingle();
@@ -56,15 +59,51 @@ export default function TopicEdit() {
     try {
       const content = JSON.parse(contentJson);
       const quiz = JSON.parse(quizJson);
+      // Snapshot previous state to history before update
+      await supabase.from("topic_versions").insert({
+        topic_id: topic.id,
+        title: topic.title,
+        summary: topic.summary,
+        content: topic.content as any,
+        quiz: topic.quiz as any,
+        visualization: topic.visualization,
+        mindmap: (topic as any).mindmap ?? null,
+        note: "auto-save",
+      });
       const { error } = await supabase.from("topics").update({
         title: topic.title, summary: topic.summary, content, quiz, difficulty_level: level,
       }).eq("id", topic.id);
       if (error) throw error;
-      toast.success("Lesson saved");
+      toast.success("Lesson saved (snapshot taken)");
       nav(`/course/${courseSlug}/topic/${topic.slug}`);
     } catch (e: any) {
       toast.error(e.message || "Save failed — check JSON syntax");
     } finally { setSaving(false); }
+  };
+
+  const loadVersions = async () => {
+    setVLoading(true);
+    const { data } = await supabase.from("topic_versions").select("*").eq("topic_id", topic.id).order("created_at", { ascending: false }).limit(50);
+    setVersions(data || []);
+    setVLoading(false);
+  };
+
+  const restoreVersion = async (v: any) => {
+    if (!confirm(`Restore version from ${new Date(v.created_at).toLocaleString()}? Current state will also be snapshotted.`)) return;
+    await supabase.from("topic_versions").insert({
+      topic_id: topic.id, title: topic.title, summary: topic.summary,
+      content: topic.content as any, quiz: topic.quiz as any,
+      visualization: topic.visualization, mindmap: (topic as any).mindmap ?? null,
+      note: "before-restore",
+    });
+    const { error } = await supabase.from("topics").update({
+      title: v.title, summary: v.summary, content: v.content, quiz: v.quiz,
+      visualization: v.visualization, mindmap: v.mindmap,
+    }).eq("id", topic.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Restored");
+    await reload();
+    await loadVersions();
   };
 
   const importDoc = async () => {
@@ -122,9 +161,34 @@ export default function TopicEdit() {
 
   return (
     <div className="container max-w-4xl py-10">
-      <Button asChild variant="ghost" size="sm" className="mb-4">
-        <Link to={`/course/${courseSlug}/topic/${topic.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to lesson</Link>
-      </Button>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <Button asChild variant="ghost" size="sm">
+          <Link to={`/course/${courseSlug}/topic/${topic.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to lesson</Link>
+        </Button>
+        <Popover onOpenChange={(o) => o && loadVersions()}>
+          <PopoverTrigger asChild>
+            <Button variant="neon" size="sm"><History className="h-4 w-4 mr-1" /> History</Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-96 max-h-96 overflow-auto">
+            <div className="font-display font-bold mb-2">Saved versions</div>
+            {vLoading && <div className="text-xs text-muted-foreground">Loading…</div>}
+            {!vLoading && versions.length === 0 && <div className="text-xs text-muted-foreground">No history yet — versions are created on every save.</div>}
+            <div className="space-y-2">
+              {versions.map(v => (
+                <div key={v.id} className="flex items-center justify-between gap-2 border border-border/50 rounded-lg p-2">
+                  <div className="text-xs">
+                    <div className="font-mono">{new Date(v.created_at).toLocaleString()}</div>
+                    <div className="text-muted-foreground">{v.note}</div>
+                  </div>
+                  <Button size="sm" variant="hero" onClick={() => restoreVersion(v)}>
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" /> Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       <h1 className="font-display text-3xl font-bold mb-6">Edit Lesson</h1>
 
@@ -219,6 +283,7 @@ export default function TopicEdit() {
                 return (
                   <BlockEditor
                     blocks={parsed}
+                    topicId={topic.id}
                     onChange={(b) => setContentJson(JSON.stringify(b, null, 2))}
                   />
                 );

@@ -4,10 +4,11 @@ import { useTopics, useProgress } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft } from "lucide-react";
+import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function CourseDetail() {
   const { courseSlug } = useParams();
@@ -16,9 +17,31 @@ export default function CourseDetail() {
   const { progress } = useProgress();
   const { isAdmin } = useIsAdmin();
   const [downloading, setDownloading] = useState(false);
+  const [genMM, setGenMM] = useState(false);
+  const [mindmap, setMindmap] = useState<any>(null);
+  const [pyqCount, setPyqCount] = useState(0);
+
+  useEffect(() => {
+    if (!course?.id) return;
+    setMindmap((course as any).mindmap || null);
+    supabase.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", course.id)
+      .then(({ count }) => setPyqCount(count || 0));
+  }, [course?.id]);
 
   if (cLoad || loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
+
+  const generateMindmap = async () => {
+    setGenMM(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-mindmap", { body: { courseId: course.id } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setMindmap(data.mindmap);
+      toast.success("Course mind map generated");
+    } catch (e: any) { toast.error(e.message || "Failed"); }
+    finally { setGenMM(false); }
+  };
 
   const byUnit: Record<number, typeof topics> = {};
   topics.forEach(t => { (byUnit[t.unit] ||= []).push(t); });
@@ -55,6 +78,9 @@ export default function CourseDetail() {
           <p className="text-muted-foreground mt-2 max-w-2xl">{course.description}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button asChild variant="ghost" size="sm">
+            <Link to={`/course/${course.slug}/pyq`}><FileQuestion className="h-4 w-4 mr-1" /> PYQs {pyqCount > 0 && <span className="ml-1 text-xs font-mono text-primary">({pyqCount})</span>}</Link>
+          </Button>
           <Button onClick={downloadDocx} variant="neon" disabled={downloading}>
             <Download className="h-4 w-4 mr-1" /> {downloading ? "Building…" : "Download .docx"}
           </Button>
@@ -65,6 +91,25 @@ export default function CourseDetail() {
           )}
         </div>
       </div>
+
+      {/* Auto Table of Contents */}
+      {topics.length > 0 && (
+        <div className="glass rounded-2xl p-5 mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <BookOpen className="h-5 w-5 text-primary" />
+            <h2 className="font-display font-bold text-lg">Table of Contents</h2>
+            <span className="text-xs text-muted-foreground ml-auto">{topics.length} lessons</span>
+          </div>
+          <ol className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+            {topics.map((t, i) => (
+              <li key={t.id} className="flex gap-2">
+                <span className="font-mono text-xs text-muted-foreground w-10">{t.unit}.{t.order_index}</span>
+                <Link to={`/course/${course.slug}/topic/${t.slug}`} className="hover:text-primary truncate">{t.title}</Link>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {topics.length === 0 ? (
         <div className="glass rounded-2xl p-10 text-center text-muted-foreground">
@@ -112,6 +157,23 @@ export default function CourseDetail() {
               </motion.section>
             );
           })}
+        </div>
+      )}
+
+      {topics.length > 0 && (
+        <div className="mt-12 glass rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="font-display font-bold text-xl flex items-center gap-2"><Brain className="h-5 w-5 text-primary" /> Course Mind Map</div>
+            {isAdmin && (
+              <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMM}>
+                {genMM ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                {mindmap ? "Regenerate" : "Generate"} mind map
+              </Button>
+            )}
+          </div>
+          {mindmap ? <Mindmap data={mindmap} /> : (
+            <p className="text-sm text-muted-foreground">No course mind map yet{isAdmin ? " — click generate." : "."}</p>
+          )}
         </div>
       )}
     </div>
