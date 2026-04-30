@@ -59,15 +59,51 @@ export default function TopicEdit() {
     try {
       const content = JSON.parse(contentJson);
       const quiz = JSON.parse(quizJson);
+      // Snapshot previous state to history before update
+      await supabase.from("topic_versions").insert({
+        topic_id: topic.id,
+        title: topic.title,
+        summary: topic.summary,
+        content: topic.content as any,
+        quiz: topic.quiz as any,
+        visualization: topic.visualization,
+        mindmap: (topic as any).mindmap ?? null,
+        note: "auto-save",
+      });
       const { error } = await supabase.from("topics").update({
         title: topic.title, summary: topic.summary, content, quiz, difficulty_level: level,
       }).eq("id", topic.id);
       if (error) throw error;
-      toast.success("Lesson saved");
+      toast.success("Lesson saved (snapshot taken)");
       nav(`/course/${courseSlug}/topic/${topic.slug}`);
     } catch (e: any) {
       toast.error(e.message || "Save failed — check JSON syntax");
     } finally { setSaving(false); }
+  };
+
+  const loadVersions = async () => {
+    setVLoading(true);
+    const { data } = await supabase.from("topic_versions").select("*").eq("topic_id", topic.id).order("created_at", { ascending: false }).limit(50);
+    setVersions(data || []);
+    setVLoading(false);
+  };
+
+  const restoreVersion = async (v: any) => {
+    if (!confirm(`Restore version from ${new Date(v.created_at).toLocaleString()}? Current state will also be snapshotted.`)) return;
+    await supabase.from("topic_versions").insert({
+      topic_id: topic.id, title: topic.title, summary: topic.summary,
+      content: topic.content as any, quiz: topic.quiz as any,
+      visualization: topic.visualization, mindmap: (topic as any).mindmap ?? null,
+      note: "before-restore",
+    });
+    const { error } = await supabase.from("topics").update({
+      title: v.title, summary: v.summary, content: v.content, quiz: v.quiz,
+      visualization: v.visualization, mindmap: v.mindmap,
+    }).eq("id", topic.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Restored");
+    await reload();
+    await loadVersions();
   };
 
   const importDoc = async () => {
