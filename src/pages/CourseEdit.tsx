@@ -296,9 +296,12 @@ export default function CourseEdit() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
-        <Button onClick={addTopic} variant="neon"><Plus className="h-4 w-4 mr-1" /> Add lesson</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => addTopic({ aiGenerate: false })} variant="ghost"><Plus className="h-4 w-4 mr-1" /> Empty lesson</Button>
+          <Button onClick={() => addTopic({ aiGenerate: true })} variant="hero"><Sparkles className="h-4 w-4 mr-1" /> Add lesson + AI generate</Button>
+        </div>
       </div>
 
 
@@ -317,10 +320,14 @@ export default function CourseEdit() {
               const status = (t as any).generation_status || "ready";
               const isReady = status === "ready";
               const isGen = generating === t.id;
+              const blockCount = Array.isArray((t as any).content) ? (t as any).content.length : 0;
               return (
                 <tr key={t.id} className="border-t border-border/50">
                   <td className="p-3 font-mono">U{t.unit}.{t.order_index}</td>
-                  <td className="p-3">{t.title}</td>
+                  <td className="p-3">
+                    {t.title}
+                    <div className="text-[10px] text-muted-foreground">{blockCount} blocks</div>
+                  </td>
                   <td className="p-3">
                     {isReady ? (
                       <span className="inline-flex items-center gap-1 text-xs text-primary"><CheckCircle2 className="h-3 w-3" /> Ready</span>
@@ -335,9 +342,14 @@ export default function CourseEdit() {
                       </Button>
                     )}
                     {isReady && (
-                      <Button variant="ghost" size="sm" disabled={isGen} onClick={() => generateOne(t.id)} title="Regenerate">
-                        {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      </Button>
+                      <>
+                        <Button variant="ghost" size="sm" disabled={isGen} onClick={() => continueLesson(t.id)} title="Add more (continue / deeper)">
+                          {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" disabled={isGen} onClick={() => generateOne(t.id)} title="Regenerate from scratch">
+                          {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        </Button>
+                      </>
                     )}
                     <Button asChild variant="ghost" size="sm"><Link to={`/course/${course.slug}/topic/${t.slug}/edit`}><Edit3 className="h-4 w-4" /></Link></Button>
                     <Button variant="ghost" size="sm" onClick={() => deleteTopic(t.id, t.title)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
