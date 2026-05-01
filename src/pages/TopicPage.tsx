@@ -28,6 +28,14 @@ export default function TopicPage() {
   const [pageIdx, setPageIdx] = useState(0);
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [genMindmap, setGenMindmap] = useState(false);
+  const [bookmarking, setBookmarking] = useState(false);
+
+  // Resume from URL hash: #p=2&w=14
+  useEffect(() => {
+    const h = window.location.hash;
+    const m = h.match(/p=(\d+)/);
+    if (m) setPageIdx(Math.max(0, parseInt(m[1], 10) - 1));
+  }, [slug]);
 
   useEffect(() => {
     if (!slug || !course?.id) return;
