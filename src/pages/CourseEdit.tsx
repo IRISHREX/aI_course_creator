@@ -101,15 +101,41 @@ export default function CourseEdit() {
   };
   const removeTag = (t: string) => setTags(tags.filter(x => x !== t));
 
-  const addTopic = async () => {
-    const maxOrder = Math.max(0, ...topics.filter(t => t.unit === 1).map(t => t.order_index));
-    const slug = `${course.slug}-lesson-${Date.now()}`;
-    const { data, error } = await supabase.from("topics").insert({
-      course_id: course.id, slug, unit: 1, order_index: maxOrder + 1,
-      title: "New Lesson", summary: "Edit this lesson", content: [{ type: "text", value: "Lesson content here." }], quiz: [],
-    }).select().maybeSingle();
-    if (error) { toast.error(error.message); return; }
-    if (data) nav(`/course/${course.slug}/topic/${data.slug}/edit`);
+  const addTopic = async (opts?: { aiGenerate?: boolean }) => {
+    const titleIn = prompt("New lesson title:");
+    if (!titleIn) return;
+    const summaryIn = prompt("Short summary (optional):") || "";
+    const unitIn = Number(prompt("Unit number (e.g. 1):", "1") || 1);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-topic", {
+        body: { courseId: course.id, title: titleIn, summary: summaryIn, unit: unitIn, generate: !!opts?.aiGenerate },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const created = data.topic;
+      await refreshTopics();
+      if (opts?.aiGenerate && created) {
+        toast.info("Generating lesson with AI…");
+        await generateOne(created.id);
+      } else if (created) {
+        nav(`/course/${course.slug}/topic/${created.slug}/edit`);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to add lesson");
+    }
+  };
+
+  const continueLesson = async (topicId: string) => {
+    setGenerating(topicId);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId, mode: "continue" } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Added ${data.blocks} more blocks`);
+      await refreshTopics();
+    } catch (e: any) {
+      toast.error(e.message || "Continue failed");
+    } finally { setGenerating(null); }
   };
 
   const deleteTopic = async (id: string, t: string) => {
