@@ -18,6 +18,7 @@ import QuizPage from "./pages/QuizPage";
 import CoverageBoard from "./pages/CoverageBoard";
 import Certificate from "./pages/Certificate";
 import CoursePYQ from "./pages/CoursePYQ";
+import Bookmarks from "./pages/Bookmarks";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/courses" element={<Courses />} />
                 <Route path="/admin/upload" element={<AdminUpload />} />
+                <Route path="/bookmarks" element={<Bookmarks />} />
                 <Route path="/course/:courseSlug" element={<CourseDetail />} />
                 <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
                 <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />

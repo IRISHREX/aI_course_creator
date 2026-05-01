@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   Type, Lightbulb, List as ListIcon, GitBranch, Plus, Trash2, ChevronUp, ChevronDown, X,
   Table as TableIcon, Workflow, BarChart3, Image as ImageIcon, Upload, Sparkles, Loader2,
+  Sigma, Code2,
 } from "lucide-react";
 
 export type Block =
@@ -18,7 +19,9 @@ export type Block =
   | { type: "table"; title?: string; headers: string[]; rows: string[][] }
   | { type: "flowchart"; title?: string; code: string }
   | { type: "chart"; title?: string; variant: "bar" | "line" | "pie"; data: { name: string; value: number }[] }
-  | { type: "image"; url: string; caption?: string };
+  | { type: "image"; url: string; caption?: string }
+  | { type: "math"; value: string; display?: boolean; caption?: string }
+  | { type: "code"; language: string; value: string; caption?: string };
 
 interface Props { blocks: Block[]; onChange: (blocks: Block[]) => void; courseId?: string; topicId?: string; }
 
@@ -31,6 +34,8 @@ const blank: Record<Block["type"], () => Block> = {
   flowchart: () => ({ type: "flowchart", title: "", code: "graph TD\n  A[Start] --> B[Process]\n  B --> C[End]" }),
   chart: () => ({ type: "chart", title: "", variant: "bar", data: [{ name: "A", value: 10 }, { name: "B", value: 20 }] }),
   image: () => ({ type: "image", url: "", caption: "" }),
+  math: () => ({ type: "math", value: "E = mc^2", display: true, caption: "" }),
+  code: () => ({ type: "code", language: "javascript", value: "// your code here\nconsole.log('hello');", caption: "" }),
 };
 
 const TYPE_META: { id: Block["type"]; label: string; icon: any }[] = [
@@ -42,6 +47,8 @@ const TYPE_META: { id: Block["type"]; label: string; icon: any }[] = [
   { id: "flowchart", label: "Flowchart", icon: Workflow },
   { id: "chart", label: "Chart", icon: BarChart3 },
   { id: "image", label: "Image", icon: ImageIcon },
+  { id: "math", label: "Math", icon: Sigma },
+  { id: "code", label: "Code", icon: Code2 },
 ];
 
 function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: any) => void; topicId?: string }) {
@@ -227,6 +234,38 @@ export function BlockEditor({ blocks, onChange, topicId }: Props) {
               )}
 
               {b.type === "image" && <ImageBlockEditor block={b} update={(nb) => update(i, nb)} topicId={topicId} />}
+
+              {b.type === "math" && (
+                <div className="space-y-2">
+                  <Textarea rows={3} className="font-mono text-xs" placeholder="LaTeX e.g. \\frac{a}{b} or E = mc^2" value={b.value} onChange={e => update(i, { ...b, value: e.target.value })} />
+                  <div className="flex items-center gap-3 text-xs">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={b.display !== false} onChange={e => update(i, { ...b, display: e.target.checked })} />
+                      Display (centered) mode
+                    </label>
+                  </div>
+                  <Input placeholder="Caption (optional)" value={b.caption || ""} onChange={e => update(i, { ...b, caption: e.target.value })} />
+                  <p className="text-[10px] text-muted-foreground">KaTeX syntax. Use single backslashes in LaTeX commands.</p>
+                </div>
+              )}
+
+              {b.type === "code" && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Select value={b.language} onValueChange={(v: any) => update(i, { ...b, language: v })}>
+                      <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["javascript","typescript","python","java","c","cpp","csharp","go","rust","ruby","php","sql","bash","html","css","json","yaml","markdown","plaintext"].map(l => (
+                          <SelectItem key={l} value={l}>{l}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input placeholder="Caption (optional)" value={b.caption || ""} onChange={e => update(i, { ...b, caption: e.target.value })} />
+                  </div>
+                  <Textarea rows={8} className="font-mono text-xs" value={b.value} onChange={e => update(i, { ...b, value: e.target.value })} />
+                </div>
+              )}
+
             </div>
           </div>
         );

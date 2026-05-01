@@ -11,7 +11,7 @@ import { KaraokeReadMode, karaokeSeek } from "@/components/KaraokeReadMode";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -28,6 +28,14 @@ export default function TopicPage() {
   const [pageIdx, setPageIdx] = useState(0);
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [genMindmap, setGenMindmap] = useState(false);
+  const [bookmarking, setBookmarking] = useState(false);
+
+  // Resume from URL hash: #p=2&w=14
+  useEffect(() => {
+    const h = window.location.hash;
+    const m = h.match(/p=(\d+)/);
+    if (m) setPageIdx(Math.max(0, parseInt(m[1], 10) - 1));
+  }, [slug]);
 
   useEffect(() => {
     if (!slug || !course?.id) return;
@@ -86,6 +94,26 @@ export default function TopicPage() {
     finally { setGenMindmap(false); }
   };
 
+  const addBookmark = async () => {
+    if (!user) { toast.info("Sign in to bookmark"); return; }
+    if (!topic || !course) return;
+    setBookmarking(true);
+    try {
+      const label = window.prompt("Bookmark label (optional):", `${topic.title} — page ${pageIdx + 1}`) || null;
+      const { error } = await supabase.from("bookmarks").insert({
+        user_id: user.id,
+        topic_id: topic.id,
+        course_id: course.id,
+        page_index: pageIdx,
+        word_index: activeWord ?? 0,
+        label,
+      });
+      if (error) throw error;
+      toast.success("Bookmarked");
+    } catch (e: any) { toast.error(e.message || "Bookmark failed"); }
+    finally { setBookmarking(false); }
+  };
+
   const linkPrefix = `/course/${courseSlug}`;
 
   return (
@@ -96,6 +124,9 @@ export default function TopicPage() {
         </Button>
         <div className="flex items-center gap-2">
           <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} />
+          <Button variant="ghost" size="sm" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page">
+            {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
+          </Button>
           {isAdmin && (
             <Button asChild variant="neon" size="sm">
               <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Edit</Link>

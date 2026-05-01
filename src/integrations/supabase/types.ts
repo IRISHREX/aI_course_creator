@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      bookmarks: {
+        Row: {
+          course_id: string
+          created_at: string
+          id: string
+          label: string | null
+          page_index: number
+          topic_id: string
+          user_id: string
+          word_index: number
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          page_index?: number
+          topic_id: string
+          user_id: string
+          word_index?: number
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          page_index?: number
+          topic_id?: string
+          user_id?: string
+          word_index?: number
+        }
+        Relationships: []
+      }
       course_pyq: {
         Row: {
           answer: string

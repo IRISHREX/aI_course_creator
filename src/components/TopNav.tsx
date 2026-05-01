@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Radio, BookOpen, Upload, LogIn, LogOut } from "lucide-react";
+import { Radio, BookOpen, Upload, LogIn, LogOut, Bookmark } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ export const TopNav = () => {
 
   const navItems = [
     { to: "/courses", label: "Courses", icon: BookOpen },
+    ...(user ? [{ to: "/bookmarks", label: "Bookmarks", icon: Bookmark }] : []),
     ...(isAdmin ? [{ to: "/admin/upload", label: "Upload", icon: Upload }] : []),
   ];
 

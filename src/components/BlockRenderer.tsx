@@ -1,63 +1,100 @@
 import { motion } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Copy, Check } from "lucide-react";
+import { useEffect, useState } from "react";
 import { MermaidDiagram } from "./Mindmap";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
+import { BlockMath, InlineMath } from "react-katex";
+import "katex/dist/katex.min.css";
+import { codeToHtml } from "shiki";
+import { Button } from "./ui/button";
 
 const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--success))", "hsl(var(--warning))", "hsl(var(--destructive))"];
 
 interface Props {
   block: any;
-  /** Optional: tokens belonging to this block, for karaoke highlight */
   wordOffset?: number;
   activeWordIndex?: number | null;
   onWordClick?: (idx: number) => void;
-  /** All tokens of the page (text fragments) so we can render with highlight */
   text?: string;
 }
 
-/** Render plain text with per-word spans, supporting active-word highlight + click-to-seek. */
+/** Strip ** markers (used when computing tokens for TTS). */
+function stripBold(s: string): string {
+  return s.replace(/\*\*(.+?)\*\*/g, "$1");
+}
+
+/**
+ * Render text with **bold** markers expanded, while assigning per-word data-w indices
+ * starting at baseIndex. Each whitespace-separated token = one word index, regardless of bold.
+ */
 function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className = "" }:
   { value: string; baseIndex: number; activeIndex: number | null | undefined; onWordClick?: (i: number) => void; className?: string }) {
-  const parts: React.ReactNode[] = [];
-  const re = /(\s+)/g;
-  let last = 0;
+  // Strip ** but remember bold ranges over the *stripped* string
+  const boldRanges: Array<[number, number]> = [];
+  let stripped = "";
+  let i = 0;
+  while (i < value.length) {
+    if (value[i] === "*" && value[i + 1] === "*") {
+      const end = value.indexOf("**", i + 2);
+      if (end !== -1) {
+        const inner = value.slice(i + 2, end);
+        const start = stripped.length;
+        stripped += inner;
+        boldRanges.push([start, stripped.length]);
+        i = end + 2;
+        continue;
+      }
+    }
+    stripped += value[i];
+    i++;
+  }
+
+  const isBold = (pos: number) => boldRanges.some(([s, e]) => pos >= s && pos < e);
+
+  // Walk stripped string, alternating words/whitespace. Assign word indices.
+  const out: React.ReactNode[] = [];
+  const re = /(\s+|\S+)/g;
+  let m: RegExpExecArray | null;
   let wordI = 0;
-  const segments = value.split(re); // alternating word/whitespace
-  segments.forEach((seg, i) => {
-    if (/^\s+$/.test(seg) || seg === "") {
-      parts.push(<span key={`s${i}`}>{seg}</span>);
+  let key = 0;
+  while ((m = re.exec(stripped))) {
+    const tok = m[0];
+    const start = m.index;
+    if (/^\s+$/.test(tok)) {
+      out.push(<span key={`s${key++}`}>{tok}</span>);
     } else {
       const idx = baseIndex + wordI;
       const active = activeIndex === idx;
-      parts.push(
+      // Render the word; if any character is in a bold range, wrap whole word in <strong>.
+      const anyBold = Array.from({ length: tok.length }, (_, k) => isBold(start + k)).some(Boolean);
+      const inner = anyBold ? <strong>{tok}</strong> : tok;
+      out.push(
         <span
-          key={`w${i}`}
+          key={`w${key++}`}
           data-w={idx}
           onClick={() => onWordClick?.(idx)}
           className={`cursor-pointer rounded px-0.5 transition-colors ${active ? "bg-primary text-primary-foreground" : "hover:bg-primary/15"}`}
         >
-          {seg}
+          {inner}
         </span>
       );
       wordI++;
     }
-  });
-  return <span className={className}>{parts}</span>;
+  }
+  return <span className={className}>{out}</span>;
 }
 
-/** Count words in a string (whitespace-separated). */
 export function countWords(s: string): number {
-  return (s.match(/\S+/g) || []).length;
+  return (stripBold(s).match(/\S+/g) || []).length;
 }
 
-/** Concatenate all readable text in a block to a string (matches blocksToReadable order). */
 export function blockToText(b: any): string {
   if (!b) return "";
-  if (b.type === "text") return b.value || "";
-  if (b.type === "highlight") return "Key point. " + (b.value || "");
+  if (b.type === "text") return stripBold(b.value || "");
+  if (b.type === "highlight") return "Key point. " + stripBold(b.value || "");
   if (b.type === "list") {
-    const head = b.title ? b.title + "." : "";
-    const items = (b.items || []).map((it: string, i: number) => `${i + 1}. ${it}`).join(". ");
+    const head = b.title ? stripBold(b.title) + "." : "";
+    const items = (b.items || []).map((it: string, i: number) => `${i + 1}. ${stripBold(it)}`).join(". ");
     return [head, items].filter(Boolean).join(" ");
   }
   if (b.type === "timeline") {
@@ -71,7 +108,53 @@ export function blockToText(b: any): string {
   if (b.type === "flowchart") return b.title || "Diagram.";
   if (b.type === "chart") return b.title || "Chart.";
   if (b.type === "image") return b.caption || "";
+  if (b.type === "math") return b.caption || "Equation.";
+  if (b.type === "code") return b.caption || "Code example.";
   return "";
+}
+
+function CodeBlock({ language, value, caption }: { language: string; value: string; caption?: string }) {
+  const [html, setHtml] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const out = await codeToHtml(value, {
+          lang: language || "plaintext",
+          theme: "github-dark",
+        });
+        if (!cancelled) setHtml(out);
+      } catch {
+        if (!cancelled) setHtml(`<pre><code>${value.replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!))}</code></pre>`);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [language, value]);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <figure className="rounded-2xl border border-border overflow-hidden bg-[#0d1117]">
+      <div className="flex items-center justify-between px-4 py-2 bg-muted/40 border-b border-border text-xs">
+        <span className="font-mono text-primary">{language}</span>
+        <Button size="sm" variant="ghost" className="h-7" onClick={copy}>
+          {copied ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <div
+        className="text-sm overflow-auto [&_pre]:!bg-transparent [&_pre]:p-4 [&_pre]:m-0"
+        dangerouslySetInnerHTML={{ __html: html || `<pre class="p-4 text-muted-foreground">Loading…</pre>` }}
+      />
+      {caption && <figcaption className="text-xs text-muted-foreground px-4 py-2 border-t border-border">{caption}</figcaption>}
+    </figure>
+  );
 }
 
 export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordClick }: Props) {
@@ -101,7 +184,8 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
 
   if (b.type === "list") {
     let off = wordOffset;
-    const titleWords = b.title ? countWords(b.title + ".") : 0;
+    const titleStripped = b.title ? stripBold(b.title) + "." : "";
+    const titleWords = titleStripped ? countWords(titleStripped) : 0;
     return (
       <div className="glass rounded-2xl p-6">
         {b.title && (
@@ -111,12 +195,12 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
         )}
         <ul className="space-y-2">
           {(b.items || []).map((it: string, j: number) => {
-            const txt = `${j + 1}. ${it}`;
-            const base = off + titleWords + b.items.slice(0, j).reduce((acc: number, s: string, k: number) => acc + countWords(`${k + 1}. ${s}`), 0);
+            const prev = b.items.slice(0, j).reduce((acc: number, s: string, k: number) => acc + countWords(`${k + 1}. ${s}`), 0);
+            const itemBase = off + titleWords + prev + 1; // +1 to skip "j."
             return (
               <li key={j} className="flex gap-3">
                 <span className="h-6 w-6 rounded-full bg-primary/20 text-primary grid place-items-center text-xs font-mono mt-0.5">{j + 1}</span>
-                <span><HighlightedText value={it} baseIndex={base + 1 /* skip "j." */} activeIndex={activeWordIndex} onWordClick={onWordClick} /></span>
+                <span><HighlightedText value={it} baseIndex={itemBase} activeIndex={activeWordIndex} onWordClick={onWordClick} /></span>
               </li>
             );
           })}
@@ -219,6 +303,21 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
         {b.caption && <figcaption className="text-xs text-muted-foreground text-center mt-2">{b.caption}</figcaption>}
       </figure>
     );
+  }
+
+  if (b.type === "math") {
+    return (
+      <figure className="glass rounded-2xl p-5 overflow-x-auto">
+        {b.display === false
+          ? <InlineMath math={b.value || ""} />
+          : <BlockMath math={b.value || ""} />}
+        {b.caption && <figcaption className="text-xs text-muted-foreground text-center mt-2">{b.caption}</figcaption>}
+      </figure>
+    );
+  }
+
+  if (b.type === "code") {
+    return <CodeBlock language={b.language || "plaintext"} value={b.value || ""} caption={b.caption} />;
   }
 
   return null;
