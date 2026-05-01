@@ -234,6 +234,38 @@ export function BlockEditor({ blocks, onChange, topicId }: Props) {
               )}
 
               {b.type === "image" && <ImageBlockEditor block={b} update={(nb) => update(i, nb)} topicId={topicId} />}
+
+              {b.type === "math" && (
+                <div className="space-y-2">
+                  <Textarea rows={3} className="font-mono text-xs" placeholder="LaTeX e.g. \\frac{a}{b} or E = mc^2" value={b.value} onChange={e => update(i, { ...b, value: e.target.value })} />
+                  <div className="flex items-center gap-3 text-xs">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={b.display !== false} onChange={e => update(i, { ...b, display: e.target.checked })} />
+                      Display (centered) mode
+                    </label>
+                  </div>
+                  <Input placeholder="Caption (optional)" value={b.caption || ""} onChange={e => update(i, { ...b, caption: e.target.value })} />
+                  <p className="text-[10px] text-muted-foreground">KaTeX syntax. Use single backslashes in LaTeX commands.</p>
+                </div>
+              )}
+
+              {b.type === "code" && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Select value={b.language} onValueChange={(v: any) => update(i, { ...b, language: v })}>
+                      <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["javascript","typescript","python","java","c","cpp","csharp","go","rust","ruby","php","sql","bash","html","css","json","yaml","markdown","plaintext"].map(l => (
+                          <SelectItem key={l} value={l}>{l}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input placeholder="Caption (optional)" value={b.caption || ""} onChange={e => update(i, { ...b, caption: e.target.value })} />
+                  </div>
+                  <Textarea rows={8} className="font-mono text-xs" value={b.value} onChange={e => update(i, { ...b, value: e.target.value })} />
+                </div>
+              )}
+
             </div>
           </div>
         );
