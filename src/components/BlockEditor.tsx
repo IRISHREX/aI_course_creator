@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   Type, Lightbulb, List as ListIcon, GitBranch, Plus, Trash2, ChevronUp, ChevronDown, X,
   Table as TableIcon, Workflow, BarChart3, Image as ImageIcon, Upload, Sparkles, Loader2,
+  Sigma, Code2,
 } from "lucide-react";
 
 export type Block =
@@ -18,7 +19,9 @@ export type Block =
   | { type: "table"; title?: string; headers: string[]; rows: string[][] }
   | { type: "flowchart"; title?: string; code: string }
   | { type: "chart"; title?: string; variant: "bar" | "line" | "pie"; data: { name: string; value: number }[] }
-  | { type: "image"; url: string; caption?: string };
+  | { type: "image"; url: string; caption?: string }
+  | { type: "math"; value: string; display?: boolean; caption?: string }
+  | { type: "code"; language: string; value: string; caption?: string };
 
 interface Props { blocks: Block[]; onChange: (blocks: Block[]) => void; courseId?: string; topicId?: string; }
 
