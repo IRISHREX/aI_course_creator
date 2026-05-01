@@ -12,6 +12,7 @@ export const TopNav = () => {
 
   const navItems = [
     { to: "/courses", label: "Courses", icon: BookOpen },
+    ...(user ? [{ to: "/bookmarks", label: "Bookmarks", icon: Bookmark }] : []),
     ...(isAdmin ? [{ to: "/admin/upload", label: "Upload", icon: Upload }] : []),
   ];
 
