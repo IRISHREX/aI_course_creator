@@ -11,7 +11,7 @@ import { KaraokeReadMode, karaokeSeek } from "@/components/KaraokeReadMode";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, BookmarkCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
