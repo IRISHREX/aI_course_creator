@@ -39,6 +39,7 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/courses" element={<Courses />} />
                 <Route path="/admin/upload" element={<AdminUpload />} />
+                <Route path="/bookmarks" element={<Bookmarks />} />
                 <Route path="/course/:courseSlug" element={<CourseDetail />} />
                 <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
                 <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
