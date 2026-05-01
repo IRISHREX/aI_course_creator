@@ -34,6 +34,8 @@ const blank: Record<Block["type"], () => Block> = {
   flowchart: () => ({ type: "flowchart", title: "", code: "graph TD\n  A[Start] --> B[Process]\n  B --> C[End]" }),
   chart: () => ({ type: "chart", title: "", variant: "bar", data: [{ name: "A", value: 10 }, { name: "B", value: 20 }] }),
   image: () => ({ type: "image", url: "", caption: "" }),
+  math: () => ({ type: "math", value: "E = mc^2", display: true, caption: "" }),
+  code: () => ({ type: "code", language: "javascript", value: "// your code here\nconsole.log('hello');", caption: "" }),
 };
 
 const TYPE_META: { id: Block["type"]; label: string; icon: any }[] = [
@@ -45,6 +47,8 @@ const TYPE_META: { id: Block["type"]; label: string; icon: any }[] = [
   { id: "flowchart", label: "Flowchart", icon: Workflow },
   { id: "chart", label: "Chart", icon: BarChart3 },
   { id: "image", label: "Image", icon: ImageIcon },
+  { id: "math", label: "Math", icon: Sigma },
+  { id: "code", label: "Code", icon: Code2 },
 ];
 
 function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: any) => void; topicId?: string }) {
