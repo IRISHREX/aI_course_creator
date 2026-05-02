@@ -52,7 +52,29 @@ export default function CoursePYQ() {
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
   const years = Array.from(new Set(items.map(i => i.year).filter((y): y is number => !!y))).sort((a, b) => b - a);
-  const visible = yearFilter === "all" ? items : items.filter(i => String(i.year) === yearFilter);
+  const visible = items
+    .filter(i => yearFilter === "all" || String(i.year) === yearFilter)
+    .filter(i => topicFilter === "all" || (i.topic_ids || []).includes(topicFilter));
+
+  const toggleTag = async (pyqId: string, topicId: string, on: boolean) => {
+    if (!isAdmin) return;
+    if (on) {
+      await supabase.from("pyq_topics").insert({ pyq_id: pyqId, topic_id: topicId });
+    } else {
+      await supabase.from("pyq_topics").delete().eq("pyq_id", pyqId).eq("topic_id", topicId);
+    }
+    reload();
+  };
+
+  const genAnswer = async (pyqId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", { body: { pyqId } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Answer generated");
+      reload();
+    } catch (e: any) { toast.error(e.message || "Failed"); }
+  };
 
   const generate = async () => {
     setGenerating(true);
