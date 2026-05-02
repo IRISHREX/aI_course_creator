@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, Sparkles, Trash2, Loader2, Save, Lock } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Trash2, Loader2, Save, Lock, Tag, FileQuestion } from "lucide-react";
 import { toast } from "sonner";
 
 interface PYQ {
   id?: string; question: string; answer: string;
   marks?: number | null; year?: number | null;
   source?: string | null; order_index: number;
+  topic_ids?: string[];
 }
 
 export default function CoursePYQ() {
@@ -26,12 +27,23 @@ export default function CoursePYQ() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [yearFilter, setYearFilter] = useState<string>("all");
+  const [topicFilter, setTopicFilter] = useState<string>("all");
+  const [topics, setTopics] = useState<{ id: string; title: string }[]>([]);
 
   const reload = async () => {
     if (!course?.id) return;
     setLoading(true);
-    const { data } = await supabase.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index");
-    setItems((data as any[]) || []);
+    const [{ data: pyqs }, { data: links }, { data: ts }] = await Promise.all([
+      supabase.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index"),
+      supabase.from("pyq_topics").select("pyq_id, topic_id"),
+      supabase.from("topics").select("id, title").eq("course_id", course.id).order("unit").order("order_index"),
+    ]);
+    const linkMap = new Map<string, string[]>();
+    (links || []).forEach((l: any) => {
+      const arr = linkMap.get(l.pyq_id) || []; arr.push(l.topic_id); linkMap.set(l.pyq_id, arr);
+    });
+    setItems(((pyqs as any[]) || []).map(p => ({ ...p, topic_ids: linkMap.get(p.id) || [] })));
+    setTopics((ts as any[]) || []);
     setLoading(false);
   };
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [course?.id]);
