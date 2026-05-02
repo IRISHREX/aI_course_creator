@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, Sparkles, Trash2, Loader2, Save, Lock } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Trash2, Loader2, Save, Lock, Tag, FileQuestion } from "lucide-react";
 import { toast } from "sonner";
 
 interface PYQ {
   id?: string; question: string; answer: string;
   marks?: number | null; year?: number | null;
   source?: string | null; order_index: number;
+  topic_ids?: string[];
 }
 
 export default function CoursePYQ() {
@@ -26,12 +27,23 @@ export default function CoursePYQ() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [yearFilter, setYearFilter] = useState<string>("all");
+  const [topicFilter, setTopicFilter] = useState<string>("all");
+  const [topics, setTopics] = useState<{ id: string; title: string }[]>([]);
 
   const reload = async () => {
     if (!course?.id) return;
     setLoading(true);
-    const { data } = await supabase.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index");
-    setItems((data as any[]) || []);
+    const [{ data: pyqs }, { data: links }, { data: ts }] = await Promise.all([
+      supabase.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index"),
+      supabase.from("pyq_topics").select("pyq_id, topic_id"),
+      supabase.from("topics").select("id, title").eq("course_id", course.id).order("unit").order("order_index"),
+    ]);
+    const linkMap = new Map<string, string[]>();
+    (links || []).forEach((l: any) => {
+      const arr = linkMap.get(l.pyq_id) || []; arr.push(l.topic_id); linkMap.set(l.pyq_id, arr);
+    });
+    setItems(((pyqs as any[]) || []).map(p => ({ ...p, topic_ids: linkMap.get(p.id) || [] })));
+    setTopics((ts as any[]) || []);
     setLoading(false);
   };
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [course?.id]);
@@ -40,7 +52,29 @@ export default function CoursePYQ() {
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
   const years = Array.from(new Set(items.map(i => i.year).filter((y): y is number => !!y))).sort((a, b) => b - a);
-  const visible = yearFilter === "all" ? items : items.filter(i => String(i.year) === yearFilter);
+  const visible = items
+    .filter(i => yearFilter === "all" || String(i.year) === yearFilter)
+    .filter(i => topicFilter === "all" || (i.topic_ids || []).includes(topicFilter));
+
+  const toggleTag = async (pyqId: string, topicId: string, on: boolean) => {
+    if (!isAdmin) return;
+    if (on) {
+      await supabase.from("pyq_topics").insert({ pyq_id: pyqId, topic_id: topicId });
+    } else {
+      await supabase.from("pyq_topics").delete().eq("pyq_id", pyqId).eq("topic_id", topicId);
+    }
+    reload();
+  };
+
+  const genAnswer = async (pyqId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", { body: { pyqId } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Answer generated");
+      reload();
+    } catch (e: any) { toast.error(e.message || "Failed"); }
+  };
 
   const generate = async () => {
     setGenerating(true);
@@ -107,12 +141,25 @@ export default function CoursePYQ() {
         )}
       </div>
 
-      {years.length > 0 && (
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <Button size="sm" variant={yearFilter === "all" ? "hero" : "ghost"} onClick={() => setYearFilter("all")}>All years</Button>
-          {years.map(y => (
-            <Button key={y} size="sm" variant={yearFilter === String(y) ? "hero" : "ghost"} onClick={() => setYearFilter(String(y))}>{y}</Button>
-          ))}
+      {(years.length > 0 || topics.length > 0) && (
+        <div className="space-y-2 mb-4">
+          {years.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" variant={yearFilter === "all" ? "hero" : "ghost"} onClick={() => setYearFilter("all")}>All years</Button>
+              {years.map(y => (
+                <Button key={y} size="sm" variant={yearFilter === String(y) ? "hero" : "ghost"} onClick={() => setYearFilter(String(y))}>{y}</Button>
+              ))}
+            </div>
+          )}
+          {topics.length > 0 && (
+            <div className="flex gap-2 flex-wrap items-center">
+              <Tag className="h-3 w-3 text-muted-foreground" />
+              <Button size="sm" variant={topicFilter === "all" ? "hero" : "ghost"} onClick={() => setTopicFilter("all")}>All lessons</Button>
+              {topics.map(t => (
+                <Button key={t.id} size="sm" variant={topicFilter === t.id ? "hero" : "ghost"} onClick={() => setTopicFilter(t.id)}>{t.title}</Button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -138,8 +185,35 @@ export default function CoursePYQ() {
                     </div>
                     <Label className="text-xs">Question</Label>
                     <Textarea rows={2} value={it.question} onChange={e => update(realI, { question: e.target.value })} />
-                    <Label className="text-xs">Answer</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">Answer</Label>
+                      {it.id && !it.answer && (
+                        <Button size="sm" variant="neon" onClick={() => genAnswer(it.id!)}>
+                          <Sparkles className="h-3 w-3 mr-1" /> Generate AI answer
+                        </Button>
+                      )}
+                    </div>
                     <Textarea rows={4} value={it.answer} onChange={e => update(realI, { answer: e.target.value })} />
+                    {it.id && topics.length > 0 && (
+                      <div>
+                        <Label className="text-xs flex items-center gap-1 mb-1"><Tag className="h-3 w-3" /> Tagged lessons</Label>
+                        <div className="flex flex-wrap gap-1">
+                          {topics.map(t => {
+                            const on = (it.topic_ids || []).includes(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => toggleTag(it.id!, t.id, !on)}
+                                className={`text-[11px] px-2 py-0.5 rounded-full border transition ${on ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
+                              >
+                                {t.title}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <details>
@@ -147,7 +221,16 @@ export default function CoursePYQ() {
                       <span className="text-xs font-mono text-primary mr-2">{it.year || "—"} · {it.marks ? `${it.marks}m` : ""}</span>
                       <span className="font-medium">Q{realI + 1}. {it.question}</span>
                     </summary>
-                    <div className="mt-3 text-sm whitespace-pre-wrap text-muted-foreground">{it.answer}</div>
+                    <div className="mt-3 text-sm whitespace-pre-wrap text-muted-foreground">{it.answer || <span className="italic">No answer yet.</span>}</div>
+                    {(it.topic_ids || []).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {(it.topic_ids || []).map(tid => {
+                          const t = topics.find(x => x.id === tid);
+                          if (!t) return null;
+                          return <span key={tid} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">{t.title}</span>;
+                        })}
+                      </div>
+                    )}
                   </details>
                 )}
               </div>

@@ -12,6 +12,9 @@ import Courses from "./pages/Courses";
 import CourseDetail from "./pages/CourseDetail";
 import CourseEdit from "./pages/CourseEdit";
 import AdminUpload from "./pages/AdminUpload";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminUsers from "./pages/AdminUsers";
+import AdminPYQUpload from "./pages/AdminPYQUpload";
 import TopicPage from "./pages/TopicPage";
 import TopicEdit from "./pages/TopicEdit";
 import QuizPage from "./pages/QuizPage";
@@ -38,7 +41,10 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/courses" element={<Courses />} />
+                <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/upload" element={<AdminUpload />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/pyq-upload" element={<AdminPYQUpload />} />
                 <Route path="/bookmarks" element={<Bookmarks />} />
                 <Route path="/course/:courseSlug" element={<CourseDetail />} />
                 <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />

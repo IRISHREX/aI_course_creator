@@ -8,6 +8,7 @@ import { useCourseBySlug } from "@/hooks/useCourses";
 import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
 import { KaraokeReadMode, karaokeSeek } from "@/components/KaraokeReadMode";
+import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
@@ -124,6 +125,7 @@ export default function TopicPage() {
         </Button>
         <div className="flex items-center gap-2">
           <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} />
+          {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
           <Button variant="ghost" size="sm" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page">
             {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
           </Button>

@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Radio, BookOpen, Upload, LogIn, LogOut, Bookmark } from "lucide-react";
+import { Radio, BookOpen, LogIn, LogOut, Bookmark, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,13 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 export const TopNav = () => {
   const { user, signOut } = useAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, isSuperAdmin } = useIsAdmin();
   const loc = useLocation();
 
   const navItems = [
     { to: "/courses", label: "Courses", icon: BookOpen },
     ...(user ? [{ to: "/bookmarks", label: "Bookmarks", icon: Bookmark }] : []),
-    ...(isAdmin ? [{ to: "/admin/upload", label: "Upload", icon: Upload }] : []),
+    ...(isAdmin ? [{ to: "/admin", label: "Admin", icon: Shield }] : []),
   ];
 
   return (
@@ -52,7 +52,8 @@ export const TopNav = () => {
           {user ? (
             <>
               <span className="hidden sm:inline text-xs text-muted-foreground font-mono">
-                {user.email?.split("@")[0]}{isAdmin && <span className="ml-1 text-primary">· admin</span>}
+                {user.email?.split("@")[0]}
+                {isSuperAdmin ? <span className="ml-1 text-primary">· super</span> : isAdmin && <span className="ml-1 text-primary">· admin</span>}
               </span>
               <Button variant="ghost" size="sm" onClick={signOut}>
                 <LogOut className="h-4 w-4" />

@@ -53,6 +53,7 @@ export type Database = {
           course_id: string
           created_at: string
           id: string
+          ingestion_source: string | null
           marks: number | null
           order_index: number
           question: string
@@ -66,6 +67,7 @@ export type Database = {
           course_id: string
           created_at?: string
           id?: string
+          ingestion_source?: string | null
           marks?: number | null
           order_index?: number
           question: string
@@ -79,6 +81,7 @@ export type Database = {
           course_id?: string
           created_at?: string
           id?: string
+          ingestion_source?: string | null
           marks?: number | null
           order_index?: number
           question?: string
@@ -169,6 +172,42 @@ export type Database = {
           id?: string
         }
         Relationships: []
+      }
+      pyq_topics: {
+        Row: {
+          created_at: string
+          id: string
+          pyq_id: string
+          topic_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pyq_id: string
+          topic_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pyq_id?: string
+          topic_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pyq_topics_pyq_id_fkey"
+            columns: ["pyq_id"]
+            isOneToOne: false
+            referencedRelation: "course_pyq"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pyq_topics_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       topic_progress: {
         Row: {
@@ -358,7 +397,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "super_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -486,7 +525,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "super_admin"],
     },
   },
 } as const
