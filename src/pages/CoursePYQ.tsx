@@ -141,12 +141,25 @@ export default function CoursePYQ() {
         )}
       </div>
 
-      {years.length > 0 && (
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <Button size="sm" variant={yearFilter === "all" ? "hero" : "ghost"} onClick={() => setYearFilter("all")}>All years</Button>
-          {years.map(y => (
-            <Button key={y} size="sm" variant={yearFilter === String(y) ? "hero" : "ghost"} onClick={() => setYearFilter(String(y))}>{y}</Button>
-          ))}
+      {(years.length > 0 || topics.length > 0) && (
+        <div className="space-y-2 mb-4">
+          {years.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" variant={yearFilter === "all" ? "hero" : "ghost"} onClick={() => setYearFilter("all")}>All years</Button>
+              {years.map(y => (
+                <Button key={y} size="sm" variant={yearFilter === String(y) ? "hero" : "ghost"} onClick={() => setYearFilter(String(y))}>{y}</Button>
+              ))}
+            </div>
+          )}
+          {topics.length > 0 && (
+            <div className="flex gap-2 flex-wrap items-center">
+              <Tag className="h-3 w-3 text-muted-foreground" />
+              <Button size="sm" variant={topicFilter === "all" ? "hero" : "ghost"} onClick={() => setTopicFilter("all")}>All lessons</Button>
+              {topics.map(t => (
+                <Button key={t.id} size="sm" variant={topicFilter === t.id ? "hero" : "ghost"} onClick={() => setTopicFilter(t.id)}>{t.title}</Button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -172,8 +185,35 @@ export default function CoursePYQ() {
                     </div>
                     <Label className="text-xs">Question</Label>
                     <Textarea rows={2} value={it.question} onChange={e => update(realI, { question: e.target.value })} />
-                    <Label className="text-xs">Answer</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">Answer</Label>
+                      {it.id && !it.answer && (
+                        <Button size="sm" variant="neon" onClick={() => genAnswer(it.id!)}>
+                          <Sparkles className="h-3 w-3 mr-1" /> Generate AI answer
+                        </Button>
+                      )}
+                    </div>
                     <Textarea rows={4} value={it.answer} onChange={e => update(realI, { answer: e.target.value })} />
+                    {it.id && topics.length > 0 && (
+                      <div>
+                        <Label className="text-xs flex items-center gap-1 mb-1"><Tag className="h-3 w-3" /> Tagged lessons</Label>
+                        <div className="flex flex-wrap gap-1">
+                          {topics.map(t => {
+                            const on = (it.topic_ids || []).includes(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => toggleTag(it.id!, t.id, !on)}
+                                className={`text-[11px] px-2 py-0.5 rounded-full border transition ${on ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
+                              >
+                                {t.title}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <details>
@@ -181,7 +221,16 @@ export default function CoursePYQ() {
                       <span className="text-xs font-mono text-primary mr-2">{it.year || "—"} · {it.marks ? `${it.marks}m` : ""}</span>
                       <span className="font-medium">Q{realI + 1}. {it.question}</span>
                     </summary>
-                    <div className="mt-3 text-sm whitespace-pre-wrap text-muted-foreground">{it.answer}</div>
+                    <div className="mt-3 text-sm whitespace-pre-wrap text-muted-foreground">{it.answer || <span className="italic">No answer yet.</span>}</div>
+                    {(it.topic_ids || []).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {(it.topic_ids || []).map(tid => {
+                          const t = topics.find(x => x.id === tid);
+                          if (!t) return null;
+                          return <span key={tid} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">{t.title}</span>;
+                        })}
+                      </div>
+                    )}
                   </details>
                 )}
               </div>
