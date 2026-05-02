@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Radio, BookOpen, Upload, LogIn, LogOut, Bookmark, Shield } from "lucide-react";
+import { Radio, BookOpen, LogIn, LogOut, Bookmark, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
