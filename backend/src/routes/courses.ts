@@ -22,29 +22,42 @@ coursesRouter.get("/:slug", async (req, res) => {
 const UpsertCourse = z.object({
   slug: z.string().min(1),
   title: z.string().min(1),
-  description: z.string().optional(),
+  description: z.string().default(""),
   coverEmoji: z.string().optional(),
   orderIndex: z.number().int().optional(),
   sourceText: z.string().optional(),
+  generationStatus: z.string().optional(),
   tags: z.array(z.string()).optional(),
   toc: z.any().optional(),
 });
 
+function normalizeCourseInput(input: z.infer<typeof UpsertCourse>) {
+  const data = { ...input };
+  const description = data.description || "";
+
+  if (description.length > 5000) {
+    data.sourceText = data.sourceText || description;
+    data.description = description.replace(/\s+/g, " ").trim().slice(0, 500);
+  }
+
+  return data;
+}
+
 coursesRouter.post("/", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
   const parsed = UpsertCourse.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const course = await prisma.course.create({ data: parsed.data });
+  const course = await prisma.course.create({ data: normalizeCourseInput(parsed.data) as any });
   res.json({ course });
 });
 
 coursesRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
   const parsed = UpsertCourse.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const course = await prisma.course.update({ where: { id: req.params.id }, data: parsed.data });
+  const course = await prisma.course.update({ where: { id: String(req.params.id) }, data: normalizeCourseInput(parsed.data as z.infer<typeof UpsertCourse>) as any });
   res.json({ course });
 });
 
 coursesRouter.delete("/:id", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  await prisma.course.delete({ where: { id: req.params.id } });
+  await prisma.course.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });

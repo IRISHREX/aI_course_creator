@@ -5,14 +5,23 @@ import { requireAuth, requireRole, AuthedRequest } from "../auth.js";
 
 export const topicsRouter = Router();
 
+topicsRouter.get("/", async (req, res) => {
+  const courseId = req.query.courseId ? String(req.query.courseId) : undefined;
+  const topics = await prisma.topic.findMany({
+    where: courseId ? { courseId } : {},
+    orderBy: [{ unit: "asc" }, { orderIndex: "asc" }],
+  });
+  res.json({ topics });
+});
+
 topicsRouter.get("/by-slug/:slug", async (req, res) => {
-  const topic = await prisma.topic.findUnique({ where: { slug: req.params.slug } });
+  const topic = await prisma.topic.findUnique({ where: { slug: String(req.params.slug) } });
   if (!topic) return res.status(404).json({ error: "Not found" });
   res.json({ topic });
 });
 
 topicsRouter.get("/:id", async (req, res) => {
-  const topic = await prisma.topic.findUnique({ where: { id: req.params.id } });
+  const topic = await prisma.topic.findUnique({ where: { id: String(req.params.id) } });
   if (!topic) return res.status(404).json({ error: "Not found" });
   res.json({ topic });
 });
@@ -44,9 +53,10 @@ topicsRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), asy
   const note = (req.body?.versionNote as string) || null;
 
   const result = await prisma.$transaction(async (tx) => {
-    const before = await tx.topic.findUnique({ where: { id: req.params.id } });
+    const topicId = String(req.params.id);
+    const before = await tx.topic.findUnique({ where: { id: topicId } });
     if (!before) throw new Error("Not found");
-    const topic = await tx.topic.update({ where: { id: req.params.id }, data: parsed.data as any });
+    const topic = await tx.topic.update({ where: { id: topicId }, data: parsed.data as any });
     await tx.topicVersion.create({
       data: {
         topicId: before.id, title: before.title, summary: before.summary,
@@ -61,22 +71,23 @@ topicsRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), asy
 });
 
 topicsRouter.delete("/:id", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  await prisma.topic.delete({ where: { id: req.params.id } });
+  await prisma.topic.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });
 
 topicsRouter.get("/:id/versions", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
   const versions = await prisma.topicVersion.findMany({
-    where: { topicId: req.params.id }, orderBy: { createdAt: "desc" },
+    where: { topicId: String(req.params.id) }, orderBy: { createdAt: "desc" },
   });
   res.json({ versions });
 });
 
 topicsRouter.post("/:id/revert/:versionId", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  const v = await prisma.topicVersion.findUnique({ where: { id: req.params.versionId } });
-  if (!v || v.topicId !== req.params.id) return res.status(404).json({ error: "Version not found" });
+  const topicId = String(req.params.id);
+  const v = await prisma.topicVersion.findUnique({ where: { id: String(req.params.versionId) } });
+  if (!v || v.topicId !== topicId) return res.status(404).json({ error: "Version not found" });
   const topic = await prisma.topic.update({
-    where: { id: req.params.id },
+    where: { id: topicId },
     data: {
       title: v.title, summary: v.summary, content: v.content as any,
       quiz: v.quiz as any, mindmap: v.mindmap as any, visualization: v.visualization,

@@ -16,7 +16,7 @@ adminRouter.get("/stats", requireAuth, requireRole("admin", "super_admin"), asyn
 adminRouter.get("/users", requireAuth, requireRole("super_admin"), async (req, res) => {
   const q = String(req.query.q || "").toLowerCase();
   const users = await prisma.user.findMany({
-    where: q ? { OR: [{ email: { contains: q } }, { displayName: { contains: q, mode: "insensitive" } }] } : {},
+    where: q ? { OR: [{ email: { contains: q } }, { displayName: { contains: q } }] } : {},
     include: { roles: true }, orderBy: { createdAt: "desc" }, take: 200,
   });
   res.json({ users });
@@ -44,6 +44,6 @@ adminRouter.post("/roles", requireAuth, requireRole("super_admin"), async (req, 
 });
 
 adminRouter.delete("/users/:id", requireAuth, requireRole("super_admin"), async (req, res) => {
-  await prisma.user.delete({ where: { id: req.params.id } });
+  await prisma.user.delete({ where: { id: String(req.params.id) } });
   res.json({ ok: true });
 });

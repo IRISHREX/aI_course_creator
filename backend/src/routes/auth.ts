@@ -62,3 +62,14 @@ authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   });
   res.json({ user, roles: req.user!.roles });
 });
+
+authRouter.patch("/me", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = z.object({ displayName: z.string().min(1).max(120) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const user = await prisma.user.update({
+    where: { id: req.user!.id },
+    data: { displayName: parsed.data.displayName },
+    select: { id: true, email: true, displayName: true, createdAt: true },
+  });
+  res.json({ user, roles: req.user!.roles });
+});

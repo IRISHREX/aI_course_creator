@@ -75,9 +75,16 @@ export default function CourseEdit() {
     const pendingTopics = topics.filter(t => (t as any).generation_status !== "ready");
     for (const t of pendingTopics) {
       try {
-        await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id } });
+        const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id } });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
         await refreshTopics();
       } catch (e: any) {
+        const message = e.message || "";
+        if (message.includes("AI generation paused") || message.includes("API key") || message.includes("limit exceeded")) {
+          toast.error(message);
+          break;
+        }
         toast.error(`Failed: ${t.title}`);
       }
     }
@@ -323,7 +330,7 @@ export default function CourseEdit() {
               const blockCount = Array.isArray((t as any).content) ? (t as any).content.length : 0;
               return (
                 <tr key={t.id} className="border-t border-border/50">
-                  <td className="p-3 font-mono">U{t.unit}.{t.order_index}</td>
+                  <td className="p-3 font-mono">{t.unit}.{t.order_index}</td>
                   <td className="p-3">
                     {t.title}
                     <div className="text-[10px] text-muted-foreground">{blockCount} blocks</div>

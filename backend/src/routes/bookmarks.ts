@@ -24,12 +24,12 @@ bookmarksRouter.post("/", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = Body.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const bookmark = await prisma.bookmark.create({
-    data: { ...parsed.data, userId: req.user!.id },
+    data: { ...parsed.data, userId: req.user!.id } as any,
   });
   res.json({ bookmark });
 });
 
 bookmarksRouter.delete("/:id", requireAuth, async (req: AuthedRequest, res) => {
-  await prisma.bookmark.deleteMany({ where: { id: req.params.id, userId: req.user!.id } });
+  await prisma.bookmark.deleteMany({ where: { id: String(req.params.id), userId: req.user!.id } });
   res.json({ ok: true });
 });

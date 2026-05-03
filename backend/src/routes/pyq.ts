@@ -23,10 +23,20 @@ pyqRouter.get("/", async (req, res) => {
   res.json({ pyqs: items });
 });
 
+pyqRouter.get("/topics", async (req, res) => {
+  const courseId = req.query.courseId ? String(req.query.courseId) : undefined;
+  const links = await prisma.pyqTopic.findMany({
+    where: courseId ? { pyq: { courseId } } : {},
+    include: { pyq: true },
+    orderBy: { createdAt: "asc" },
+  });
+  res.json({ links });
+});
+
 const UpsertPyq = z.object({
   courseId: z.string().uuid(),
   question: z.string().min(1),
-  answer: z.string().optional(),
+  answer: z.string().default(""),
   marks: z.number().int().nullable().optional(),
   year: z.number().int().nullable().optional(),
   source: z.string().nullable().optional(),
@@ -39,9 +49,9 @@ pyqRouter.post("/", requireAuth, requireRole("admin", "super_admin"), async (req
   const { topicIds = [], ...data } = parsed.data;
   const pyq = await prisma.coursePyq.create({
     data: {
-      ...data,
+      ...(data as any),
       topicLinks: { create: topicIds.map(topicId => ({ topicId })) },
-    },
+    } as any,
   });
   res.json({ pyq });
 });
@@ -51,12 +61,13 @@ pyqRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), async 
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { topicIds, ...data } = parsed.data;
   const pyq = await prisma.$transaction(async (tx) => {
-    const updated = await tx.coursePyq.update({ where: { id: req.params.id }, data });
+    const pyqId = String(req.params.id);
+    const updated = await tx.coursePyq.update({ where: { id: pyqId }, data: data as any });
     if (topicIds) {
-      await tx.pyqTopic.deleteMany({ where: { pyqId: req.params.id } });
+      await tx.pyqTopic.deleteMany({ where: { pyqId } });
       if (topicIds.length)
         await tx.pyqTopic.createMany({
-          data: topicIds.map(topicId => ({ pyqId: req.params.id, topicId })),
+          data: topicIds.map(topicId => ({ pyqId, topicId })),
         });
     }
     return updated;
@@ -65,6 +76,22 @@ pyqRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), async 
 });
 
 pyqRouter.delete("/:id", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  await prisma.coursePyq.delete({ where: { id: req.params.id } });
+  await prisma.coursePyq.delete({ where: { id: String(req.params.id) } });
+  res.json({ ok: true });
+});
+
+pyqRouter.post("/:id/topics", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
+  const parsed = z.object({ topicId: z.string().uuid() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const link = await prisma.pyqTopic.upsert({
+    where: { pyqId_topicId: { pyqId: String(req.params.id), topicId: parsed.data.topicId } },
+    update: {},
+    create: { pyqId: String(req.params.id), topicId: parsed.data.topicId },
+  });
+  res.json({ link });
+});
+
+pyqRouter.delete("/:id/topics/:topicId", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
+  await prisma.pyqTopic.deleteMany({ where: { pyqId: String(req.params.id), topicId: String(req.params.topicId) } });
   res.json({ ok: true });
 });

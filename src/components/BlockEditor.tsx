@@ -51,6 +51,72 @@ const TYPE_META: { id: Block["type"]; label: string; icon: any }[] = [
   { id: "code", label: "Code", icon: Code2 },
 ];
 
+const TYPE_META_BY_ID = new Map(TYPE_META.map((meta) => [meta.id, meta]));
+
+const asString = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
+const asStringArray = (value: unknown) => Array.isArray(value) ? value.map((item) => asString(item)) : [""];
+
+function blockToEditableBlock(block: unknown): Block {
+  if (!block || typeof block !== "object") {
+    return { type: "text", value: typeof block === "undefined" ? "" : String(block) };
+  }
+
+  const maybeBlock = block as Record<string, unknown>;
+  switch (maybeBlock.type) {
+    case "text":
+      return { type: "text", value: asString(maybeBlock.value) };
+    case "highlight":
+      return { type: "highlight", value: asString(maybeBlock.value) };
+    case "list":
+      return { type: "list", title: asString(maybeBlock.title), items: asStringArray(maybeBlock.items) };
+    case "timeline":
+      return {
+        type: "timeline",
+        items: Array.isArray(maybeBlock.items)
+          ? maybeBlock.items.map((item) => ({
+              label: asString((item as Record<string, unknown>)?.label),
+              desc: asString((item as Record<string, unknown>)?.desc),
+            }))
+          : [{ label: "", desc: "" }],
+      };
+    case "table":
+      return {
+        type: "table",
+        title: asString(maybeBlock.title),
+        headers: asStringArray(maybeBlock.headers),
+        rows: Array.isArray(maybeBlock.rows)
+          ? maybeBlock.rows.map((row) => asStringArray(row))
+          : [[""]],
+      };
+    case "flowchart":
+      return { type: "flowchart", title: asString(maybeBlock.title), code: asString(maybeBlock.code, "graph TD\n  A[Start] --> B[Process]\n  B --> C[End]") };
+    case "chart":
+      return {
+        type: "chart",
+        title: asString(maybeBlock.title),
+        variant: maybeBlock.variant === "line" || maybeBlock.variant === "pie" ? maybeBlock.variant : "bar",
+        data: Array.isArray(maybeBlock.data)
+          ? maybeBlock.data.map((item) => ({
+              name: asString((item as Record<string, unknown>)?.name),
+              value: Number((item as Record<string, unknown>)?.value) || 0,
+            }))
+          : [{ name: "", value: 0 }],
+      };
+    case "image":
+      return { type: "image", url: asString(maybeBlock.url), caption: asString(maybeBlock.caption) };
+    case "math":
+      return { type: "math", value: asString(maybeBlock.value), display: maybeBlock.display !== false, caption: asString(maybeBlock.caption) };
+    case "code":
+      return { type: "code", language: asString(maybeBlock.language, "plaintext"), value: asString(maybeBlock.value), caption: asString(maybeBlock.caption) };
+  }
+
+  if (typeof maybeBlock.value === "string") {
+    return { type: "text", value: maybeBlock.value };
+  }
+
+  return { type: "text", value: JSON.stringify(block, null, 2) };
+}
+
 function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: any) => void; topicId?: string }) {
   const [busy, setBusy] = useState<"upload" | "ai" | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -104,23 +170,24 @@ function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: 
 }
 
 export function BlockEditor({ blocks, onChange, topicId }: Props) {
-  const update = (i: number, b: Block) => { const next = [...blocks]; next[i] = b; onChange(next); };
-  const remove = (i: number) => onChange(blocks.filter((_, j) => j !== i));
+  const safeBlocks = Array.isArray(blocks) ? blocks.map(blockToEditableBlock) : [];
+  const update = (i: number, b: Block) => { const next = [...safeBlocks]; next[i] = b; onChange(next); };
+  const remove = (i: number) => onChange(safeBlocks.filter((_, j) => j !== i));
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;
-    if (j < 0 || j >= blocks.length) return;
-    const next = [...blocks]; [next[i], next[j]] = [next[j], next[i]]; onChange(next);
+    if (j < 0 || j >= safeBlocks.length) return;
+    const next = [...safeBlocks]; [next[i], next[j]] = [next[j], next[i]]; onChange(next);
   };
-  const add = (type: Block["type"]) => onChange([...blocks, blank[type]()]);
+  const add = (type: Block["type"]) => onChange([...safeBlocks, blank[type]()]);
 
   return (
     <div className="space-y-3">
-      {blocks.length === 0 && (
+      {safeBlocks.length === 0 && (
         <div className="glass rounded-xl p-6 text-center text-sm text-muted-foreground">No blocks yet — add one below.</div>
       )}
 
-      {blocks.map((b, i) => {
-        const meta = TYPE_META.find(t => t.id === b.type)!;
+      {safeBlocks.map((b, i) => {
+        const meta = TYPE_META_BY_ID.get(b.type) ?? TYPE_META_BY_ID.get("text")!;
         const Icon = meta.icon;
         return (
           <div key={i} className="glass rounded-xl border border-border/60 overflow-hidden">
@@ -130,7 +197,7 @@ export function BlockEditor({ blocks, onChange, topicId }: Props) {
               </div>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(i, -1)} disabled={i === 0}><ChevronUp className="h-3.5 w-3.5" /></Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(i, 1)} disabled={i === blocks.length - 1}><ChevronDown className="h-3.5 w-3.5" /></Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(i, 1)} disabled={i === safeBlocks.length - 1}><ChevronDown className="h-3.5 w-3.5" /></Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => remove(i)}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             </div>

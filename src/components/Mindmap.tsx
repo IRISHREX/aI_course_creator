@@ -18,6 +18,13 @@ function toMermaid(root: Node): string {
   return lines.join("\n");
 }
 
+function sanitizeMermaidFlowchart(code: string): string {
+  return code.replace(/\b([A-Za-z][\w-]*)\s*([\[{])([^"{}\[\]\n]+)([\]}])/g, (_match, id, open, label, close) => {
+    const safeLabel = String(label).replace(/\s+/g, " ").trim().replace(/"/g, "'");
+    return `${id}${open}"${safeLabel}"${close}`;
+  });
+}
+
 export function Mindmap({ data }: { data: Node | null | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -42,7 +49,8 @@ export function MermaidDiagram({ code }: { code: string }) {
   useEffect(() => {
     if (!code || !ref.current) return;
     const id = "md-" + Math.random().toString(36).slice(2, 9);
-    mermaid.render(id, code).then(({ svg }) => {
+    const safeCode = sanitizeMermaidFlowchart(code);
+    mermaid.render(id, safeCode).then(({ svg }) => {
       if (ref.current) ref.current.innerHTML = svg;
     }).catch(err => {
       if (ref.current) ref.current.innerHTML = `<pre class="text-xs text-destructive p-3">${err.message}</pre>`;

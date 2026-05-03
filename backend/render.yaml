@@ -19,7 +19,7 @@ services:
         value: https://ignouprep.lovable.app
       - key: SUPER_ADMIN_EMAILS
         value: soheljavadeveloper@gmail.com,sohejavadeveloper@gmail.com
-      - key: LOVABLE_API_KEY
+      - key: GOOGLE_AI_API_KEY
         sync: false
 databases:
   - name: ignouprep-db

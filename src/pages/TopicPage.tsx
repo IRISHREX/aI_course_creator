@@ -86,7 +86,7 @@ export default function TopicPage() {
     if (!isAdmin) return;
     setGenMindmap(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-mindmap", { body: { topicId: topic.id } });
+      const { data, error } = await supabase.functions.invoke("generate-mindmap", { body: { topicId: topic.id, courseId: course?.id } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setTopic({ ...topic, mindmap: data.mindmap } as any);

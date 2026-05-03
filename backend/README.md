@@ -22,7 +22,7 @@ npm run dev                # http://localhost:8080
 ## Deploy
 
 ### Render (recommended, one-click)
-Push the `backend/` folder to a Git repo, then in Render → New → Blueprint → point at this repo. `render.yaml` provisions both the web service and Postgres database. Set `LOVABLE_API_KEY` manually in the dashboard.
+Push the `backend/` folder to a Git repo, then in Render → New → Blueprint → point at this repo. `render.yaml` provisions both the web service and Postgres database. Set `GOOGLE_AI_API_KEY` manually in the dashboard.
 
 ### Railway
 `railway up` from this folder. Add a Postgres plugin and set the same env vars from `.env.example`.
@@ -32,7 +32,7 @@ Push the `backend/` folder to a Git repo, then in Render → New → Blueprint �
 fly launch --copy-config --no-deploy
 fly postgres create
 fly postgres attach <db-name>
-fly secrets set JWT_SECRET=$(openssl rand -hex 32) LOVABLE_API_KEY=...
+fly secrets set JWT_SECRET=$(openssl rand -hex 32) GOOGLE_AI_API_KEY=...
 fly deploy
 ```
 
@@ -66,7 +66,7 @@ npm run db:import       # loads into the new DB
 | POST/PATCH/DELETE | `/pyq` | admin |
 | GET  | `/admin/stats` | admin |
 | GET  | `/admin/users`, POST `/admin/roles`, DELETE `/admin/users/:id` | super_admin |
-| POST | `/ai/chat` (proxy to Lovable AI) | admin |
+| POST | `/ai/chat` (proxy to Gemini) | admin |
 
 ## Frontend switch-over (next pass)
 

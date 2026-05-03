@@ -62,7 +62,7 @@ export default function CoverageBoard() {
                 <tr key={t.id} className="border-t border-border/50 hover:bg-primary/5 transition">
                   <td className="p-4 font-mono text-muted-foreground">{String(idx + 1).padStart(2, "0")}</td>
                   <td className="p-4 font-medium">{t.title}</td>
-                  <td className="p-4 hidden md:table-cell text-muted-foreground">U{t.unit}.{t.order_index}</td>
+                  <td className="p-4 hidden md:table-cell text-muted-foreground">{t.unit}.{t.order_index}</td>
                   <td className="p-4">
                     {p?.passed ? <span className="inline-flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" /> Passed</span>
                     : p?.viewed ? <span className="inline-flex items-center gap-1 text-primary">In progress</span>

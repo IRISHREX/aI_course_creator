@@ -51,7 +51,7 @@ export default function AdminUpload() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Course "${title}" created with ${data.topicCount} lessons`);
+      toast.success(`Course "${title}" created with ${data.topicCount} lessons${data.scannedChunks ? ` after scanning ${data.scannedChunks} chunk${data.scannedChunks === 1 ? "" : "s"}` : ""}`);
       nav(`/course/${data.slug}`);
     } catch (e: any) {
       toast.error(e.message || "Generation failed");

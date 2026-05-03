@@ -35,17 +35,28 @@ Deno.serve(async (req) => {
     const { courseId, topicId } = await req.json();
     if (!courseId && !topicId) throw new Error("courseId or topicId required");
 
-    let title = "", body = "";
+    let title = "", body = "", target = "course";
     if (topicId) {
       const { data: t } = await admin.from("topics").select("title, summary, content").eq("id", topicId).maybeSingle();
       if (!t) throw new Error("Topic not found");
       title = t.title;
-      body = `${t.summary}\n\n${JSON.stringify(t.content).slice(0, 6000)}`;
+      target = "lesson";
+      body = `Lesson title: ${t.title}
+Lesson summary: ${t.summary || ""}
+Lesson content:
+${JSON.stringify(t.content || []).slice(0, 7000)}
+
+Make the root label the lesson title. Use the main ideas from this lesson as branches. Do not create a generic study plan.`;
     } else {
       const { data: c } = await admin.from("courses").select("title, description").eq("id", courseId).maybeSingle();
       const { data: ts } = await admin.from("topics").select("title, summary").eq("course_id", courseId).order("unit").order("order_index");
       title = c?.title || "";
-      body = `${c?.description}\n\nLessons:\n${(ts || []).map((t: any) => `- ${t.title}: ${t.summary}`).join("\n")}`;
+      body = `Course title: ${c?.title || ""}
+Course description: ${c?.description || ""}
+Lessons:
+${(ts || []).map((t: any) => `- ${t.title}: ${t.summary || ""}`).join("\n")}
+
+Make the root label the course title and organize branches by course concepts.`;
     }
 
     const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -54,8 +65,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You build educational mind maps. Always call the tool with a tree of 4-7 main branches, each with 2-5 sub-branches. Labels short (max 6 words)." },
-          { role: "user", content: `Make a mindmap for:\nTitle: ${title}\n\n${body}` },
+          { role: "system", content: "You build educational concept mind maps, not study schedules. Always call the tool with a tree of 4-7 main branches, each with 2-5 sub-branches. Labels short (max 6 words)." },
+          { role: "user", content: `Make a ${target} mind map for:\nTitle: ${title}\n\n${body}` },
         ],
         tools: [{
           type: "function",

@@ -68,7 +68,7 @@ export default function Auth() {
           </div>
           <div>
             <Label htmlFor="pw">Password</Label>
-            <Input id="pw" type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} />
+            <Input id="pw" type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           <Button type="submit" variant="hero" size="lg" className="w-full" disabled={busy}>
             {busy ? "..." : (mode === "signin" ? "Sign in" : "Create account")}
