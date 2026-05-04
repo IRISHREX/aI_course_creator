@@ -14,7 +14,7 @@ progressRouter.get("/", requireAuth, async (req: AuthedRequest, res) => {
 });
 
 const ProgressBody = z.object({
-  topicId: z.string().uuid(),
+  topicId: z.string().min(1),
   viewed: z.boolean().optional(),
   passed: z.boolean().optional(),
   attempts: z.number().int().min(0).optional(),

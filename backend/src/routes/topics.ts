@@ -27,7 +27,7 @@ topicsRouter.get("/:id", async (req, res) => {
 });
 
 const UpsertTopic = z.object({
-  courseId: z.string().uuid(),
+  courseId: z.string().min(1),
   slug: z.string().min(1),
   unit: z.number().int().min(1),
   orderIndex: z.number().int(),

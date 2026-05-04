@@ -33,10 +33,13 @@ authRouter.post("/signup", async (req, res) => {
   });
 
   if (env.SUPER_ADMIN_EMAILS.includes(lower)) {
-    await prisma.userRole.createMany({
-      data: [{ userId: user.id, role: "admin" }, { userId: user.id, role: "super_admin" }],
-      skipDuplicates: true,
-    });
+    for (const role of ["admin", "super_admin"] as const) {
+      await prisma.userRole.upsert({
+        where: { userId_role: { userId: user.id, role } },
+        update: {},
+        create: { userId: user.id, role },
+      });
+    }
   }
 
   const token = signToken({ sub: user.id, email: user.email });

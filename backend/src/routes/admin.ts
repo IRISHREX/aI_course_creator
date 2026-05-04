@@ -23,7 +23,7 @@ adminRouter.get("/users", requireAuth, requireRole("super_admin"), async (req, r
 });
 
 const RoleBody = z.object({
-  userId: z.string().uuid(),
+  userId: z.string().min(1),
   role: z.enum(["admin", "super_admin"]),
   grant: z.boolean(),
 });

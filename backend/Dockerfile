@@ -13,4 +13,4 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY package.json ./
 EXPOSE 8080
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/server.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node dist/src/server.js"]
