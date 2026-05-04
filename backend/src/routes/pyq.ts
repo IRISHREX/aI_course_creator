@@ -34,13 +34,13 @@ pyqRouter.get("/topics", async (req, res) => {
 });
 
 const UpsertPyq = z.object({
-  courseId: z.string().uuid(),
+  courseId: z.string().min(1),
   question: z.string().min(1),
   answer: z.string().default(""),
   marks: z.number().int().nullable().optional(),
   year: z.number().int().nullable().optional(),
   source: z.string().nullable().optional(),
-  topicIds: z.array(z.string().uuid()).optional(),
+  topicIds: z.array(z.string().min(1)).optional(),
 });
 
 pyqRouter.post("/", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
@@ -81,7 +81,7 @@ pyqRouter.delete("/:id", requireAuth, requireRole("admin", "super_admin"), async
 });
 
 pyqRouter.post("/:id/topics", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  const parsed = z.object({ topicId: z.string().uuid() }).safeParse(req.body);
+  const parsed = z.object({ topicId: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const link = await prisma.pyqTopic.upsert({
     where: { pyqId_topicId: { pyqId: String(req.params.id), topicId: parsed.data.topicId } },

@@ -13,8 +13,8 @@ bookmarksRouter.get("/", requireAuth, async (req: AuthedRequest, res) => {
 });
 
 const Body = z.object({
-  topicId: z.string().uuid(),
-  courseId: z.string().uuid(),
+  topicId: z.string().min(1),
+  courseId: z.string().min(1),
   pageIndex: z.number().int().min(0).default(0),
   wordIndex: z.number().int().min(0).default(0),
   label: z.string().max(200).optional(),
