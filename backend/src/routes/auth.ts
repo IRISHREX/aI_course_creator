@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { prisma } from "../db.js";
+import { User, UserRole } from "../models.js";
 import { signToken, requireAuth, AuthedRequest } from "../auth.js";
 import { env } from "../env.js";
 
@@ -19,60 +19,51 @@ authRouter.post("/signup", async (req, res) => {
   const { email, password, displayName } = parsed.data;
   const lower = email.toLowerCase();
 
-  const existing = await prisma.user.findUnique({ where: { email: lower } });
-  if (existing) return res.status(409).json({ error: "Email already in use" });
+  if (await User.exists({ email: lower })) return res.status(409).json({ error: "Email already in use" });
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
-    data: {
-      email: lower,
-      passwordHash,
-      displayName: displayName || lower.split("@")[0],
-      roles: { create: [{ role: "user" }] },
-    },
+  const user = await User.create({
+    email: lower,
+    passwordHash,
+    displayName: displayName || lower.split("@")[0],
   });
+  await UserRole.create({ userId: user._id, role: "user" });
 
   if (env.SUPER_ADMIN_EMAILS.includes(lower)) {
     for (const role of ["admin", "super_admin"] as const) {
-      await prisma.userRole.upsert({
-        where: { userId_role: { userId: user.id, role } },
-        update: {},
-        create: { userId: user.id, role },
-      });
+      await UserRole.updateOne({ userId: user._id, role }, { $setOnInsert: { userId: user._id, role } }, { upsert: true });
     }
   }
 
-  const token = signToken({ sub: user.id, email: user.email });
-  res.json({ token, user: { id: user.id, email: user.email, displayName: user.displayName } });
+  const id = String(user._id);
+  const token = signToken({ sub: id, email: user.email });
+  res.json({ token, user: { id, email: user.email, displayName: user.displayName } });
 });
 
 authRouter.post("/login", async (req, res) => {
   const parsed = Creds.pick({ email: true, password: true }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { email, password } = parsed.data;
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ error: "Invalid credentials" });
-  const token = signToken({ sub: user.id, email: user.email });
-  res.json({ token, user: { id: user.id, email: user.email, displayName: user.displayName } });
+  const id = String(user._id);
+  const token = signToken({ sub: id, email: user.email });
+  res.json({ token, user: { id, email: user.email, displayName: user.displayName } });
 });
 
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.id },
-    select: { id: true, email: true, displayName: true, createdAt: true },
-  });
-  res.json({ user, roles: req.user!.roles });
+  const user = await User.findById(req.user!.id, "email displayName createdAt").lean();
+  res.json({ user: user && { id: String(user._id), email: user.email, displayName: user.displayName, createdAt: user.createdAt }, roles: req.user!.roles });
 });
 
 authRouter.patch("/me", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = z.object({ displayName: z.string().min(1).max(120) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const user = await prisma.user.update({
-    where: { id: req.user!.id },
-    data: { displayName: parsed.data.displayName },
-    select: { id: true, email: true, displayName: true, createdAt: true },
-  });
-  res.json({ user, roles: req.user!.roles });
+  const user = await User.findByIdAndUpdate(
+    req.user!.id, { displayName: parsed.data.displayName },
+    { new: true, projection: "email displayName createdAt" },
+  ).lean();
+  res.json({ user: user && { id: String(user._id), email: user.email, displayName: user.displayName, createdAt: user.createdAt }, roles: req.user!.roles });
 });

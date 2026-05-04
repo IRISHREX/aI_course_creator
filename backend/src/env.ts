@@ -21,7 +21,6 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: parseInt(process.env.PORT || "8080", 10),
   CORS_ORIGIN: (process.env.CORS_ORIGIN || "*").split(",").map(s => s.trim()),
-  LOVABLE_API_KEY: process.env.LOVABLE_API_KEY || "",
   GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || "",
   SUPER_ADMIN_EMAILS: (process.env.SUPER_ADMIN_EMAILS || "")
     .split(",").map(s => s.trim().toLowerCase()).filter(Boolean),

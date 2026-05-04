@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
-import { prisma } from "./db.js";
+import { UserAiKey } from "./models.js";
 import { env } from "./env.js";
 
 const ALGORITHM = "aes-256-gcm";
@@ -33,59 +33,33 @@ export type DecryptedAiKey = {
 };
 
 export async function getUserAiKeys(userId: string): Promise<DecryptedAiKey[]> {
-  const rows = await prisma.userAiKey.findMany({
-    where: { userId, status: "active" },
-    orderBy: [{ updatedAt: "asc" }],
-  });
+  const rows = await UserAiKey.find({ userId, status: "active" }).sort({ updatedAt: 1 }).lean();
   return rows.map((row) => ({
-    id: row.id,
+    id: String(row._id),
     provider: row.provider,
     keyPreview: row.keyPreview,
     apiKey: decryptApiKey(row.encryptedKey),
   }));
 }
 
-async function ensureMultipleAiKeysAllowed() {
-  await prisma.$executeRawUnsafe(
-    "CREATE INDEX `user_ai_keys_user_id_status_updated_at_idx` ON `user_ai_keys` (`user_id`, `status`, `updated_at`)",
-  ).catch(() => undefined);
-  await prisma.$executeRawUnsafe("DROP INDEX `user_ai_keys_user_id_key` ON `user_ai_keys`").catch(() => undefined);
-}
-
-function isOldSingleKeyConstraintError(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "P2002" &&
-    JSON.stringify((error as { meta?: unknown }).meta || {}).includes("user_ai_keys_user_id_key")
-  );
-}
-
 export async function saveUserAiKey(userId: string, apiKey: string, provider = "google") {
   const trimmed = apiKey.trim();
   const keyPreview = trimmed.length > 8 ? `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}` : "saved";
-  const data = {
-    userId,
-    provider,
+  const created = await UserAiKey.create({
+    userId, provider,
     encryptedKey: encryptApiKey(trimmed),
-    keyPreview,
-    status: "active",
-    lastError: null,
+    keyPreview, status: "active", lastError: null,
+  });
+  return {
+    id: String(created._id),
+    provider: created.provider,
+    keyPreview: created.keyPreview,
+    status: created.status,
+    lastError: created.lastError,
+    updatedAt: created.updatedAt,
   };
-  const select = { id: true, provider: true, keyPreview: true, status: true, lastError: true, updatedAt: true };
-  try {
-    return await prisma.userAiKey.create({ data, select });
-  } catch (error) {
-    if (!isOldSingleKeyConstraintError(error)) throw error;
-    await ensureMultipleAiKeysAllowed();
-    return prisma.userAiKey.create({ data, select });
-  }
 }
 
 export async function markUserAiKeyLimited(keyId: string, message: string) {
-  await prisma.userAiKey.update({
-    where: { id: keyId },
-    data: { status: "limited", lastError: message },
-  });
+  await UserAiKey.findByIdAndUpdate(keyId, { status: "limited", lastError: message });
 }
