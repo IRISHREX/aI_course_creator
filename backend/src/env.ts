@@ -8,24 +8,9 @@ function req(name: string): string {
 
 function databaseUrl(): string {
   const value = req("DATABASE_URL");
-
-  try {
-    const url = new URL(value);
-    const username = decodeURIComponent(url.username);
-    const password = decodeURIComponent(url.password);
-
-    if (url.protocol === "mysql:" && username === "user" && password === "pass") {
-      throw new Error(
-        "DATABASE_URL still uses the example MySQL credentials. Update backend/.env with a real MySQL user/password, then restart the API."
-      );
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith("DATABASE_URL still uses")) {
-      throw err;
-    }
-    throw new Error("DATABASE_URL must be a valid database connection URL.");
+  if (!/^mongodb(\+srv)?:\/\//.test(value)) {
+    throw new Error("DATABASE_URL must be a mongodb:// or mongodb+srv:// connection string.");
   }
-
   return value;
 }
 
