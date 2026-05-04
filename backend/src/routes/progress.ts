@@ -1,15 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
-import { prisma } from "../db.js";
+import { TopicProgress } from "../models.js";
 import { requireAuth, AuthedRequest } from "../auth.js";
 
 export const progressRouter = Router();
 
 progressRouter.get("/", requireAuth, async (req: AuthedRequest, res) => {
-  const progress = await prisma.topicProgress.findMany({
-    where: { userId: req.user!.id },
-    orderBy: { updatedAt: "desc" },
-  });
+  const progress = await TopicProgress.find({ userId: req.user!.id }).sort({ updatedAt: -1 }).lean();
   res.json({ progress });
 });
 
@@ -25,10 +22,10 @@ progressRouter.put("/", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = ProgressBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { topicId, ...data } = parsed.data;
-  const progress = await prisma.topicProgress.upsert({
-    where: { userId_topicId: { userId: req.user!.id, topicId } },
-    update: data,
-    create: { userId: req.user!.id, topicId, ...data },
-  });
+  const progress = await TopicProgress.findOneAndUpdate(
+    { userId: req.user!.id, topicId },
+    { $set: data, $setOnInsert: { userId: req.user!.id, topicId } },
+    { upsert: true, new: true },
+  ).lean();
   res.json({ progress });
 });

@@ -1,36 +1,38 @@
 import { Router } from "express";
 import { z } from "zod";
-import { prisma } from "../db.js";
+import { Types } from "mongoose";
+import { CoursePyq, Topic } from "../models.js";
 import { requireAuth, requireRole } from "../auth.js";
 
 export const pyqRouter = Router();
 
+function toObjectId(value: string) {
+  return new Types.ObjectId(value);
+}
+
+async function attachTopics(pyqs: any[]) {
+  const topicIds = Array.from(new Set(pyqs.flatMap(p => (p.topicIds || []).map(String))));
+  if (!topicIds.length) return pyqs.map(p => ({ ...p, topics: [] }));
+  const topics = await Topic.find({ _id: { $in: topicIds } }, "title slug").lean();
+  const byId = new Map(topics.map(t => [String(t._id), t]));
+  return pyqs.map(p => ({
+    ...p,
+    topics: (p.topicIds || []).map((id: any) => byId.get(String(id))).filter(Boolean),
+  }));
+}
+
 pyqRouter.get("/", async (req, res) => {
   const courseId = String(req.query.courseId || "");
+  if (!courseId) return res.status(400).json({ error: "courseId required" });
   const topicId = req.query.topicId ? String(req.query.topicId) : undefined;
   const year = req.query.year ? parseInt(String(req.query.year), 10) : undefined;
-  if (!courseId) return res.status(400).json({ error: "courseId required" });
 
-  const items = await prisma.coursePyq.findMany({
-    where: {
-      courseId,
-      ...(year ? { year } : {}),
-      ...(topicId ? { topicLinks: { some: { topicId } } } : {}),
-    },
-    include: { topicLinks: { include: { topic: { select: { id: true, title: true, slug: true } } } } },
-    orderBy: [{ year: "desc" }, { orderIndex: "asc" }],
-  });
-  res.json({ pyqs: items });
-});
+  const filter: any = { courseId };
+  if (year) filter.year = year;
+  if (topicId) filter.topicIds = topicId;
 
-pyqRouter.get("/topics", async (req, res) => {
-  const courseId = req.query.courseId ? String(req.query.courseId) : undefined;
-  const links = await prisma.pyqTopic.findMany({
-    where: courseId ? { pyq: { courseId } } : {},
-    include: { pyq: true },
-    orderBy: { createdAt: "asc" },
-  });
-  res.json({ links });
+  const items = await CoursePyq.find(filter).sort({ year: -1, orderIndex: 1 }).lean();
+  res.json({ pyqs: await attachTopics(items) });
 });
 
 const UpsertPyq = z.object({
@@ -47,12 +49,7 @@ pyqRouter.post("/", requireAuth, requireRole("admin", "super_admin"), async (req
   const parsed = UpsertPyq.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { topicIds = [], ...data } = parsed.data;
-  const pyq = await prisma.coursePyq.create({
-    data: {
-      ...(data as any),
-      topicLinks: { create: topicIds.map(topicId => ({ topicId })) },
-    } as any,
-  });
+  const pyq = await CoursePyq.create({ ...data, topicIds: topicIds.map(toObjectId) });
   res.json({ pyq });
 });
 
@@ -60,38 +57,25 @@ pyqRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), async 
   const parsed = UpsertPyq.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { topicIds, ...data } = parsed.data;
-  const pyq = await prisma.$transaction(async (tx) => {
-    const pyqId = String(req.params.id);
-    const updated = await tx.coursePyq.update({ where: { id: pyqId }, data: data as any });
-    if (topicIds) {
-      await tx.pyqTopic.deleteMany({ where: { pyqId } });
-      if (topicIds.length)
-        await tx.pyqTopic.createMany({
-          data: topicIds.map(topicId => ({ pyqId, topicId })),
-        });
-    }
-    return updated;
-  });
+  const update: any = { ...data };
+  if (topicIds) update.topicIds = topicIds.map(toObjectId);
+  const pyq = await CoursePyq.findByIdAndUpdate(req.params.id, update, { new: true }).lean();
   res.json({ pyq });
 });
 
 pyqRouter.delete("/:id", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  await prisma.coursePyq.delete({ where: { id: String(req.params.id) } });
+  await CoursePyq.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
 });
 
 pyqRouter.post("/:id/topics", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
   const parsed = z.object({ topicId: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const link = await prisma.pyqTopic.upsert({
-    where: { pyqId_topicId: { pyqId: String(req.params.id), topicId: parsed.data.topicId } },
-    update: {},
-    create: { pyqId: String(req.params.id), topicId: parsed.data.topicId },
-  });
-  res.json({ link });
+  await CoursePyq.updateOne({ _id: req.params.id }, { $addToSet: { topicIds: toObjectId(parsed.data.topicId) } });
+  res.json({ ok: true });
 });
 
 pyqRouter.delete("/:id/topics/:topicId", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  await prisma.pyqTopic.deleteMany({ where: { pyqId: String(req.params.id), topicId: String(req.params.topicId) } });
+  await CoursePyq.updateOne({ _id: req.params.id }, { $pull: { topicIds: toObjectId(req.params.topicId) } });
   res.json({ ok: true });
 });
