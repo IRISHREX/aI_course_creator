@@ -1,11 +1,11 @@
-# IGNOUprep — Custom Backend
+# IGNOUprep — Custom Backend (MongoDB)
 
-Express + Prisma + PostgreSQL + JWT auth. Replaces Lovable Cloud / Supabase.
+Express + Prisma + **MongoDB** + JWT auth. Replaces Lovable Cloud / Supabase.
 
 ## Stack
 - **Node 20 + Express 4** — REST API
-- **Prisma 5** — ORM + migrations
-- **PostgreSQL 16** — database
+- **Prisma 5** — ORM (MongoDB provider)
+- **MongoDB 6+** — database (must be a replica set; Atlas works out of the box)
 - **JWT (HS256) + bcrypt** — auth
 - **Zod** — validation
 
@@ -13,40 +13,35 @@ Express + Prisma + PostgreSQL + JWT auth. Replaces Lovable Cloud / Supabase.
 
 ```bash
 cd backend
-cp .env.example .env       # fill DATABASE_URL, JWT_SECRET
+cp .env.example .env       # fill DATABASE_URL (mongodb+srv://...), JWT_SECRET
 npm install
-npx prisma migrate dev --name init
-npm run dev                # http://localhost:8080
+npx prisma generate
+npx prisma db push         # creates collections + indexes in MongoDB
+npm run dev                # http://localhost:5000
 ```
+
+> Prisma's MongoDB provider requires a **replica set**. Atlas clusters are replica sets by default. For local dev, run `mongod --replSet rs0` then `rs.initiate()` in mongosh, or use `mongo:7` with `--replSet` in Docker.
 
 ## Deploy
 
-### Render (recommended, one-click)
-Push the `backend/` folder to a Git repo, then in Render → New → Blueprint → point at this repo. `render.yaml` provisions both the web service and Postgres database. Set `GOOGLE_AI_API_KEY` manually in the dashboard.
+### Render
+Push the `backend/` folder to a Git repo, then in Render → New → Blueprint → point at this repo. `render.yaml` provisions the web service. **Set `DATABASE_URL` manually** to your MongoDB Atlas connection string, plus `GOOGLE_AI_API_KEY`.
 
-### Railway
-`railway up` from this folder. Add a Postgres plugin and set the same env vars from `.env.example`.
-
-### Fly.io
-```bash
-fly launch --copy-config --no-deploy
-fly postgres create
-fly postgres attach <db-name>
-fly secrets set JWT_SECRET=$(openssl rand -hex 32) GOOGLE_AI_API_KEY=...
-fly deploy
-```
+### Railway / Fly.io
+Same idea — bring your own MongoDB Atlas URL via env. There's no managed Mongo plugin on Render/Railway, so Atlas (free M0 tier) is the easiest.
 
 ## Migrating data from Supabase (one-time)
 
 ```bash
 # 1. Set Supabase creds in .env (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-# 2. Set DATABASE_URL to the NEW Postgres
-npx prisma migrate deploy
+# 2. Set DATABASE_URL to the NEW MongoDB
+npx prisma db push
 npm run db:export       # writes ./export/*.json
-npm run db:import       # loads into the new DB
+npm run db:import       # loads into MongoDB (remaps UUIDs → ObjectIds)
 ```
 
-⚠️ **Passwords don't transfer** (Supabase hashes them with bcrypt+pepper we can't read). All imported users get a placeholder hash and must use **Forgot Password** to set a new one. If you want zero-friction migration, switch the auth strategy to "Keep Supabase Auth, replace only DB + functions" — say the word and I'll restructure.
+⚠️ **Passwords don't transfer** — all imported users get a placeholder hash and must use **Forgot Password** to set a new one.
+⚠️ **IDs change** — old Supabase UUIDs are remapped to new Mongo ObjectIds. Bookmark/permalink URLs that embed UUIDs will break; slug-based URLs keep working.
 
 ## API surface
 
@@ -74,6 +69,5 @@ The React app still talks to Supabase. Once this backend is deployed, I'll add:
 - `src/lib/api.ts` — fetch wrapper that injects the JWT
 - Replace `supabase.from(...)` calls with `api.get/post(...)`
 - Replace `supabase.auth.*` with `/auth/login` + `localStorage` token
-- Move `supabase/functions/*` callers to `/ai/chat` (or move the AI-heavy logic into new backend routes)
 
 Tell me when the backend is deployed and I'll do the frontend migration.
