@@ -1,4 +1,5 @@
-// Imports ./export/*.json into the Prisma DB.
+// Imports ./export/*.json into the Prisma+MongoDB database.
+// Supabase UUIDs are remapped to fresh Mongo ObjectIds; FKs are rewritten via an in-memory map.
 // Users get a placeholder password hash — they MUST reset password after migration.
 // Run: npm run db:import
 import { readFileSync, existsSync } from "node:fs";
@@ -14,23 +15,26 @@ function load(name: string): any[] {
 
 const PLACEHOLDER_PW = await bcrypt.hash(`reset-${Date.now()}-${Math.random()}`, 10);
 
+// Maps old Supabase UUIDs → new Mongo ObjectIds
+const idMap: Record<string, Record<string, string>> = {
+  user: {}, course: {}, topic: {}, pyq: {},
+};
+
 async function importUsers() {
   const authUsers = load("auth_users");
   const profiles = load("profiles");
-  const profileByid = new Map(profiles.map(p => [p.id, p]));
+  const profileById = new Map(profiles.map(p => [p.id, p]));
   for (const u of authUsers) {
-    const p = profileByid.get(u.id);
-    await prisma.user.upsert({
-      where: { id: u.id },
-      update: {},
-      create: {
-        id: u.id,
+    const p = profileById.get(u.id);
+    const created = await prisma.user.create({
+      data: {
         email: (u.email || `${u.id}@unknown.local`).toLowerCase(),
         passwordHash: PLACEHOLDER_PW,
         displayName: p?.display_name || u.email?.split("@")[0] || null,
         createdAt: new Date(u.created_at || Date.now()),
       },
     });
+    idMap.user[u.id] = created.id;
   }
   console.log(`✓ users: ${authUsers.length}`);
 }
@@ -38,9 +42,11 @@ async function importUsers() {
 async function importRoles() {
   const rows = load("user_roles");
   for (const r of rows) {
+    const userId = idMap.user[r.user_id];
+    if (!userId) continue;
     await prisma.userRole.upsert({
-      where: { userId_role: { userId: r.user_id, role: r.role } },
-      update: {}, create: { id: r.id, userId: r.user_id, role: r.role },
+      where: { userId_role: { userId, role: r.role } },
+      update: {}, create: { userId, role: r.role },
     });
   }
   console.log(`✓ user_roles: ${rows.length}`);
@@ -49,16 +55,16 @@ async function importRoles() {
 async function importCourses() {
   const rows = load("courses");
   for (const c of rows) {
-    await prisma.course.upsert({
-      where: { id: c.id }, update: {},
-      create: {
-        id: c.id, slug: c.slug, title: c.title, description: c.description || "",
+    const created = await prisma.course.create({
+      data: {
+        slug: c.slug, title: c.title, description: c.description || "",
         coverEmoji: c.cover_emoji, orderIndex: c.order_index || 0,
         sourceText: c.source_text, generationStatus: c.generation_status || "ready",
         tags: c.tags || [], mindmap: c.mindmap, toc: c.toc,
         createdAt: new Date(c.created_at), updatedAt: new Date(c.updated_at),
       },
     });
+    idMap.course[c.id] = created.id;
   }
   console.log(`✓ courses: ${rows.length}`);
 }
@@ -66,10 +72,11 @@ async function importCourses() {
 async function importTopics() {
   const rows = load("topics");
   for (const t of rows) {
-    await prisma.topic.upsert({
-      where: { id: t.id }, update: {},
-      create: {
-        id: t.id, courseId: t.course_id, slug: t.slug, unit: t.unit,
+    const courseId = idMap.course[t.course_id];
+    if (!courseId) continue;
+    const created = await prisma.topic.create({
+      data: {
+        courseId, slug: t.slug, unit: t.unit,
         orderIndex: t.order_index, title: t.title, summary: t.summary,
         content: t.content || [], quiz: t.quiz || [], mindmap: t.mindmap,
         visualization: t.visualization, difficultyLevel: t.difficulty_level || 5,
@@ -77,6 +84,7 @@ async function importTopics() {
         createdAt: new Date(t.created_at), updatedAt: new Date(t.updated_at),
       },
     });
+    idMap.topic[t.id] = created.id;
   }
   console.log(`✓ topics: ${rows.length}`);
 }
@@ -84,12 +92,14 @@ async function importTopics() {
 async function importTopicVersions() {
   const rows = load("topic_versions");
   for (const v of rows) {
-    await prisma.topicVersion.upsert({
-      where: { id: v.id }, update: {},
-      create: {
-        id: v.id, topicId: v.topic_id, title: v.title, summary: v.summary || "",
+    const topicId = idMap.topic[v.topic_id];
+    if (!topicId) continue;
+    await prisma.topicVersion.create({
+      data: {
+        topicId, title: v.title, summary: v.summary || "",
         content: v.content || [], quiz: v.quiz || [], mindmap: v.mindmap,
-        visualization: v.visualization, note: v.note, createdBy: v.created_by,
+        visualization: v.visualization, note: v.note,
+        createdBy: v.created_by ? idMap.user[v.created_by] : undefined,
         createdAt: new Date(v.created_at),
       },
     });
@@ -100,10 +110,13 @@ async function importTopicVersions() {
 async function importBookmarks() {
   const rows = load("bookmarks");
   for (const b of rows) {
-    await prisma.bookmark.upsert({
-      where: { id: b.id }, update: {},
-      create: {
-        id: b.id, userId: b.user_id, topicId: b.topic_id, courseId: b.course_id,
+    const userId = idMap.user[b.user_id];
+    const topicId = idMap.topic[b.topic_id];
+    const courseId = idMap.course[b.course_id];
+    if (!userId || !topicId || !courseId) continue;
+    await prisma.bookmark.create({
+      data: {
+        userId, topicId, courseId,
         pageIndex: b.page_index || 0, wordIndex: b.word_index || 0, label: b.label,
         createdAt: new Date(b.created_at),
       },
@@ -115,11 +128,14 @@ async function importBookmarks() {
 async function importProgress() {
   const rows = load("topic_progress");
   for (const p of rows) {
+    const userId = idMap.user[p.user_id];
+    const topicId = idMap.topic[p.topic_id];
+    if (!userId || !topicId) continue;
     await prisma.topicProgress.upsert({
-      where: { userId_topicId: { userId: p.user_id, topicId: p.topic_id } },
+      where: { userId_topicId: { userId, topicId } },
       update: {},
       create: {
-        id: p.id, userId: p.user_id, topicId: p.topic_id, viewed: p.viewed,
+        userId, topicId, viewed: p.viewed,
         passed: p.passed, attempts: p.attempts, bestQuizScore: p.best_quiz_score,
       },
     });
@@ -130,24 +146,30 @@ async function importProgress() {
 async function importPyqs() {
   const rows = load("course_pyq");
   for (const p of rows) {
-    await prisma.coursePyq.upsert({
-      where: { id: p.id }, update: {},
-      create: {
-        id: p.id, courseId: p.course_id, topicId: p.topic_id,
+    const courseId = idMap.course[p.course_id];
+    if (!courseId) continue;
+    const created = await prisma.coursePyq.create({
+      data: {
+        courseId,
+        topicId: p.topic_id ? idMap.topic[p.topic_id] : undefined,
         question: p.question, answer: p.answer || "", marks: p.marks, year: p.year,
         source: p.source, ingestionSource: p.ingestion_source || "manual",
         orderIndex: p.order_index || 0,
         createdAt: new Date(p.created_at), updatedAt: new Date(p.updated_at),
       },
     });
+    idMap.pyq[p.id] = created.id;
   }
   console.log(`✓ course_pyq: ${rows.length}`);
 
   const links = load("pyq_topics");
   for (const l of links) {
+    const pyqId = idMap.pyq[l.pyq_id];
+    const topicId = idMap.topic[l.topic_id];
+    if (!pyqId || !topicId) continue;
     await prisma.pyqTopic.upsert({
-      where: { pyqId_topicId: { pyqId: l.pyq_id, topicId: l.topic_id } },
-      update: {}, create: { id: l.id, pyqId: l.pyq_id, topicId: l.topic_id },
+      where: { pyqId_topicId: { pyqId, topicId } },
+      update: {}, create: { pyqId, topicId },
     });
   }
   console.log(`✓ pyq_topics: ${links.length}`);
@@ -164,4 +186,5 @@ await importPyqs();
 
 console.log("\n✅ Import complete.");
 console.log("⚠️  All users have placeholder passwords — they must use Forgot Password to set a new one.");
+console.log("ℹ️  Old Supabase UUIDs were remapped to new Mongo ObjectIds; any external references will need updating.");
 await prisma.$disconnect();
