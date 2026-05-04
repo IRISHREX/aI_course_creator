@@ -1,10 +1,10 @@
-// Prisma schema mirroring the existing Supabase schema
+// Prisma schema — MongoDB
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
@@ -15,7 +15,7 @@ enum AppRole {
 }
 
 model User {
-  id           String     @id @default(uuid())
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
   email        String     @unique
   passwordHash String     @map("password_hash")
   displayName  String?    @map("display_name")
@@ -29,13 +29,13 @@ model User {
 }
 
 model UserAiKey {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @map("user_id") @db.ObjectId
   provider      String   @default("google")
-  encryptedKey  String   @db.Text @map("encrypted_key")
+  encryptedKey  String   @map("encrypted_key")
   keyPreview    String?  @map("key_preview")
   status        String   @default("active")
-  lastError     String?  @db.Text @map("last_error")
+  lastError     String?  @map("last_error")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -45,8 +45,8 @@ model UserAiKey {
 }
 
 model UserRole {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @map("user_id") @db.ObjectId
   role      AppRole
   createdAt DateTime @default(now()) @map("created_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -56,13 +56,13 @@ model UserRole {
 }
 
 model Course {
-  id               String   @id @default(uuid())
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
   slug             String   @unique
   title            String
-  description      String   @db.Text
+  description      String
   coverEmoji       String?  @default("📡") @map("cover_emoji")
   orderIndex       Int      @default(0) @map("order_index")
-  sourceText       String?  @map("source_text") @db.LongText
+  sourceText       String?  @map("source_text")
   generationStatus String   @default("ready") @map("generation_status")
   tags             Json     @default("[]")
   mindmap          Json?
@@ -76,17 +76,17 @@ model Course {
 }
 
 model Topic {
-  id               String   @id @default(uuid())
-  courseId         String   @map("course_id")
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  courseId         String   @map("course_id") @db.ObjectId
   slug             String   @unique
   unit             Int
   orderIndex       Int      @map("order_index")
   title            String
-  summary          String   @db.Text
+  summary          String
   content          Json     @default("[]")
   quiz             Json     @default("[]")
   mindmap          Json?
-  visualization    String?  @db.LongText
+  visualization    String?
   difficultyLevel  Int      @default(5) @map("difficulty_level")
   generationStatus String   @default("ready") @map("generation_status")
   createdAt        DateTime @default(now()) @map("created_at")
@@ -101,16 +101,16 @@ model Topic {
 }
 
 model TopicVersion {
-  id            String   @id @default(uuid())
-  topicId       String   @map("topic_id")
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  topicId       String   @map("topic_id") @db.ObjectId
   title         String
-  summary       String   @db.Text
+  summary       String
   content       Json     @default("[]")
   quiz          Json     @default("[]")
   mindmap       Json?
-  visualization String?  @db.LongText
-  note          String?  @db.Text
-  createdBy     String?  @map("created_by")
+  visualization String?
+  note          String?
+  createdBy     String?  @map("created_by") @db.ObjectId
   createdAt     DateTime @default(now()) @map("created_at")
   topic         Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
@@ -118,10 +118,10 @@ model TopicVersion {
 }
 
 model Bookmark {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  topicId   String   @map("topic_id")
-  courseId  String   @map("course_id")
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @map("user_id") @db.ObjectId
+  topicId   String   @map("topic_id") @db.ObjectId
+  courseId  String   @map("course_id") @db.ObjectId
   pageIndex Int      @default(0) @map("page_index")
   wordIndex Int      @default(0) @map("word_index")
   label     String?
@@ -133,9 +133,9 @@ model Bookmark {
 }
 
 model TopicProgress {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
-  topicId       String   @map("topic_id")
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @map("user_id") @db.ObjectId
+  topicId       String   @map("topic_id") @db.ObjectId
   viewed        Boolean  @default(false)
   passed        Boolean  @default(false)
   attempts      Int      @default(0)
@@ -149,11 +149,11 @@ model TopicProgress {
 }
 
 model CoursePyq {
-  id              String   @id @default(uuid())
-  courseId        String   @map("course_id")
-  topicId         String?  @map("topic_id")
-  question        String   @db.Text
-  answer          String   @db.Text
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  courseId        String   @map("course_id") @db.ObjectId
+  topicId         String?  @map("topic_id") @db.ObjectId
+  question        String
+  answer          String
   marks           Int?
   year            Int?
   source          String?
@@ -168,9 +168,9 @@ model CoursePyq {
 }
 
 model PyqTopic {
-  id        String   @id @default(uuid())
-  pyqId     String   @map("pyq_id")
-  topicId   String   @map("topic_id")
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  pyqId     String   @map("pyq_id") @db.ObjectId
+  topicId   String   @map("topic_id") @db.ObjectId
   createdAt DateTime @default(now()) @map("created_at")
   pyq       CoursePyq @relation(fields: [pyqId], references: [id], onDelete: Cascade)
   topic     Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
