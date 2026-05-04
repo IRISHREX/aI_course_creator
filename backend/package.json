@@ -8,8 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy",
-    "prisma:dev": "prisma migrate dev",
+    "prisma:push": "prisma db push",
+    "prisma:dev": "prisma db push",
     "db:export": "tsx scripts/export-from-supabase.ts",
     "db:import": "tsx scripts/import-into-prisma.ts"
   },
