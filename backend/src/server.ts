@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { env } from "./env.js";
+import { connectDb } from "./db.js";
 import { authRouter } from "./routes/auth.js";
 import { coursesRouter } from "./routes/courses.js";
 import { topicsRouter } from "./routes/topics.js";
@@ -11,7 +12,6 @@ import { adminRouter } from "./routes/admin.js";
 import { aiRouter } from "./routes/ai.js";
 import { aiKeysRouter } from "./routes/aiKeys.js";
 import { progressRouter } from "./routes/progress.js";
-import { prisma } from "./db.js";
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -25,9 +25,7 @@ function isAllowedOrigin(origin: string) {
         || url.hostname.startsWith("192.168.")
         || url.hostname.startsWith("10.")
         || /^172\.(1[6-9]|2\d|3[0-1])\./.test(url.hostname);
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }
   return false;
 }
@@ -60,9 +58,8 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 
 async function start() {
   try {
-    await prisma.$connect();
-    console.log("DB connected");
-
+    await connectDb();
+    console.log("MongoDB connected");
     app.listen(env.PORT, () => console.log(`API listening on :${env.PORT}`));
   } catch (err) {
     console.error("DB connection failed", err);
