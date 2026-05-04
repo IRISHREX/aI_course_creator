@@ -291,7 +291,7 @@ export default function TopicEdit() {
             </TabsContent>
             <TabsContent value="json" className="mt-3">
               <Textarea rows={14} value={contentJson} onChange={e => setContentJson(e.target.value)} className="font-mono text-xs" />
-              <p className="text-xs text-muted-foreground mt-1">Block types: text, highlight, list, timeline, table, flowchart, chart, image, math, code. Use **word** in text/highlight/list to bold.</p>
+              <p className="text-xs text-muted-foreground mt-1">Block types: text, highlight, list, timeline, table, flowchart, chart, image, math, code. Use **word** for bold, `word` for golden highlight, and ***word*** for bold red.</p>
             </TabsContent>
           </Tabs>
         </div>

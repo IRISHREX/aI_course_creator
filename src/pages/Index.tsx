@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Radio, BookOpen, Sparkles, Award, Brain, Wifi } from "lucide-react";
+import { BookOpen, Award, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 import { useCourses } from "@/hooks/useCourses";
 
 const Index = () => {
@@ -37,27 +38,8 @@ const Index = () => {
 
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.7 }}
-            className="relative aspect-square max-w-md mx-auto">
-            <div className="absolute inset-0 grid-bg rounded-3xl glass overflow-hidden">
-              <div className="absolute inset-0 grid place-items-center">
-                <div className="relative">
-                  <div className="h-20 w-20 rounded-2xl bg-gradient-primary grid place-items-center shadow-glow animate-pulse-glow">
-                    <Radio className="h-10 w-10 text-primary-foreground" />
-                  </div>
-                  {[0, 0.7, 1.4].map((d, i) => (
-                    <span key={i} className="absolute inset-0 rounded-2xl border-2 border-primary animate-signal" style={{ animationDelay: `${d}s` }} />
-                  ))}
-                  {[Wifi, Brain, Sparkles, Award].map((Ic, i) => (
-                    <div key={i} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-orbit"
-                      style={{ animationDelay: `${i * -3}s` }}>
-                      <div className="h-10 w-10 rounded-xl glass grid place-items-center text-primary shadow-glow-purple">
-                        <Ic className="h-5 w-5" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            className="relative min-h-[340px] w-full md:min-h-[560px]">
+            <ThreeParticleBackground className="opacity-90" />
           </motion.div>
         </div>
       </section>

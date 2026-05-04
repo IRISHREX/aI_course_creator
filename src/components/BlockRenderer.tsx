@@ -18,9 +18,64 @@ interface Props {
   text?: string;
 }
 
-/** Strip ** markers (used when computing tokens for TTS). */
-function stripBold(s: string): string {
-  return s.replace(/\*\*(.+?)\*\*/g, "$1");
+/**
+ * Parse inline formatting markers and return a plain string plus formatting spans.
+ * Supported markers:
+ *   `text` -> golden highlight
+ *   **text** -> bold
+ *   ***text*** -> bold red
+ */
+function parseFormatting(value: string) {
+  const spans: Array<{ start: number; end: number; type: "bold" | "gold" | "red" }> = [];
+  let stripped = "";
+  let i = 0;
+
+  while (i < value.length) {
+    if (value.startsWith("***", i)) {
+      const end = value.indexOf("***", i + 3);
+      if (end !== -1) {
+        const inner = value.slice(i + 3, end);
+        const start = stripped.length;
+        stripped += inner;
+        spans.push({ start, end: stripped.length, type: "red" });
+        i = end + 3;
+        continue;
+      }
+    }
+
+    if (value[i] === "`") {
+      const end = value.indexOf("`", i + 1);
+      if (end !== -1) {
+        const inner = value.slice(i + 1, end);
+        const start = stripped.length;
+        stripped += inner;
+        spans.push({ start, end: stripped.length, type: "gold" });
+        i = end + 1;
+        continue;
+      }
+    }
+
+    if (value.startsWith("**", i)) {
+      const end = value.indexOf("**", i + 2);
+      if (end !== -1) {
+        const inner = value.slice(i + 2, end);
+        const start = stripped.length;
+        stripped += inner;
+        spans.push({ start, end: stripped.length, type: "bold" });
+        i = end + 2;
+        continue;
+      }
+    }
+
+    stripped += value[i];
+    i++;
+  }
+
+  return { stripped, spans };
+}
+
+function stripFormatting(s: string): string {
+  return parseFormatting(s).stripped;
 }
 
 /**
@@ -29,27 +84,8 @@ function stripBold(s: string): string {
  */
 function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className = "" }:
   { value: string; baseIndex: number; activeIndex: number | null | undefined; onWordClick?: (i: number) => void; className?: string }) {
-  // Strip ** but remember bold ranges over the *stripped* string
-  const boldRanges: Array<[number, number]> = [];
-  let stripped = "";
-  let i = 0;
-  while (i < value.length) {
-    if (value[i] === "*" && value[i + 1] === "*") {
-      const end = value.indexOf("**", i + 2);
-      if (end !== -1) {
-        const inner = value.slice(i + 2, end);
-        const start = stripped.length;
-        stripped += inner;
-        boldRanges.push([start, stripped.length]);
-        i = end + 2;
-        continue;
-      }
-    }
-    stripped += value[i];
-    i++;
-  }
-
-  const isBold = (pos: number) => boldRanges.some(([s, e]) => pos >= s && pos < e);
+  const { stripped, spans } = parseFormatting(value);
+  const hasFormat = (pos: number, type: "bold" | "gold" | "red") => spans.some(span => span.type === type && pos >= span.start && pos < span.end);
 
   // Walk stripped string, alternating words/whitespace. Assign word indices.
   const out: React.ReactNode[] = [];
@@ -65,17 +101,26 @@ function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className
     } else {
       const idx = baseIndex + wordI;
       const active = activeIndex === idx;
-      // Render the word; if any character is in a bold range, wrap whole word in <strong>.
-      const anyBold = Array.from({ length: tok.length }, (_, k) => isBold(start + k)).some(Boolean);
-      const inner = anyBold ? <strong>{tok}</strong> : tok;
+      const hasRed = Array.from({ length: tok.length }, (_, k) => hasFormat(start + k, "red")).some(Boolean);
+      const hasGold = Array.from({ length: tok.length }, (_, k) => hasFormat(start + k, "gold")).some(Boolean);
+      const hasBold = Array.from({ length: tok.length }, (_, k) => hasFormat(start + k, "bold")).some(Boolean);
+      const formatClass = !active
+        ? hasRed
+          ? "font-semibold text-rose-600"
+          : hasGold
+            ? "font-semibold bg-amber-200/80 text-amber-950"
+            : hasBold
+              ? "font-semibold"
+              : ""
+        : "";
       out.push(
         <span
           key={`w${key++}`}
           data-w={idx}
           onClick={() => onWordClick?.(idx)}
-          className={`cursor-pointer rounded px-0.5 transition-colors ${active ? "bg-primary text-primary-foreground" : "hover:bg-primary/15"}`}
+          className={`cursor-pointer rounded px-0.5 transition-colors ${active ? "bg-primary text-primary-foreground" : "hover:bg-primary/15"} ${formatClass}`}
         >
-          {inner}
+          {tok}
         </span>
       );
       wordI++;
@@ -85,16 +130,16 @@ function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className
 }
 
 export function countWords(s: string): number {
-  return (stripBold(s).match(/\S+/g) || []).length;
+  return (stripFormatting(s).match(/\S+/g) || []).length;
 }
 
 export function blockToText(b: any): string {
   if (!b) return "";
-  if (b.type === "text") return stripBold(b.value || "");
-  if (b.type === "highlight") return "Key point. " + stripBold(b.value || "");
+  if (b.type === "text") return stripFormatting(b.value || "");
+  if (b.type === "highlight") return "Key point. " + stripFormatting(b.value || "");
   if (b.type === "list") {
-    const head = b.title ? stripBold(b.title) + "." : "";
-    const items = (b.items || []).map((it: string, i: number) => `${i + 1}. ${stripBold(it)}`).join(". ");
+    const head = b.title ? stripFormatting(b.title) + "." : "";
+    const items = (b.items || []).map((it: string, i: number) => `${i + 1}. ${stripFormatting(it)}`).join(". ");
     return [head, items].filter(Boolean).join(" ");
   }
   if (b.type === "timeline") {
@@ -184,7 +229,7 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
 
   if (b.type === "list") {
     let off = wordOffset;
-    const titleStripped = b.title ? stripBold(b.title) + "." : "";
+    const titleStripped = b.title ? stripFormatting(b.title) + "." : "";
     const titleWords = titleStripped ? countWords(titleStripped) : 0;
     return (
       <div className="glass rounded-2xl p-6">
