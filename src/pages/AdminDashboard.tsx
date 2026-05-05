@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Users, BookOpen, FileQuestion, Upload, Shield, Bookmark, KeyRound, Activity, Trash2, Save, RotateCw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type AiKeyState = {
   id: string;
@@ -18,6 +19,14 @@ type AiKeyState = {
   updatedAt: string;
 } | null;
 
+type ProviderType = "google" | "openai" | "groq";
+
+const PROVIDERS: { value: ProviderType; label: string; helpUrl?: string }[] = [
+  { value: "google", label: "Google Gemini", helpUrl: "https://aistudio.google.com/api-keys" },
+  { value: "openai", label: "OpenAI", helpUrl: "https://platform.openai.com/api-keys" },
+  { value: "groq", label: "Groq", helpUrl: "https://console.groq.com" },
+];
+
 export default function AdminDashboard() {
   const { isAdmin, isSuperAdmin, loading } = useIsAdmin();
   const nav = useNavigate();
@@ -25,6 +34,7 @@ export default function AdminDashboard() {
   const [aiKey, setAiKey] = useState<AiKeyState>(null);
   const [aiKeys, setAiKeys] = useState<AiKeyState[]>([]);
   const [apiKey, setApiKey] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState<ProviderType>("google");
   const [keyBusy, setKeyBusy] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -59,16 +69,16 @@ export default function AdminDashboard() {
 
   const saveKey = async () => {
     if (!apiKey.trim()) {
-      toast.error("Paste a Gemini API key first");
+      toast.error(`Paste a ${PROVIDERS.find(p => p.value === selectedProvider)?.label} API key first`);
       return;
     }
     setKeyBusy(true);
     try {
-      const data = await supabase.aiKeys.save(apiKey.trim());
+      const data = await supabase.aiKeys.save(apiKey.trim(), selectedProvider);
       setAiKey(data.key);
       setApiKey("");
       await refreshAiKey();
-      toast.success("Gemini API key added");
+      toast.success(`${PROVIDERS.find(p => p.value === selectedProvider)?.label} API key added`);
       await checkKey();
     } catch (e: any) {
       toast.error(e.message || "Could not save API key");
@@ -82,10 +92,10 @@ export default function AdminDashboard() {
     try {
       const data = await supabase.aiKeys.check();
       await refreshAiKey();
-      if (data.check?.ok) toast.success("Gemini key is active");
-      else toast.error(data.check?.message || "Gemini key check failed");
+      if (data.check?.ok) toast.success(`${data.check.provider.toUpperCase()} key is active`);
+      else toast.error(data.check?.message || "API key check failed");
     } catch (e: any) {
-      toast.error(e.message || "Gemini key check failed");
+      toast.error(e.message || "API key check failed");
     } finally {
       setChecking(false);
     }
@@ -97,7 +107,7 @@ export default function AdminDashboard() {
       await supabase.aiKeys.remove(id);
       await refreshAiKey();
       setApiKey("");
-      toast.success(id ? "Gemini API key deleted" : "All Gemini API keys deleted");
+      toast.success(id ? "API key deleted" : "All API keys deleted");
     } catch (e: any) {
       toast.error(e.message || "Could not delete API key");
     } finally {
@@ -143,10 +153,10 @@ export default function AdminDashboard() {
           <div>
             <div className="font-display font-bold flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-primary" />
-              Gemini API keys
+              AI API Keys
             </div>
             <div className="text-xs text-muted-foreground">
-              Saved keys are tried in order; if one fails, generation switches to the next active key.
+              Add API keys for Gemini, OpenAI, or Groq. Saved keys are tried in order; if one fails, generation switches to the next active key.
             </div>
           </div>
           <Badge
@@ -158,41 +168,64 @@ export default function AdminDashboard() {
         </div>
 
         {aiKeys.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {aiKeys.map((key, index) => (
-              <div key={key.id} className="grid gap-2 rounded-lg border border-border/60 p-3 text-sm md:grid-cols-[auto_1fr_auto_auto_auto] md:items-center">
-                <Badge variant={key.status === "active" ? "default" : "destructive"} className="capitalize">
-                  {key.status}
-                </Badge>
-                <div>
-                  <div className="font-mono">{index + 1}. {key.keyPreview || "saved"}</div>
-                  {key.lastError && <div className="text-xs text-destructive mt-1">{key.lastError}</div>}
+          <div className="mb-4 space-y-4">
+            {PROVIDERS.map((provider) => {
+              const providerKeys = aiKeys.filter(k => k.provider === provider.value);
+              if (!providerKeys.length) return null;
+              return (
+                <div key={provider.value}>
+                  <div className="text-sm font-semibold text-muted-foreground mb-2">{provider.label}</div>
+                  <div className="space-y-2">
+                    {providerKeys.map((key, index) => (
+                      <div key={key.id} className="grid gap-2 rounded-lg border border-border/60 p-3 text-sm md:grid-cols-[auto_1fr_auto_auto_auto] md:items-center">
+                        <Badge variant={key.status === "active" ? "default" : "destructive"} className="capitalize">
+                          {key.status}
+                        </Badge>
+                        <div>
+                          <div className="font-mono">{index + 1}. {key.keyPreview || "saved"}</div>
+                          {key.lastError && <div className="text-xs text-destructive mt-1">{key.lastError}</div>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{key.updatedAt ? new Date(key.updatedAt).toLocaleString() : "Unknown"}</div>
+                        <Button onClick={() => deleteKey(key.id)} variant="ghost" size="sm" disabled={keyBusy || checking} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground capitalize">{key.provider}</div>
-                <div className="text-xs text-muted-foreground">{key.updatedAt ? new Date(key.updatedAt).toLocaleString() : "Unknown"}</div>
-                <Button onClick={() => deleteKey(key.id)} variant="ghost" size="sm" disabled={keyBusy || checking} className="text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_auto_auto_auto] md:items-end">
           <div>
-            <Label htmlFor="gemini-key">Add key</Label>
+            <Label htmlFor="provider">Provider</Label>
+            <Select value={selectedProvider} onValueChange={(v) => setSelectedProvider(v as ProviderType)}>
+              <SelectTrigger id="provider" className="mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDERS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="api-key">Add key</Label>
             <Input
-              id="gemini-key"
+              id="api-key"
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Paste Gemini API key"
+              placeholder={`Paste ${PROVIDERS.find(p => p.value === selectedProvider)?.label} API key`}
               autoComplete="off"
               className="mt-2"
             />
             <div className="mt-2 text-xs text-muted-foreground">
-              Need a key? <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noreferrer" className="text-primary underline">Generate one in AI Studio</a>.
+              Need a key? <a href={PROVIDERS.find(p => p.value === selectedProvider)?.helpUrl} target="_blank" rel="noreferrer" className="text-primary underline">Generate one here</a>.
             </div>
           </div>
           <Button onClick={saveKey} disabled={keyBusy || checking} className="md:mb-0">

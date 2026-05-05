@@ -8,7 +8,7 @@ export const aiKeysRouter = Router();
 
 const SaveKey = z.object({
   apiKey: z.string().min(10).max(500),
-  provider: z.string().default("google"),
+  provider: z.enum(["google", "openai", "groq"]).default("google"),
 });
 
 const adminOnly = [requireAuth, requireRole("admin", "super_admin")] as const;
@@ -29,6 +29,52 @@ async function checkGeminiKey(apiKey: string) {
     return { ok: false, status, httpStatus: r.status, message: String(message) };
   }
   return { ok: true, status: "active", httpStatus: r.status, message: "Gemini key is active", usage: data?.usageMetadata };
+}
+
+async function checkOpenAIKey(apiKey: string) {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Reply with exactly: OK" }],
+      max_tokens: 4,
+      temperature: 0,
+    }),
+  });
+  const data = await r.json().catch(() => null);
+  if (!r.ok) {
+    const message = data?.error?.message || data?.error?.type || "OpenAI key check failed";
+    const status = r.status === 429 ? "limited" : "invalid";
+    return { ok: false, status, httpStatus: r.status, message: String(message) };
+  }
+  return { ok: true, status: "active", httpStatus: r.status, message: "OpenAI key is active", usage: data?.usage };
+}
+
+async function checkGroqKey(apiKey: string) {
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "mixtral-8x7b-32768",
+      messages: [{ role: "user", content: "Reply with exactly: OK" }],
+      max_tokens: 4,
+      temperature: 0,
+    }),
+  });
+  const data = await r.json().catch(() => null);
+  if (!r.ok) {
+    const message = data?.error?.message || data?.error?.type || "Groq key check failed";
+    const status = r.status === 429 ? "limited" : "invalid";
+    return { ok: false, status, httpStatus: r.status, message: String(message) };
+  }
+  return { ok: true, status: "active", httpStatus: r.status, message: "Groq key is active", usage: data?.usage };
 }
 
 function serializeKey(row: any) {
@@ -61,15 +107,23 @@ aiKeysRouter.post("/", ...adminOnly, async (req: AuthedRequest, res) => {
 
 aiKeysRouter.post("/check", ...adminOnly, async (req: AuthedRequest, res) => {
   const rows = await UserAiKey.find({ userId: req.user!.id }).sort({ updatedAt: 1 });
-  if (!rows.length) return res.status(404).json({ error: "No Gemini API key saved" });
+  if (!rows.length) return res.status(404).json({ error: "No API key saved" });
 
   const checks = [];
   for (const row of rows) {
-    const result = await checkGeminiKey(decryptApiKey(row.encryptedKey));
+    const decryptedKey = decryptApiKey(row.encryptedKey);
+    let result;
+    if (row.provider === "openai") {
+      result = await checkOpenAIKey(decryptedKey);
+    } else if (row.provider === "groq") {
+      result = await checkGroqKey(decryptedKey);
+    } else {
+      result = await checkGeminiKey(decryptedKey);
+    }
     row.status = result.status;
     row.lastError = result.ok ? null : result.message;
     await row.save();
-    checks.push({ id: String(row._id), keyPreview: row.keyPreview, ...result });
+    checks.push({ id: String(row._id), provider: row.provider, keyPreview: row.keyPreview, ...result });
   }
   res.json({ check: checks[0], checks });
 });

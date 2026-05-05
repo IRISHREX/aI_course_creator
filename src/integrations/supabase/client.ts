@@ -476,10 +476,10 @@ function normalizeQuiz(quiz: unknown) {
     .slice(0, 4);
 }
 
-async function saveAiKey(apiKey: string) {
+async function saveAiKey(apiKey: string, provider: string = "google") {
   return api("/ai-keys", {
     method: "POST",
-    body: JSON.stringify({ apiKey, provider: "google" }),
+    body: JSON.stringify({ apiKey, provider }),
   });
 }
 
@@ -836,8 +836,8 @@ export const supabase = {
     async get() {
       return api("/ai-keys");
     },
-    async save(apiKey: string) {
-      return saveAiKey(apiKey);
+    async save(apiKey: string, provider: string = "google") {
+      return saveAiKey(apiKey, provider);
     },
     async check() {
       return api("/ai-keys/check", { method: "POST" });
