@@ -489,16 +489,26 @@ async function requestReplacementAiKey(message: string) {
   await saveAiKey(apiKey.trim());
 }
 
-async function aiJson(system: string, user: string, fallback: any) {
+const PROVIDER_KEY = "ignouprep.ai.provider";
+export function getActiveProvider(): string {
+  return localStorage.getItem(PROVIDER_KEY) || "auto";
+}
+export function setActiveProvider(provider: string) {
+  localStorage.setItem(PROVIDER_KEY, provider);
+  window.dispatchEvent(new Event("ignouprep:ai-provider"));
+}
+
+async function aiJson(system: string, user: string, fallback: any, opts?: { maxTokens?: number }) {
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          provider: getActiveProvider(),
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
           temperature: 0.2,
+          max_tokens: opts?.maxTokens ?? 2048,
         }),
       });
       const text = data.choices?.[0]?.message?.content || "";
@@ -514,23 +524,18 @@ async function aiJson(system: string, user: string, fallback: any) {
   }
 }
 
-async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any) {
+async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any, opts?: { maxTokens?: number }) {
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          provider: getActiveProvider(),
           messages: [{ role: "system", content: `${system}\nAlways call the ${toolName} tool.` }, { role: "user", content: user }],
           temperature: 0.2,
-          tools: [{
-            type: "function",
-            function: {
-              name: toolName,
-              parameters,
-            },
-          }],
+          max_tokens: opts?.maxTokens ?? 4096,
+          tools: [{ type: "function", function: { name: toolName, parameters } }],
           tool_choice: { type: "function", function: { name: toolName } },
         }),
       });
