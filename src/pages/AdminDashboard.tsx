@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getActiveProvider, setActiveProvider } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, BookOpen, FileQuestion, Upload, Shield, Bookmark, KeyRound, Activity, Trash2, Save, RotateCw } from "lucide-react";
+import { Users, BookOpen, FileQuestion, Upload, Shield, Bookmark, KeyRound, Activity, Trash2, Save, RotateCw, Zap } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type AiKeyState = {
@@ -19,12 +19,18 @@ type AiKeyState = {
   updatedAt: string;
 } | null;
 
-type ProviderType = "google" | "openai" | "groq";
+type ProviderType = "google" | "openai" | "groq" | "anthropic";
 
 const PROVIDERS: { value: ProviderType; label: string; helpUrl?: string }[] = [
   { value: "google", label: "Google Gemini", helpUrl: "https://aistudio.google.com/api-keys" },
   { value: "openai", label: "OpenAI", helpUrl: "https://platform.openai.com/api-keys" },
+  { value: "anthropic", label: "Anthropic Claude", helpUrl: "https://console.anthropic.com/settings/keys" },
   { value: "groq", label: "Groq", helpUrl: "https://console.groq.com" },
+];
+
+const ACTIVE_OPTIONS = [
+  { value: "auto", label: "Auto (smart fallback)" },
+  ...PROVIDERS.map(p => ({ value: p.value, label: p.label })),
 ];
 
 export default function AdminDashboard() {
@@ -35,8 +41,15 @@ export default function AdminDashboard() {
   const [aiKeys, setAiKeys] = useState<AiKeyState[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<ProviderType>("google");
+  const [activeProvider, setActiveProviderState] = useState<string>(getActiveProvider());
   const [keyBusy, setKeyBusy] = useState(false);
   const [checking, setChecking] = useState(false);
+
+  const switchActive = (val: string) => {
+    setActiveProviderState(val);
+    setActiveProvider(val);
+    toast.success(`AI now using: ${ACTIVE_OPTIONS.find(o => o.value === val)?.label}`);
+  };
 
   useEffect(() => {
     if (!loading && !isAdmin) nav("/");
@@ -146,6 +159,22 @@ export default function AdminDashboard() {
             <div className="text-xs text-muted-foreground uppercase tracking-wider">{c.label}</div>
           </div>
         ))}
+      </div>
+
+      <div className="glass rounded-2xl p-5 mb-4 border border-primary/30">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Zap className="h-5 w-5 text-primary" />
+          <div className="flex-1 min-w-[200px]">
+            <div className="font-display font-bold">Active AI Provider</div>
+            <div className="text-xs text-muted-foreground">Switch instantly. "Auto" tries Gemini → OpenAI → Anthropic → Groq based on saved keys.</div>
+          </div>
+          <Select value={activeProvider} onValueChange={switchActive}>
+            <SelectTrigger className="w-[240px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ACTIVE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="glass rounded-2xl p-5 mb-8">
