@@ -902,8 +902,9 @@ Make the root label the course title and organize branches by course concepts.`;
           const data = await api("/ai/chat", {
             method: "POST",
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
+              provider: getActiveProvider(),
               messages: [{ role: "user", content: `Write a concise exam-ready model answer.\nQuestion: ${pyq?.question || body.pyqId}\nMarks: ${pyq?.marks || "unknown"}` }],
+              max_tokens: 1024,
             }),
           });
           const answer = data.choices?.[0]?.message?.content || "";
