@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getActiveProvider, setActiveProvider } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, BookOpen, FileQuestion, Upload, Shield, Bookmark, KeyRound, Activity, Trash2, Save, RotateCw } from "lucide-react";
+import { Users, BookOpen, FileQuestion, Upload, Shield, Bookmark, KeyRound, Activity, Trash2, Save, RotateCw, Zap } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type AiKeyState = {
@@ -19,12 +19,18 @@ type AiKeyState = {
   updatedAt: string;
 } | null;
 
-type ProviderType = "google" | "openai" | "groq";
+type ProviderType = "google" | "openai" | "groq" | "anthropic";
 
 const PROVIDERS: { value: ProviderType; label: string; helpUrl?: string }[] = [
   { value: "google", label: "Google Gemini", helpUrl: "https://aistudio.google.com/api-keys" },
   { value: "openai", label: "OpenAI", helpUrl: "https://platform.openai.com/api-keys" },
+  { value: "anthropic", label: "Anthropic Claude", helpUrl: "https://console.anthropic.com/settings/keys" },
   { value: "groq", label: "Groq", helpUrl: "https://console.groq.com" },
+];
+
+const ACTIVE_OPTIONS = [
+  { value: "auto", label: "Auto (smart fallback)" },
+  ...PROVIDERS.map(p => ({ value: p.value, label: p.label })),
 ];
 
 export default function AdminDashboard() {
