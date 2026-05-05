@@ -161,6 +161,22 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      <div className="glass rounded-2xl p-5 mb-4 border border-primary/30">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Zap className="h-5 w-5 text-primary" />
+          <div className="flex-1 min-w-[200px]">
+            <div className="font-display font-bold">Active AI Provider</div>
+            <div className="text-xs text-muted-foreground">Switch instantly. "Auto" tries Gemini → OpenAI → Anthropic → Groq based on saved keys.</div>
+          </div>
+          <Select value={activeProvider} onValueChange={switchActive}>
+            <SelectTrigger className="w-[240px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ACTIVE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="glass rounded-2xl p-5 mb-8">
         <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
           <div>
