@@ -6,9 +6,12 @@ import { decryptApiKey, saveUserAiKey } from "../aiKeys.js";
 
 export const aiKeysRouter = Router();
 
+const PROVIDERS = ["google", "openai", "groq", "anthropic"] as const;
+type Provider = typeof PROVIDERS[number];
+
 const SaveKey = z.object({
   apiKey: z.string().min(10).max(500),
-  provider: z.enum(["google", "openai", "groq"]).default("google"),
+  provider: z.enum(PROVIDERS).default("google"),
 });
 
 const adminOnly = [requireAuth, requireRole("admin", "super_admin")] as const;
@@ -18,63 +21,64 @@ async function checkGeminiKey(apiKey: string) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
+      contents: [{ role: "user", parts: [{ text: "Reply: OK" }] }],
       generationConfig: { maxOutputTokens: 4, temperature: 0 },
     }),
   });
-  const data = await r.json().catch(() => null);
-  if (!r.ok) {
-    const message = data?.error?.message || data?.error || "Gemini key check failed";
-    const status = r.status === 429 ? "limited" : "invalid";
-    return { ok: false, status, httpStatus: r.status, message: String(message) };
-  }
-  return { ok: true, status: "active", httpStatus: r.status, message: "Gemini key is active", usage: data?.usageMetadata };
+  return parseCheck(r, "Gemini");
 }
 
 async function checkOpenAIKey(apiKey: string) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: "Reply with exactly: OK" }],
-      max_tokens: 4,
-      temperature: 0,
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "Reply: OK" }],
+      max_tokens: 4, temperature: 0,
     }),
   });
-  const data = await r.json().catch(() => null);
-  if (!r.ok) {
-    const message = data?.error?.message || data?.error?.type || "OpenAI key check failed";
-    const status = r.status === 429 ? "limited" : "invalid";
-    return { ok: false, status, httpStatus: r.status, message: String(message) };
-  }
-  return { ok: true, status: "active", httpStatus: r.status, message: "OpenAI key is active", usage: data?.usage };
+  return parseCheck(r, "OpenAI");
 }
 
 async function checkGroqKey(apiKey: string) {
   const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: "mixtral-8x7b-32768",
-      messages: [{ role: "user", content: "Reply with exactly: OK" }],
-      max_tokens: 4,
-      temperature: 0,
+      model: "llama-3.1-8b-instant",
+      messages: [{ role: "user", content: "Reply: OK" }],
+      max_tokens: 4, temperature: 0,
     }),
   });
+  return parseCheck(r, "Groq");
+}
+
+async function checkAnthropicKey(apiKey: string) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-3-5-haiku-latest",
+      max_tokens: 4,
+      messages: [{ role: "user", content: "Reply: OK" }],
+    }),
+  });
+  return parseCheck(r, "Anthropic");
+}
+
+async function parseCheck(r: Response, label: string) {
   const data = await r.json().catch(() => null);
   if (!r.ok) {
-    const message = data?.error?.message || data?.error?.type || "Groq key check failed";
+    const message = (data as any)?.error?.message || (data as any)?.error?.type || (data as any)?.error || `${label} key check failed`;
     const status = r.status === 429 ? "limited" : "invalid";
     return { ok: false, status, httpStatus: r.status, message: String(message) };
   }
-  return { ok: true, status: "active", httpStatus: r.status, message: "Groq key is active", usage: data?.usage };
+  return { ok: true, status: "active", httpStatus: r.status, message: `${label} key is active`, usage: (data as any)?.usage || (data as any)?.usageMetadata };
 }
 
 function serializeKey(row: any) {
@@ -101,9 +105,16 @@ aiKeysRouter.post("/", ...adminOnly, async (req: AuthedRequest, res) => {
     const key = await saveUserAiKey(req.user!.id, parsed.data.apiKey, parsed.data.provider);
     res.json({ key });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Could not save Gemini API key" });
+    res.status(500).json({ error: error.message || "Could not save AI API key" });
   }
 });
+
+async function runCheck(provider: Provider, apiKey: string) {
+  if (provider === "openai") return checkOpenAIKey(apiKey);
+  if (provider === "groq") return checkGroqKey(apiKey);
+  if (provider === "anthropic") return checkAnthropicKey(apiKey);
+  return checkGeminiKey(apiKey);
+}
 
 aiKeysRouter.post("/check", ...adminOnly, async (req: AuthedRequest, res) => {
   const rows = await UserAiKey.find({ userId: req.user!.id }).sort({ updatedAt: 1 });
@@ -112,14 +123,7 @@ aiKeysRouter.post("/check", ...adminOnly, async (req: AuthedRequest, res) => {
   const checks = [];
   for (const row of rows) {
     const decryptedKey = decryptApiKey(row.encryptedKey);
-    let result;
-    if (row.provider === "openai") {
-      result = await checkOpenAIKey(decryptedKey);
-    } else if (row.provider === "groq") {
-      result = await checkGroqKey(decryptedKey);
-    } else {
-      result = await checkGeminiKey(decryptedKey);
-    }
+    const result = await runCheck((row.provider as Provider) || "google", decryptedKey);
     row.status = result.status;
     row.lastError = result.ok ? null : result.message;
     await row.save();
