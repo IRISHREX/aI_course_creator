@@ -476,10 +476,10 @@ function normalizeQuiz(quiz: unknown) {
     .slice(0, 4);
 }
 
-async function saveAiKey(apiKey: string) {
+async function saveAiKey(apiKey: string, provider: string = "google") {
   return api("/ai-keys", {
     method: "POST",
-    body: JSON.stringify({ apiKey, provider: "google" }),
+    body: JSON.stringify({ apiKey, provider }),
   });
 }
 
@@ -489,16 +489,26 @@ async function requestReplacementAiKey(message: string) {
   await saveAiKey(apiKey.trim());
 }
 
-async function aiJson(system: string, user: string, fallback: any) {
+const PROVIDER_KEY = "ignouprep.ai.provider";
+export function getActiveProvider(): string {
+  return localStorage.getItem(PROVIDER_KEY) || "auto";
+}
+export function setActiveProvider(provider: string) {
+  localStorage.setItem(PROVIDER_KEY, provider);
+  window.dispatchEvent(new Event("ignouprep:ai-provider"));
+}
+
+async function aiJson(system: string, user: string, fallback: any, opts?: { maxTokens?: number }) {
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          provider: getActiveProvider(),
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
           temperature: 0.2,
+          max_tokens: opts?.maxTokens ?? 2048,
         }),
       });
       const text = data.choices?.[0]?.message?.content || "";
@@ -514,23 +524,18 @@ async function aiJson(system: string, user: string, fallback: any) {
   }
 }
 
-async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any) {
+async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any, opts?: { maxTokens?: number }) {
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          provider: getActiveProvider(),
           messages: [{ role: "system", content: `${system}\nAlways call the ${toolName} tool.` }, { role: "user", content: user }],
           temperature: 0.2,
-          tools: [{
-            type: "function",
-            function: {
-              name: toolName,
-              parameters,
-            },
-          }],
+          max_tokens: opts?.maxTokens ?? 4096,
+          tools: [{ type: "function", function: { name: toolName, parameters } }],
           tool_choice: { type: "function", function: { name: toolName } },
         }),
       });
@@ -836,8 +841,8 @@ export const supabase = {
     async get() {
       return api("/ai-keys");
     },
-    async save(apiKey: string) {
-      return saveAiKey(apiKey);
+    async save(apiKey: string, provider: string = "google") {
+      return saveAiKey(apiKey, provider);
     },
     async check() {
       return api("/ai-keys/check", { method: "POST" });
@@ -897,8 +902,9 @@ Make the root label the course title and organize branches by course concepts.`;
           const data = await api("/ai/chat", {
             method: "POST",
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
+              provider: getActiveProvider(),
               messages: [{ role: "user", content: `Write a concise exam-ready model answer.\nQuestion: ${pyq?.question || body.pyqId}\nMarks: ${pyq?.marks || "unknown"}` }],
+              max_tokens: 1024,
             }),
           });
           const answer = data.choices?.[0]?.message?.content || "";

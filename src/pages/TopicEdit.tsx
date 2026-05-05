@@ -9,12 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BlockEditor, type Block } from "@/components/BlockEditor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 type TransformAction = "simplify" | "expand" | "bullets" | "analogy" | "bigger" | "smaller" | "level";
+type ProviderType = "google" | "openai" | "groq";
 
 export default function TopicEdit() {
   const { courseSlug, slug } = useParams();
@@ -28,6 +30,7 @@ export default function TopicEdit() {
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(5);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderType>("google");
   const [customInstruction, setCustomInstruction] = useState("");
   const [versions, setVersions] = useState<any[]>([]);
   const [vLoading, setVLoading] = useState(false);
@@ -125,7 +128,7 @@ export default function TopicEdit() {
   const generateFresh = async () => {
     setAiBusy("generate");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level } });
+      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level, provider: selectedProvider } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Fresh lesson generated");
@@ -243,11 +246,26 @@ export default function TopicEdit() {
             </div>
           </div>
 
-          <div className="border-t border-border/50 mt-4 pt-4 flex items-center justify-between">
+          <div className="border-t border-border/50 mt-4 pt-4 flex items-center justify-between flex-wrap gap-3">
             <div className="text-xs text-muted-foreground">Replace everything with a fresh AI-generated lesson</div>
-            <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh}>
-              {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="w-[120px]">
+                <Label htmlFor="topic-provider" className="text-xs">Provider</Label>
+                <Select value={selectedProvider} onValueChange={(v) => setSelectedProvider(v as ProviderType)}>
+                  <SelectTrigger id="topic-provider" className="h-9 mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="google">Gemini</SelectItem>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="groq">Groq</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh} className="mt-6">
+                {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
+              </Button>
+            </div>
           </div>
         </div>
 

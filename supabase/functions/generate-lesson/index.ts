@@ -7,6 +7,18 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const SUPPORTED_BLOCK_TYPES = new Set(["text", "list", "highlight", "table", "code", "flowchart", "chart", "image", "math", "timeline"]);
 
+function getModelForProvider(provider: string): string {
+  switch (provider) {
+    case "openai":
+      return "openai/gpt-4o";
+    case "groq":
+      return "groq/mixtral-8x7b-32768";
+    case "google":
+    default:
+      return "google/gemini-2.5-flash";
+  }
+}
+
 const LESSON_GENERATION_SYSTEM_PROMPT = `You are a structured content generator for an AI learning platform.
 
 Your task is to generate educational lesson content as strict JSON-compatible content blocks.
@@ -166,8 +178,9 @@ Deno.serve(async (req) => {
     const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", userData.user.id).eq("role", "admin").maybeSingle();
     if (!roleRow) throw new Error("Admin only");
 
-    const { topicId, level, mode, customInstruction } = await req.json();
+    const { topicId, level, mode, customInstruction, provider } = await req.json();
     if (!topicId) throw new Error("topicId required");
+    const selectedProvider = provider || "google";
 
     const { data: topic } = await admin.from("topics").select("*, courses(title, source_text)").eq("id", topicId).maybeSingle();
     if (!topic) throw new Error("Topic not found");
@@ -257,7 +270,7 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: getModelForProvider(selectedProvider),
         messages: [
           { role: "system", content: `${LESSON_GENERATION_SYSTEM_PROMPT}\nAlways call the write_lesson tool.` },
           { role: "user", content: userPrompt },

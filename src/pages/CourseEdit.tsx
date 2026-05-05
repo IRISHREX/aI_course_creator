@@ -12,6 +12,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type ProviderType = "google" | "openai" | "groq";
 
 export default function CourseEdit() {
   const { courseSlug } = useParams();
@@ -24,6 +27,7 @@ export default function CourseEdit() {
   const [emoji, setEmoji] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState<ProviderType>("google");
   const [generating, setGenerating] = useState<string | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [reDocsUrl, setReDocsUrl] = useState("");
@@ -63,7 +67,7 @@ export default function CourseEdit() {
   const generateOne = async (topicId: string) => {
     setGenerating(topicId);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId } });
+      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId, provider: selectedProvider } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Lesson generated");
@@ -95,7 +99,7 @@ export default function CourseEdit() {
         setGenerating(t.id);
         toast.info(`Generating: ${t.title}`);
         try {
-          const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id } });
+          const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id, provider: selectedProvider } });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
           generatedCount++;
@@ -166,7 +170,7 @@ export default function CourseEdit() {
   const continueLesson = async (topicId: string) => {
     setGenerating(topicId);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId, mode: "continue" } });
+      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId, mode: "continue", provider: selectedProvider } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success(`Added ${data.blocks} more blocks`);
@@ -240,7 +244,7 @@ export default function CourseEdit() {
       {/* Generation progress */}
       {topics.length > 0 && (
         <div className="glass rounded-2xl p-5 mb-6">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
             <div>
               <div className="font-display font-bold flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" /> AI Generation Progress
@@ -249,11 +253,26 @@ export default function CourseEdit() {
                 {ready} of {topics.length} lessons ready · {pending} pending
               </div>
             </div>
-            {pending > 0 && (
-              <Button onClick={generateAllRemaining} variant="hero" size="sm" disabled={batchRunning}>
-                {batchRunning ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Generating…</> : <><Zap className="h-4 w-4 mr-1" /> Generate all remaining</>}
-              </Button>
-            )}
+            <div className="flex items-end gap-2 flex-wrap">
+              <div>
+                <Label htmlFor="gen-provider" className="text-xs">AI Provider</Label>
+                <Select value={selectedProvider} onValueChange={(v) => setSelectedProvider(v as ProviderType)}>
+                  <SelectTrigger id="gen-provider" className="w-[120px] h-10 mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="google">Gemini</SelectItem>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="groq">Groq</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {pending > 0 && (
+                <Button onClick={generateAllRemaining} variant="hero" size="sm" disabled={batchRunning}>
+                  {batchRunning ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Generating…</> : <><Zap className="h-4 w-4 mr-1" /> Generate all remaining</>}
+                </Button>
+              )}
+            </div>
           </div>
           <Progress value={pct} className="h-2" />
         </div>
