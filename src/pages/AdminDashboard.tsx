@@ -41,8 +41,15 @@ export default function AdminDashboard() {
   const [aiKeys, setAiKeys] = useState<AiKeyState[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<ProviderType>("google");
+  const [activeProvider, setActiveProviderState] = useState<string>(getActiveProvider());
   const [keyBusy, setKeyBusy] = useState(false);
   const [checking, setChecking] = useState(false);
+
+  const switchActive = (val: string) => {
+    setActiveProviderState(val);
+    setActiveProvider(val);
+    toast.success(`AI now using: ${ACTIVE_OPTIONS.find(o => o.value === val)?.label}`);
+  };
 
   useEffect(() => {
     if (!loading && !isAdmin) nav("/");
