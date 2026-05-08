@@ -29,6 +29,7 @@ export default function TopicEdit() {
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(5);
+  const [aiOverride, setAiOverride] = useState<any>({});
   const [customInstruction, setCustomInstruction] = useState("");
   const [versions, setVersions] = useState<any[]>([]);
   const [vLoading, setVLoading] = useState(false);
