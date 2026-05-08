@@ -62,8 +62,9 @@ export default function Bookmarks() {
   );
 
   return (
-    <ThreeBackground />
-    <div className="container max-w-3xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-3xl py-10">
       <h1 className="font-display text-3xl font-bold flex items-center gap-2 mb-6">
         <Bookmark className="h-7 w-7 text-primary" /> My Bookmarks
       </h1>
@@ -101,5 +102,6 @@ export default function Bookmarks() {
         </div>
       )}
     </div>
+    </>
   );
 }

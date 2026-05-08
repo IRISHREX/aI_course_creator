@@ -118,8 +118,9 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <ThreeBackground />
-    <div className="container max-w-6xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-6xl py-10">
       <div className="flex items-start justify-between mb-8 flex-wrap gap-3">
         <div>
           <h1 className="font-display text-3xl font-bold flex items-center gap-2">
@@ -245,5 +246,6 @@ export default function AdminDashboard() {
         )}
       </div>
     </div>
+    </>
   );
 }

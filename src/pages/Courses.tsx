@@ -38,8 +38,9 @@ export default function Courses() {
   };
 
   return (
-    <ThreeBackground />
-    <div className="container py-12">
+    <>
+      <ThreeBackground />
+      <div className="container py-12">
       <div className="flex items-end justify-between flex-wrap gap-4 mb-8">
         <div>
           <div className="text-xs font-mono text-primary tracking-widest mb-2">SIGNAL ACADEMY</div>
@@ -170,5 +171,6 @@ export default function Courses() {
         </div>
       )}
     </div>
+    </>
   );
 }
