@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import ThreeBackground from "@/components/ThreeBackground";
 
 export default function Courses() {
   const { courses, loading, refresh } = useCourses();
@@ -37,6 +38,7 @@ export default function Courses() {
   };
 
   return (
+    <ThreeBackground />
     <div className="container py-12">
       <div className="flex items-end justify-between flex-wrap gap-4 mb-8">
         <div>

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Users, BookOpen, FileQuestion, Upload, Shield, Bookmark, KeyRound, Activity, Trash2, Save, RotateCw } from "lucide-react";
 import { AiDefaultsCard } from "@/components/AiControls";
+import ThreeBackground from "@/components/ThreeBackground";
 
 type AiKeyState = {
   id: string;
@@ -117,6 +118,7 @@ export default function AdminDashboard() {
   ];
 
   return (
+    <ThreeBackground />
     <div className="container max-w-6xl py-10">
       <div className="flex items-start justify-between mb-8 flex-wrap gap-3">
         <div>
