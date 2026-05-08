@@ -70,7 +70,7 @@ export default function CoursePYQ() {
 
   const genAnswer = async (pyqId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", { body: { pyqId } });
+      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", { body: { pyqId, aiOverride } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Answer generated");
@@ -81,7 +81,7 @@ export default function CoursePYQ() {
   const generate = async () => {
     setGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyq", { body: { courseId: course.id, count: 10 } });
+      const { data, error } = await supabase.functions.invoke("generate-pyq", { body: { courseId: course.id, count: 10, aiOverride } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success(`Added ${data.inserted} AI-generated questions`);
