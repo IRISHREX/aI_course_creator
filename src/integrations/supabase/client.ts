@@ -489,16 +489,83 @@ async function requestReplacementAiKey(message: string) {
   await saveAiKey(apiKey.trim());
 }
 
-async function aiJson(system: string, user: string, fallback: any) {
+// ---------------- AI Settings (global defaults + per-call overrides) ----------------
+const AI_SETTINGS_KEY = "ignouprep.ai.settings";
+const AI_SETTINGS_EVENT = "ignouprep:ai-settings";
+
+export type AiSettings = {
+  model: string;
+  temperature: number;
+  maxTokens: number;        // for short JSON calls (mindmap, quiz, pyq answer)
+  lessonMaxTokens: number;  // for big lesson generation
+  contextChars: number;     // generic context truncation
+  lessonContextChars: number; // source-text truncation per lesson
+};
+
+const AI_DEFAULTS: AiSettings = {
+  model: "google/gemini-2.5-flash-lite",
+  temperature: 0.2,
+  maxTokens: 1024,
+  lessonMaxTokens: 3072,
+  contextChars: 3000,
+  lessonContextChars: 5000,
+};
+
+export function getAiSettings(): AiSettings {
+  try {
+    const raw = localStorage.getItem(AI_SETTINGS_KEY);
+    if (!raw) return { ...AI_DEFAULTS };
+    return { ...AI_DEFAULTS, ...JSON.parse(raw) };
+  } catch {
+    return { ...AI_DEFAULTS };
+  }
+}
+
+export function setAiSettings(patch: Partial<AiSettings>) {
+  const next = { ...getAiSettings(), ...patch };
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new Event(AI_SETTINGS_EVENT));
+  return next;
+}
+
+export function resetAiSettings() {
+  localStorage.removeItem(AI_SETTINGS_KEY);
+  window.dispatchEvent(new Event(AI_SETTINGS_EVENT));
+  return { ...AI_DEFAULTS };
+}
+
+export function onAiSettingsChange(cb: () => void) {
+  window.addEventListener(AI_SETTINGS_EVENT, cb);
+  return () => window.removeEventListener(AI_SETTINGS_EVENT, cb);
+}
+
+export const AI_DEFAULT_SETTINGS = AI_DEFAULTS;
+
+type AiOpts = { model?: string; maxTokens?: number; temperature?: number; override?: Partial<AiSettings> };
+
+function resolveAi(opts?: AiOpts, kind: "json" | "lesson" = "json") {
+  const s = { ...getAiSettings(), ...(opts?.override || {}) };
+  return {
+    model: opts?.model || s.model,
+    temperature: typeof opts?.temperature === "number" ? opts.temperature : s.temperature,
+    max_tokens: opts?.maxTokens ?? (kind === "lesson" ? s.lessonMaxTokens : s.maxTokens),
+    contextChars: s.contextChars,
+    lessonContextChars: s.lessonContextChars,
+  };
+}
+
+async function aiJson(system: string, user: string, fallback: any, opts?: AiOpts) {
+  const cfg = resolveAi(opts, "json");
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: cfg.model,
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
-          temperature: 0.2,
+          temperature: cfg.temperature,
+          max_tokens: cfg.max_tokens,
         }),
       });
       const text = data.choices?.[0]?.message?.content || "";
@@ -514,16 +581,18 @@ async function aiJson(system: string, user: string, fallback: any) {
   }
 }
 
-async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any) {
+async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any, opts?: AiOpts) {
+  const cfg = resolveAi(opts, "lesson");
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: cfg.model,
           messages: [{ role: "system", content: `${system}\nAlways call the ${toolName} tool.` }, { role: "user", content: user }],
-          temperature: 0.2,
+          temperature: cfg.temperature,
+          max_tokens: cfg.max_tokens,
           tools: [{
             type: "function",
             function: {
