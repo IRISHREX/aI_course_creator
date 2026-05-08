@@ -668,24 +668,23 @@ function chunkText(text: string, size = 20000) {
   return chunks;
 }
 
-function focusSource(sourceText: string, title: string, summary = "") {
-  if (sourceText.length <= 10000) return sourceText;
+function focusSource(sourceText: string, title: string, summary = "", size?: number) {
+  const cap = size ?? getAiSettings().lessonContextChars;
+  if (sourceText.length <= cap) return sourceText;
   const words = `${title} ${summary}`.toLowerCase().split(/\W+/).filter((word) => word.length > 4);
   const lower = sourceText.toLowerCase();
   let bestIdx = -1;
   for (const word of words) {
     const idx = lower.indexOf(word);
-    if (idx !== -1) {
-      bestIdx = idx;
-      break;
-    }
+    if (idx !== -1) { bestIdx = idx; break; }
   }
-  if (bestIdx === -1) return sourceText.slice(0, 10000);
-  const start = Math.max(0, bestIdx - 1800);
-  return sourceText.slice(start, start + 10000);
+  if (bestIdx === -1) return sourceText.slice(0, cap);
+  const start = Math.max(0, bestIdx - Math.floor(cap * 0.18));
+  return sourceText.slice(start, start + cap);
 }
 
-async function generateCompactLesson(topic: any, courseTitle: string, courseOutline: string, sourceText: string) {
+async function generateCompactLesson(topic: any, courseTitle: string, courseOutline: string, sourceText: string, opts?: AiOpts) {
+  const cfg = resolveAi(opts, "lesson");
   const result = await aiToolJson(
     `${LESSON_GENERATION_SYSTEM_PROMPT}
 Keep output compact: 6-10 blocks. Prefer text, list, highlight, table, and flowchart. Do not create image blocks.`,
@@ -694,15 +693,16 @@ Lesson: ${topic.unit}.${topic.order_index} ${topic.title}
 Summary: ${topic.summary || ""}
 
 Course outline:
-${courseOutline}
+${courseOutline.slice(0, cfg.contextChars)}
 
 Relevant source excerpt:
-${focusSource(sourceText, topic.title, topic.summary || "")}
+${focusSource(sourceText, topic.title, topic.summary || "", cfg.lessonContextChars)}
 
 Generate a complete but concise lesson and exactly 4 multiple-choice quiz questions. Avoid repeating other lessons.`,
     "write_lesson",
     WRITE_LESSON_PARAMETERS,
     { content: [], quiz: [] },
+    opts,
   );
   return {
     content: normalizeLessonContent(result.content || []).slice(0, 12),
