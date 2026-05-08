@@ -101,6 +101,7 @@ aiRouter.post("/chat", requireAuth, requireRole("admin", "super_admin"), async (
     ...(toolConfig ? { toolConfig } : {}),
     generationConfig: {
       ...(typeof parsed.data.temperature === "number" ? { temperature: parsed.data.temperature } : {}),
+      ...(typeof parsed.data.max_tokens === "number" ? { maxOutputTokens: parsed.data.max_tokens } : {}),
     },
   });
 
