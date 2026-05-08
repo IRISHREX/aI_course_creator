@@ -6,6 +6,7 @@ const TOKEN_KEY = "ignouprep.auth.token";
 const AUTH_EVENT = "ignouprep:auth";
 
 const keyMap: Record<string, string> = {
+  _id: "id",
   course_id: "courseId",
   cover_emoji: "coverEmoji",
   order_index: "orderIndex",
@@ -24,13 +25,14 @@ const keyMap: Record<string, string> = {
   created_by: "createdBy",
   ingestion_source: "ingestionSource",
 };
-const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, k]));
+const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).filter(([k]) => k !== "_id").map(([k, v]) => [v, k]));
 
 function toCamelKey(key: string) {
   return keyMap[key] || key;
 }
 
 function toSnakeKey(key: string) {
+  if (key === "_id") return "id";
   return reverseKeyMap[key] || key;
 }
 
@@ -564,10 +566,12 @@ async function getCourseTopics(courseId: string) {
 }
 
 async function patchTopic(topicId: string, body: any) {
+  if (!topicId) throw new Error("Cannot update topic because the backend did not return a topic id.");
   return fromApi((await api(`/topics/${encodeURIComponent(topicId)}`, { method: "PATCH", body: JSON.stringify(toApi(body)) })).topic);
 }
 
 async function patchCourse(courseId: string, body: any) {
+  if (!courseId) throw new Error("Cannot update course because the backend did not return a course id.");
   return fromApi((await api(`/courses/${encodeURIComponent(courseId)}`, { method: "PATCH", body: JSON.stringify(toApi(body)) })).course);
 }
 
@@ -589,10 +593,52 @@ function textToBlocks(text: string) {
   }));
 }
 
-function chunkText(text: string, size = 12000) {
+function chunkText(text: string, size = 20000) {
   const chunks: string[] = [];
   for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size));
   return chunks;
+}
+
+function focusSource(sourceText: string, title: string, summary = "") {
+  if (sourceText.length <= 10000) return sourceText;
+  const words = `${title} ${summary}`.toLowerCase().split(/\W+/).filter((word) => word.length > 4);
+  const lower = sourceText.toLowerCase();
+  let bestIdx = -1;
+  for (const word of words) {
+    const idx = lower.indexOf(word);
+    if (idx !== -1) {
+      bestIdx = idx;
+      break;
+    }
+  }
+  if (bestIdx === -1) return sourceText.slice(0, 10000);
+  const start = Math.max(0, bestIdx - 1800);
+  return sourceText.slice(start, start + 10000);
+}
+
+async function generateCompactLesson(topic: any, courseTitle: string, courseOutline: string, sourceText: string) {
+  const result = await aiToolJson(
+    `${LESSON_GENERATION_SYSTEM_PROMPT}
+Keep output compact: 6-10 blocks. Prefer text, list, highlight, table, and flowchart. Do not create image blocks.`,
+    `Course: ${courseTitle}
+Lesson: ${topic.unit}.${topic.order_index} ${topic.title}
+Summary: ${topic.summary || ""}
+
+Course outline:
+${courseOutline}
+
+Relevant source excerpt:
+${focusSource(sourceText, topic.title, topic.summary || "")}
+
+Generate a complete but concise lesson and exactly 4 multiple-choice quiz questions. Avoid repeating other lessons.`,
+    "write_lesson",
+    WRITE_LESSON_PARAMETERS,
+    { content: [], quiz: [] },
+  );
+  return {
+    content: normalizeLessonContent(result.content || []).slice(0, 12),
+    quiz: normalizeQuiz(result.quiz || []),
+  };
 }
 
 function normalizeOutline(result: any) {
@@ -628,14 +674,18 @@ async function buildCourseOutlineFromSource(title: string, sourceText: string) {
   const chunks = chunkText(sourceText);
   const summaries: string[] = [];
 
-  for (let index = 0; index < chunks.length; index++) {
-    const result = await aiJson(
-      "Return only valid JSON: {\"summary\":\"\",\"topics\":[\"\"]}. Scan this source chunk and list every important topic, subtopic, term, process, formula, and example. Do not create lessons yet.",
-      `Course: ${title}\nChunk ${index + 1} of ${chunks.length}\n\n${chunks[index]}`,
-      { summary: "", topics: [] },
-    );
-    const topicList = Array.isArray(result.topics) ? result.topics.join("; ") : "";
-    summaries.push(`Chunk ${index + 1}: ${result.summary || ""}\nTopics: ${topicList}`);
+  if (chunks.length === 1) {
+    summaries.push(`Full source: ${chunks[0].slice(0, 18000)}`);
+  } else {
+    for (let index = 0; index < chunks.length; index++) {
+      const result = await aiJson(
+        "Return only valid JSON: {\"summary\":\"\",\"topics\":[\"\"]}. Scan this source chunk and list every important topic, subtopic, term, process, formula, and example. Do not create lessons yet.",
+        `Course: ${title}\nChunk ${index + 1} of ${chunks.length}\n\n${chunks[index]}`,
+        { summary: "", topics: [] },
+      );
+      const topicList = Array.isArray(result.topics) ? result.topics.join("; ") : "";
+      summaries.push(`Chunk ${index + 1}: ${result.summary || ""}\nTopics: ${topicList}`);
+    }
   }
 
   const result = await aiJson(
@@ -968,8 +1018,23 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
         }
         if (name === "update-course-source") {
           const source = body.rawText || body.docsUrl || "";
-          await patchCourse(body.courseId, { source_text: source });
-          return { data: { ok: true, sourceLength: source.length, attempts: 1 }, error: null };
+          await patchCourse(body.courseId, {
+            source_text: source,
+            generation_status: body.resetLessons ? "generating" : "ready",
+          });
+          let resetCount = 0;
+          if (body.resetLessons) {
+            const topics = await getCourseTopics(body.courseId);
+            for (const topic of topics) {
+              await patchTopic(topic.id, {
+                content: [],
+                quiz: [],
+                generation_status: "pending",
+              });
+              resetCount++;
+            }
+          }
+          return { data: { ok: true, sourceLength: source.length, attempts: 1, resetCount }, error: null };
         }
         if (name === "import-doc") {
           const text = body.url || "";
@@ -995,11 +1060,11 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
           })).course);
           const result = await buildCourseOutlineFromSource(body.title, sourceText);
           if (result.description) await patchCourse(course.id, { description: result.description.slice(0, 500), toc: result.units });
-          let topicCount = 0;
+          const createdTopics: any[] = [];
           for (const unit of result.units || []) {
-            const unitNumber = Number(unit.unit) || topicCount + 1;
+            const unitNumber = Number(unit.unit) || createdTopics.length + 1;
             const unitTitle = String(unit.title || `Unit ${unitNumber}`);
-            await api("/topics", {
+            const unitTopic = fromApi((await api("/topics", {
               method: "POST",
               body: JSON.stringify({
                 courseId: course.id,
@@ -1012,10 +1077,10 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
                 quiz: [],
                 generationStatus: "pending",
               }),
-            });
-            topicCount++;
+            })).topic);
+            createdTopics.push(unitTopic);
             for (const [index, lesson] of (unit.lessons || []).entries()) {
-              await api("/topics", {
+              const lessonTopic = fromApi((await api("/topics", {
                 method: "POST",
                 body: JSON.stringify({
                   courseId: course.id,
@@ -1028,11 +1093,41 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
                   quiz: [],
                   generationStatus: "pending",
                 }),
-              });
-              topicCount++;
+              })).topic);
+              createdTopics.push(lessonTopic);
             }
           }
-          return { data: { ok: true, slug, topicCount }, error: null };
+          const courseOutline = createdTopics.map((topic: any) => `- ${topic.unit}.${topic.order_index} ${topic.title}: ${topic.summary || ""}`).join("\n");
+          let generatedCount = 0;
+          let failedLesson: { title: string; error: string } | null = null;
+          for (const topic of createdTopics) {
+            try {
+              const lesson = await generateCompactLesson(topic, body.title, courseOutline, sourceText);
+              await patchTopic(topic.id, {
+                content: lesson.content,
+                quiz: lesson.quiz,
+                generation_status: "ready",
+              });
+              generatedCount++;
+            } catch (error: any) {
+              failedLesson = { title: topic.title, error: error.message || "Lesson generation failed" };
+              await patchTopic(topic.id, { generation_status: "failed" });
+              break;
+            }
+          }
+          await patchCourse(course.id, { generation_status: failedLesson ? "partial" : "ready" });
+          return {
+            data: {
+              ok: true,
+              slug,
+              topicCount: createdTopics.length,
+              generatedCount,
+              failedLesson,
+              partial: !!failedLesson,
+              scannedChunks: chunkText(sourceText).length,
+            },
+            error: null,
+          };
         }
         if (name === "export-course") {
           const course = (await getAllCourses()).find((item: any) => item.id === body.courseId);

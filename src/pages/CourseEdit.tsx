@@ -48,13 +48,16 @@ export default function CourseEdit() {
   );
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
-  const ready = topics.filter(t => (t as any).generation_status === "ready").length;
+  const isTopicReady = (t: any) => (t.generation_status || "ready") === "ready" && Array.isArray(t.content) && t.content.length > 0;
+  const ready = topics.filter(isTopicReady).length;
   const pending = topics.length - ready;
   const pct = topics.length ? Math.round((ready / topics.length) * 100) : 100;
 
   const refreshTopics = async () => {
     const { data } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
-    setTopics((data as any) ?? []);
+    const nextTopics = (data as any) ?? [];
+    setTopics(nextTopics);
+    return nextTopics;
   };
 
   const generateOne = async (topicId: string) => {
@@ -72,24 +75,52 @@ export default function CourseEdit() {
 
   const generateAllRemaining = async () => {
     setBatchRunning(true);
-    const pendingTopics = topics.filter(t => (t as any).generation_status !== "ready");
-    for (const t of pendingTopics) {
-      try {
-        const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id } });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-        await refreshTopics();
-      } catch (e: any) {
-        const message = e.message || "";
-        if (message.includes("AI generation paused") || message.includes("API key") || message.includes("limit exceeded")) {
-          toast.error(message);
+    let generatedCount = 0;
+    let stopped = false;
+    try {
+      const latestTopics = await refreshTopics();
+      const pendingTopics = latestTopics.filter((t: any) => {
+        const status = t.generation_status || "ready";
+        const blockCount = Array.isArray(t.content) ? t.content.length : 0;
+        return status !== "ready" || blockCount === 0;
+      });
+
+      if (!pendingTopics.length) {
+        toast.info("No pending lessons to generate");
+        return;
+      }
+
+      toast.info(`Generating ${pendingTopics.length} lesson${pendingTopics.length === 1 ? "" : "s"}...`);
+      for (const t of pendingTopics) {
+        setGenerating(t.id);
+        toast.info(`Generating: ${t.title}`);
+        try {
+          const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id } });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          generatedCount++;
+          await refreshTopics();
+        } catch (e: any) {
+          stopped = true;
+          const message = e.message || "";
+          if (message.includes("AI generation paused") || message.includes("API key") || message.includes("limit exceeded")) {
+            toast.error(message);
+            break;
+          }
+          toast.error(`Stopped at "${t.title}": ${message || "generation failed"}`);
           break;
         }
-        toast.error(`Failed: ${t.title}`);
       }
+
+      if (generatedCount > 0) {
+        toast.success(stopped ? `Generated ${generatedCount} lesson${generatedCount === 1 ? "" : "s"} before stopping` : `Generated ${generatedCount} lesson${generatedCount === 1 ? "" : "s"}`);
+      } else if (stopped) {
+        toast.error("No lessons were generated");
+      }
+    } finally {
+      setGenerating(null);
+      setBatchRunning(false);
     }
-    setBatchRunning(false);
-    toast.success("Batch generation complete");
   };
 
   const saveCourse = async () => {
@@ -179,9 +210,10 @@ export default function CourseEdit() {
       if (data?.error) throw new Error(data.error);
       toast.success(`Source updated (${data.sourceLength.toLocaleString()} chars${data.attempts > 1 ? `, ${data.attempts} attempts` : ""})`);
       setReDocsUrl(""); setReRawText("");
-      await refreshTopics();
+      const latestTopics = await refreshTopics();
       if (resetLessons) {
-        toast.info("Re-running generation for all lessons…");
+        const resetCount = typeof data.resetCount === "number" ? data.resetCount : latestTopics.length;
+        toast.info(`Re-running generation for ${resetCount} lesson${resetCount === 1 ? "" : "s"}...`);
         await generateAllRemaining();
       }
     } catch (e: any) {
@@ -325,7 +357,7 @@ export default function CourseEdit() {
           <tbody>
             {topics.map(t => {
               const status = (t as any).generation_status || "ready";
-              const isReady = status === "ready";
+              const isReady = isTopicReady(t as any);
               const isGen = generating === t.id;
               const blockCount = Array.isArray((t as any).content) ? (t as any).content.length : 0;
               return (

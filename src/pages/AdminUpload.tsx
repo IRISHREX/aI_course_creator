@@ -51,7 +51,13 @@ export default function AdminUpload() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Course "${title}" created with ${data.topicCount} lessons${data.scannedChunks ? ` after scanning ${data.scannedChunks} chunk${data.scannedChunks === 1 ? "" : "s"}` : ""}`);
+      const generated = Number(data.generatedCount || 0);
+      const total = Number(data.topicCount || 0);
+      if (data.partial) {
+        toast.warning(`Course created. Generated ${generated}/${total} lessons before stopping at "${data.failedLesson?.title || "a lesson"}".`);
+      } else {
+        toast.success(`Course "${title}" created with ${generated || total} generated lessons${data.scannedChunks ? ` after scanning ${data.scannedChunks} chunk${data.scannedChunks === 1 ? "" : "s"}` : ""}`);
+      }
       nav(`/course/${data.slug}`);
     } catch (e: any) {
       toast.error(e.message || "Generation failed");

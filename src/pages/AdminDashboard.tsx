@@ -191,6 +191,9 @@ export default function AdminDashboard() {
               autoComplete="off"
               className="mt-2"
             />
+            <div className="mt-2 text-xs text-muted-foreground">
+              Need a key? <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noreferrer" className="text-primary underline">Generate one in AI Studio</a>.
+            </div>
           </div>
           <Button onClick={saveKey} disabled={keyBusy || checking} className="md:mb-0">
             {keyBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

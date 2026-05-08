@@ -9,6 +9,7 @@ import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
 import { KaraokeReadMode, karaokeSeek } from "@/components/KaraokeReadMode";
 import { LessonPYQButton } from "@/components/LessonPYQButton";
+import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
@@ -118,7 +119,9 @@ export default function TopicPage() {
   const linkPrefix = `/course/${courseSlug}`;
 
   return (
-    <div className="container max-w-5xl py-10">
+    <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-hidden">
+      <LessonTerrainBackground className="opacity-35" />
+      <div className="container relative z-10 max-w-5xl py-10">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
         <Button asChild variant="ghost" size="sm">
           <Link to={linkPrefix}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
@@ -235,6 +238,7 @@ export default function TopicPage() {
         {neighbors.next && (
           <Button asChild variant="ghost"><Link to={`${linkPrefix}/topic/${neighbors.next.slug}`}>{neighbors.next.title}<ArrowRight className="h-4 w-4 ml-1" /></Link></Button>
         )}
+      </div>
       </div>
     </div>
   );
