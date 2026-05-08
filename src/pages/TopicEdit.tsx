@@ -245,11 +245,14 @@ export default function TopicEdit() {
             </div>
           </div>
 
-          <div className="border-t border-border/50 mt-4 pt-4 flex items-center justify-between">
+          <div className="border-t border-border/50 mt-4 pt-4 flex items-center justify-between gap-2 flex-wrap">
             <div className="text-xs text-muted-foreground">Replace everything with a fresh AI-generated lesson</div>
-            <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh}>
-              {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
-            </Button>
+            <div className="flex items-center gap-2">
+              <AiOverridePopover value={aiOverride} onChange={setAiOverride} />
+              <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh}>
+                {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
+              </Button>
+            </div>
           </div>
         </div>
 
