@@ -8,11 +8,12 @@ import { getUserAiKeys, markUserAiKeyLimited } from "../aiKeys.js";
 export const aiRouter = Router();
 
 const ChatBody = z.object({
-  model: z.string().default("google/gemini-2.5-flash"),
+  model: z.string().default("google/gemini-2.5-flash-lite"),
   messages: z.array(z.object({ role: z.string(), content: z.any() })),
   tools: z.any().optional(),
   tool_choice: z.any().optional(),
-  temperature: z.number().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  max_tokens: z.number().int().min(64).max(8192).optional(),
 });
 
 function toGeminiModel(model: string): string {
