@@ -29,6 +29,7 @@ export default function CoursePYQ() {
   const [generating, setGenerating] = useState(false);
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [topicFilter, setTopicFilter] = useState<string>("all");
+  const [aiOverride, setAiOverride] = useState<any>({});
   const [topics, setTopics] = useState<{ id: string; title: string }[]>([]);
 
   const reload = async () => {
