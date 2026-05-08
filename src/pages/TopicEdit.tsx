@@ -11,6 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlockEditor, type Block } from "@/components/BlockEditor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AiOverridePopover } from "@/components/AiControls";
 import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
