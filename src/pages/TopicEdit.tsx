@@ -140,7 +140,7 @@ export default function TopicEdit() {
   const transform = async (action: TransformAction, customLevel?: number) => {
     setAiBusy(action);
     try {
-      const body: any = { topicId: topic.id, action };
+      const body: any = { topicId: topic.id, action, aiOverride };
       if (action === "level") body.level = customLevel ?? level;
       if (customInstruction.trim()) body.customInstruction = customInstruction.trim();
       const { data, error } = await supabase.functions.invoke("transform-content", { body });
