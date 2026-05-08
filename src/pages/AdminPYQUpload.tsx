@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileQuestion, Upload, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import ThreeBackground from "@/components/ThreeBackground";
 
 export default function AdminPYQUpload() {
   const { isAdmin, loading } = useIsAdmin();
@@ -53,7 +54,9 @@ export default function AdminPYQUpload() {
   };
 
   return (
-    <div className="container max-w-2xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-2xl py-10">
       <h1 className="font-display text-3xl font-bold flex items-center gap-2 mb-2">
         <FileQuestion className="h-6 w-6 text-primary" /> Generate PYQs from Doc / Image
       </h1>
@@ -88,5 +91,5 @@ export default function AdminPYQUpload() {
         </Button>
       </div>
     </div>
-  );
+    </>
 }

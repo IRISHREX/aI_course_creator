@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, Trophy, RotateCw, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import ThreeBackground from "@/components/ThreeBackground";
 
 export default function QuizPage() {
   const { courseSlug, slug } = useParams();
@@ -82,7 +83,9 @@ export default function QuizPage() {
   }
 
   return (
-    <div className="container max-w-2xl py-12">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-2xl py-12">
       <div className="flex items-center justify-between mb-6">
         <div className="text-xs font-mono text-muted-foreground">{topic.title}</div>
         <div className="text-xs font-mono text-primary">Q {i + 1} / {total}</div>
@@ -124,5 +127,6 @@ export default function QuizPage() {
         </motion.div>
       </AnimatePresence>
     </div>
+    </>
   );
 }

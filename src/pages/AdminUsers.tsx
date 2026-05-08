@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Shield, ShieldCheck, User as UserIcon, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import ThreeBackground from "@/components/ThreeBackground";
 
 interface UserRow {
   id: string;
@@ -65,7 +66,9 @@ export default function AdminUsers() {
   );
 
   return (
-    <div className="container max-w-5xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-4xl py-10">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="font-display text-3xl font-bold flex items-center gap-2">
@@ -116,5 +119,6 @@ export default function AdminUsers() {
         </div>
       )}
     </div>
+    </>
   );
 }

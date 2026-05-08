@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { CheckCircle2, Circle, BarChart3, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import ThreeBackground from "@/components/ThreeBackground";
 
 export default function CoverageBoard() {
   const { courseSlug } = useParams();
@@ -19,7 +20,9 @@ export default function CoverageBoard() {
   const pct = total ? Math.round((passed / total) * 100) : 0;
 
   return (
-    <div className="container py-12">
+    <>
+      <ThreeBackground />
+      <div className="container py-12">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link to={`/course/${courseSlug}`}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
       </Button>
@@ -77,5 +80,6 @@ export default function CoverageBoard() {
         </table>
       </div>
     </div>
+    </>
   );
 }

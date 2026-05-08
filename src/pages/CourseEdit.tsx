@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
+import ThreeBackground from "@/components/ThreeBackground";
 
 export default function CourseEdit() {
   const { courseSlug } = useParams();
@@ -230,7 +231,9 @@ export default function CourseEdit() {
   };
 
   return (
-    <div className="container max-w-4xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-4xl py-10">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link to={`/course/${course.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to course</Link>
       </Button>
@@ -400,5 +403,6 @@ export default function CourseEdit() {
         </table>
       </div>
     </div>
+    </>
   );
 }

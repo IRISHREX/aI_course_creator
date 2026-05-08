@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, FileText, Sparkles, Upload, Lock } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
+import ThreeBackground from "@/components/ThreeBackground";
 
 export default function AdminUpload() {
   const { isAdmin, loading } = useIsAdmin();
@@ -65,7 +66,9 @@ export default function AdminUpload() {
   };
 
   return (
-    <div className="container max-w-3xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-3xl py-10">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link to="/courses"><ArrowLeft className="h-4 w-4 mr-1" /> Courses</Link>
       </Button>
@@ -106,5 +109,6 @@ export default function AdminUpload() {
         </Button>
       </div>
     </div>
+    </>
   );
 }

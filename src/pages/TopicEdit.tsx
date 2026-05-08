@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { AiOverridePopover } from "@/components/AiControls";
 import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
+import ThreeBackground from "@/components/ThreeBackground";
 
 type TransformAction = "simplify" | "expand" | "bullets" | "analogy" | "bigger" | "smaller" | "level";
 
@@ -162,7 +163,9 @@ export default function TopicEdit() {
   );
 
   return (
-    <div className="container max-w-4xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-4xl py-10">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <Button asChild variant="ghost" size="sm">
           <Link to={`/course/${courseSlug}/topic/${topic.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to lesson</Link>
@@ -311,5 +314,6 @@ export default function TopicEdit() {
         </Button>
       </div>
     </div>
+    </>
   );
 }

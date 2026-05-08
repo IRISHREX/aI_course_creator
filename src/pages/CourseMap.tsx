@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTopics, useProgress } from "@/hooks/useTopics";
 import { CheckCircle2, Circle, Lock, Sparkles } from "lucide-react";
+import ThreeBackground from "@/components/ThreeBackground";
 
 const UNIT_NAMES: Record<number, string> = {
   1: "Foundations", 2: "Cellular Networks", 3: "GSM & GPRS", 4: "Wireless & Data", 5: "Advanced Topics",
@@ -17,7 +18,9 @@ export default function CourseMap() {
   topics.forEach(t => { (byUnit[t.unit] ||= []).push(t); });
 
   return (
-    <div className="container py-12">
+    <>
+      <ThreeBackground />
+      <div className="container py-12">
       <div className="mb-10">
         <h1 className="font-display text-4xl md:text-5xl font-bold">Course <span className="text-gradient">Map</span></h1>
         <p className="text-muted-foreground mt-2">Click any node to enter the lesson. Glowing nodes are completed.</p>
@@ -81,5 +84,6 @@ export default function CourseMap() {
         })}
       </div>
     </div>
+    </>
   );
 }

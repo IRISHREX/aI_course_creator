@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Plus, Sparkles, Trash2, Loader2, Save, Lock, Tag, FileQuestion } from "lucide-react";
 import { AiOverridePopover } from "@/components/AiControls";
 import { toast } from "sonner";
+import ThreeBackground from "@/components/ThreeBackground";
 
 interface PYQ {
   id?: string; question: string; answer: string;
@@ -123,7 +124,9 @@ export default function CoursePYQ() {
   };
 
   return (
-    <div className="container max-w-4xl py-10">
+    <>
+      <ThreeBackground />
+      <div className="container max-w-4xl py-10">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link to={`/course/${courseSlug}`}><ArrowLeft className="h-4 w-4 mr-1" /> {course.title}</Link>
       </Button>
@@ -248,5 +251,6 @@ export default function CoursePYQ() {
         </div>
       )}
     </div>
+    </>
   );
 }

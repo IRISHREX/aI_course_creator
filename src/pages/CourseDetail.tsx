@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import ThreeBackground from "@/components/ThreeBackground";
 
 export default function CourseDetail() {
   const { courseSlug } = useParams();
@@ -66,7 +67,9 @@ export default function CourseDetail() {
   };
 
   return (
-    <div className="container py-12">
+    <>
+      <ThreeBackground />
+      <div className="container py-12">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link to="/courses"><ArrowLeft className="h-4 w-4 mr-1" /> All courses</Link>
       </Button>
@@ -177,5 +180,6 @@ export default function CourseDetail() {
         </div>
       )}
     </div>
+    </>
   );
 }
