@@ -211,6 +211,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      <AiDefaultsCard />
+
       <div className="grid md:grid-cols-2 gap-3">
         <Link to="/admin/upload" className="glass rounded-2xl p-5 hover:bg-primary/5 transition">
           <Upload className="h-5 w-5 text-primary mb-2" />
