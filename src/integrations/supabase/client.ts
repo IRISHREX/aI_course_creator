@@ -489,16 +489,83 @@ async function requestReplacementAiKey(message: string) {
   await saveAiKey(apiKey.trim());
 }
 
-async function aiJson(system: string, user: string, fallback: any) {
+// ---------------- AI Settings (global defaults + per-call overrides) ----------------
+const AI_SETTINGS_KEY = "ignouprep.ai.settings";
+const AI_SETTINGS_EVENT = "ignouprep:ai-settings";
+
+export type AiSettings = {
+  model: string;
+  temperature: number;
+  maxTokens: number;        // for short JSON calls (mindmap, quiz, pyq answer)
+  lessonMaxTokens: number;  // for big lesson generation
+  contextChars: number;     // generic context truncation
+  lessonContextChars: number; // source-text truncation per lesson
+};
+
+const AI_DEFAULTS: AiSettings = {
+  model: "google/gemini-2.5-flash-lite",
+  temperature: 0.2,
+  maxTokens: 1024,
+  lessonMaxTokens: 3072,
+  contextChars: 3000,
+  lessonContextChars: 5000,
+};
+
+export function getAiSettings(): AiSettings {
+  try {
+    const raw = localStorage.getItem(AI_SETTINGS_KEY);
+    if (!raw) return { ...AI_DEFAULTS };
+    return { ...AI_DEFAULTS, ...JSON.parse(raw) };
+  } catch {
+    return { ...AI_DEFAULTS };
+  }
+}
+
+export function setAiSettings(patch: Partial<AiSettings>) {
+  const next = { ...getAiSettings(), ...patch };
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new Event(AI_SETTINGS_EVENT));
+  return next;
+}
+
+export function resetAiSettings() {
+  localStorage.removeItem(AI_SETTINGS_KEY);
+  window.dispatchEvent(new Event(AI_SETTINGS_EVENT));
+  return { ...AI_DEFAULTS };
+}
+
+export function onAiSettingsChange(cb: () => void) {
+  window.addEventListener(AI_SETTINGS_EVENT, cb);
+  return () => window.removeEventListener(AI_SETTINGS_EVENT, cb);
+}
+
+export const AI_DEFAULT_SETTINGS = AI_DEFAULTS;
+
+type AiOpts = { model?: string; maxTokens?: number; temperature?: number; override?: Partial<AiSettings> };
+
+function resolveAi(opts?: AiOpts, kind: "json" | "lesson" = "json") {
+  const s = { ...getAiSettings(), ...(opts?.override || {}) };
+  return {
+    model: opts?.model || s.model,
+    temperature: typeof opts?.temperature === "number" ? opts.temperature : s.temperature,
+    max_tokens: opts?.maxTokens ?? (kind === "lesson" ? s.lessonMaxTokens : s.maxTokens),
+    contextChars: s.contextChars,
+    lessonContextChars: s.lessonContextChars,
+  };
+}
+
+async function aiJson(system: string, user: string, fallback: any, opts?: AiOpts) {
+  const cfg = resolveAi(opts, "json");
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: cfg.model,
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
-          temperature: 0.2,
+          temperature: cfg.temperature,
+          max_tokens: cfg.max_tokens,
         }),
       });
       const text = data.choices?.[0]?.message?.content || "";
@@ -514,16 +581,18 @@ async function aiJson(system: string, user: string, fallback: any) {
   }
 }
 
-async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any) {
+async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any, opts?: AiOpts) {
+  const cfg = resolveAi(opts, "lesson");
   let askedForKey = false;
   while (true) {
     try {
       const data = await api("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: cfg.model,
           messages: [{ role: "system", content: `${system}\nAlways call the ${toolName} tool.` }, { role: "user", content: user }],
-          temperature: 0.2,
+          temperature: cfg.temperature,
+          max_tokens: cfg.max_tokens,
           tools: [{
             type: "function",
             function: {
@@ -599,24 +668,23 @@ function chunkText(text: string, size = 20000) {
   return chunks;
 }
 
-function focusSource(sourceText: string, title: string, summary = "") {
-  if (sourceText.length <= 10000) return sourceText;
+function focusSource(sourceText: string, title: string, summary = "", size?: number) {
+  const cap = size ?? getAiSettings().lessonContextChars;
+  if (sourceText.length <= cap) return sourceText;
   const words = `${title} ${summary}`.toLowerCase().split(/\W+/).filter((word) => word.length > 4);
   const lower = sourceText.toLowerCase();
   let bestIdx = -1;
   for (const word of words) {
     const idx = lower.indexOf(word);
-    if (idx !== -1) {
-      bestIdx = idx;
-      break;
-    }
+    if (idx !== -1) { bestIdx = idx; break; }
   }
-  if (bestIdx === -1) return sourceText.slice(0, 10000);
-  const start = Math.max(0, bestIdx - 1800);
-  return sourceText.slice(start, start + 10000);
+  if (bestIdx === -1) return sourceText.slice(0, cap);
+  const start = Math.max(0, bestIdx - Math.floor(cap * 0.18));
+  return sourceText.slice(start, start + cap);
 }
 
-async function generateCompactLesson(topic: any, courseTitle: string, courseOutline: string, sourceText: string) {
+async function generateCompactLesson(topic: any, courseTitle: string, courseOutline: string, sourceText: string, opts?: AiOpts) {
+  const cfg = resolveAi(opts, "lesson");
   const result = await aiToolJson(
     `${LESSON_GENERATION_SYSTEM_PROMPT}
 Keep output compact: 6-10 blocks. Prefer text, list, highlight, table, and flowchart. Do not create image blocks.`,
@@ -625,15 +693,16 @@ Lesson: ${topic.unit}.${topic.order_index} ${topic.title}
 Summary: ${topic.summary || ""}
 
 Course outline:
-${courseOutline}
+${courseOutline.slice(0, cfg.contextChars)}
 
 Relevant source excerpt:
-${focusSource(sourceText, topic.title, topic.summary || "")}
+${focusSource(sourceText, topic.title, topic.summary || "", cfg.lessonContextChars)}
 
 Generate a complete but concise lesson and exactly 4 multiple-choice quiz questions. Avoid repeating other lessons.`,
     "write_lesson",
     WRITE_LESSON_PARAMETERS,
     { content: [], quiz: [] },
+    opts,
   );
   return {
     content: normalizeLessonContent(result.content || []).slice(0, 12),
@@ -853,11 +922,14 @@ export const supabase = {
     async invoke(name: string, options?: { body?: any }) {
       try {
         const body = options?.body || {};
+        const ai: AiOpts | undefined = body.aiOverride ? { override: body.aiOverride, ...(body.aiOverride.model ? { model: body.aiOverride.model } : {}), ...(typeof body.aiOverride.maxTokens === "number" ? { maxTokens: body.aiOverride.maxTokens } : {}), ...(typeof body.aiOverride.temperature === "number" ? { temperature: body.aiOverride.temperature } : {}) } : undefined;
+        const ctxCap = (ai ? resolveAi(ai, "json") : resolveAi(undefined, "json")).contextChars;
         if (name === "generate-quiz") {
           const data = await aiJson(
-            "Return only valid JSON in this shape: {\"questions\":[{\"q\":\"\",\"options\":[\"\",\"\",\"\",\"\"],\"answer\":0}]}. Generate concise course quiz questions.",
-            `Topic: ${body.title}\nSummary: ${body.summary}\nContent: ${JSON.stringify(body.content).slice(0, 4000)}\nGenerate 3 questions.`,
+            "JSON only: {\"questions\":[{\"q\":\"\",\"options\":[\"\",\"\",\"\",\"\"],\"answer\":0}]}. 3 concise MCQs.",
+            `Topic: ${body.title}\nSummary: ${body.summary}\nContent: ${JSON.stringify(body.content).slice(0, ctxCap)}`,
             { questions: [] },
+            ai,
           );
           return { data, error: null };
         }
@@ -867,26 +939,22 @@ export const supabase = {
           const course = courseId ? (await getAllCourses()).find((item: any) => item.id === courseId) : null;
           const topics = !topic && courseId ? await getCourseTopics(courseId) : [];
           const mindmapPrompt = topic
-            ? `Build a mind map for this lesson only.
-
-Lesson title: ${topic.title}
-Lesson summary: ${topic.summary || ""}
-Lesson content:
-${JSON.stringify(topic.content || []).slice(0, 7000)}
-
-Make the root label the lesson title. Use the main ideas from this lesson as branches. Do not create a generic study plan.`
-            : `Build a mind map for this course.
-
-Course title: ${course?.title || "Course"}
-Course description: ${course?.description || ""}
+            ? `Mind map for this lesson only.
+Title: ${topic.title}
+Summary: ${topic.summary || ""}
+Content: ${JSON.stringify(topic.content || []).slice(0, ctxCap)}
+Root = lesson title. Branches = main ideas.`
+            : `Mind map for this course.
+Title: ${course?.title || "Course"}
+Description: ${(course?.description || "").slice(0, 600)}
 Lessons:
-${topics.map((item: any) => `- ${item.title}: ${item.summary || ""}`).join("\n")}
-
-Make the root label the course title and organize branches by course concepts.`;
+${topics.map((item: any) => `- ${item.title}`).join("\n").slice(0, ctxCap)}
+Root = course title.`;
           const data = await aiJson(
-            "Return only valid JSON in this shape: {\"mindmap\":{\"id\":\"root\",\"label\":\"\",\"children\":[]}}. Build an educational concept mind map, not a study schedule. Labels must be short.",
+            "JSON only: {\"mindmap\":{\"id\":\"root\",\"label\":\"\",\"children\":[]}}. Concept map, short labels.",
             mindmapPrompt,
             { mindmap: null },
+            ai,
           );
           if (data.mindmap && body.topicId) await patchTopic(body.topicId, { mindmap: data.mindmap });
           if (data.mindmap && !body.topicId && courseId) await patchCourse(courseId, { mindmap: data.mindmap });
@@ -894,11 +962,14 @@ Make the root label the course title and organize branches by course concepts.`;
         }
         if (name === "generate-pyq-answer") {
           const pyq = await findPyq(body.pyqId);
+          const cfg = resolveAi(ai, "json");
           const data = await api("/ai/chat", {
             method: "POST",
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
-              messages: [{ role: "user", content: `Write a concise exam-ready model answer.\nQuestion: ${pyq?.question || body.pyqId}\nMarks: ${pyq?.marks || "unknown"}` }],
+              model: cfg.model,
+              temperature: cfg.temperature,
+              max_tokens: cfg.max_tokens,
+              messages: [{ role: "user", content: `Concise exam-ready model answer.\nQ: ${pyq?.question || body.pyqId}\nMarks: ${pyq?.marks || "?"}` }],
             }),
           });
           const answer = data.choices?.[0]?.message?.content || "";
@@ -908,43 +979,20 @@ Make the root label the course title and organize branches by course concepts.`;
         if (name === "generate-lesson") {
           const topic = await getTopic(body.topicId);
           const customInstruction = cleanString(body.customInstruction || body.instruction);
-          const userPrompt = `Generate a lesson on: ${topic.title}
-
-Current summary: ${topic.summary || ""}
-Mode: ${body.mode || "replace"}
-Level: ${body.level || 5}
-
-${customInstruction ? `Extra instruction from admin: ${customInstruction}\n` : ""}
-Follow this structure:
-1. Intro (text)
-2. Core Concept (text)
-3. Key Points (list)
-4. Example (text)
-5. Insight (highlight)
-6. Advanced Concept (text)
-7. Example (text)
-8. Summary (text)
-
-You may add up to 7 extra supported blocks when they improve the lesson, such as:
-- table for comparisons
-- code for programming or algorithms
-- flowchart for processes; put valid Mermaid flowchart syntax in code, for example:
-  graph TD
-    A[Start] --> B[Process]
-    B --> C[End]
-  Quote labels that contain punctuation or parentheses, e.g. B{"Connectivity (e.g., Wi-Fi)"}.
-- chart for simple numeric comparisons
-- math for formulas
-- timeline for historical or sequential topics
-- image only when a visual would genuinely help; include caption and prompt, not an empty url
-
-Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one correct).`;
+          const userPrompt = `Lesson: ${topic.title}
+Summary: ${topic.summary || ""}
+Mode: ${body.mode || "replace"} | Level: ${body.level || 5}
+${customInstruction ? `Admin instruction: ${customInstruction}\n` : ""}
+Structure: Intro, Core Concept, Key Points (list), Example, Insight (highlight), Advanced, Example, Summary.
+Optional blocks: table, code, flowchart (Mermaid graph TD; quote labels with punctuation), chart, math, timeline.
+Also write exactly 4 MCQs (4 options, 1 correct).`;
           const result = await aiToolJson(
             LESSON_GENERATION_SYSTEM_PROMPT,
             userPrompt,
             "write_lesson",
             WRITE_LESSON_PARAMETERS,
             { content: [], quiz: [] },
+            ai,
           );
           const blocks = normalizeLessonContent(result.content || []);
           if (blocks.length < 8) throw new Error("AI did not return enough valid lesson blocks");
@@ -961,9 +1009,10 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
         if (name === "transform-content") {
           const topic = await getTopic(body.topicId);
           const result = await aiJson(
-            "Return only valid JSON: {\"content\":[]}. Rewrite the provided lesson blocks according to the requested action.",
-            `Action: ${body.action}\nLevel: ${body.level || ""}\nInstruction: ${body.customInstruction || ""}\nContent: ${JSON.stringify(topic.content).slice(0, 8000)}`,
+            "JSON only: {\"content\":[]}. Rewrite blocks per action.",
+            `Action: ${body.action}\nLevel: ${body.level || ""}\nInstruction: ${body.customInstruction || ""}\nContent: ${JSON.stringify(topic.content).slice(0, ctxCap * 2)}`,
             { content: topic.content || [] },
+            ai,
           );
           return { data: { ok: true, content: result.content || topic.content || [] }, error: null };
         }
@@ -985,14 +1034,15 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
               generationStatus: body.generate ? "pending" : "ready",
             }),
           })).topic);
-          if (body.generate) await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id } });
+          if (body.generate) await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, aiOverride: body.aiOverride } });
           return { data: { ok: true, topic }, error: null };
         }
         if (name === "generate-pyq") {
           const result = await aiJson(
-            "Return only valid JSON: {\"questions\":[{\"question\":\"\",\"answer\":\"\",\"marks\":5,\"year\":2026}]}",
+            "JSON only: {\"questions\":[{\"question\":\"\",\"answer\":\"\",\"marks\":5,\"year\":2026}]}",
             `Generate ${body.count || 10} previous-year-style exam questions for courseId ${body.courseId}.`,
             { questions: [] },
+            ai,
           );
           let inserted = 0;
           for (const item of result.questions || []) {
@@ -1102,7 +1152,7 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
           let failedLesson: { title: string; error: string } | null = null;
           for (const topic of createdTopics) {
             try {
-              const lesson = await generateCompactLesson(topic, body.title, courseOutline, sourceText);
+              const lesson = await generateCompactLesson(topic, body.title, courseOutline, sourceText, ai);
               await patchTopic(topic.id, {
                 content: lesson.content,
                 quiz: lesson.quiz,

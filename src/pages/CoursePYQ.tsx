@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Plus, Sparkles, Trash2, Loader2, Save, Lock, Tag, FileQuestion } from "lucide-react";
+import { AiOverridePopover } from "@/components/AiControls";
 import { toast } from "sonner";
 
 interface PYQ {
@@ -28,6 +29,7 @@ export default function CoursePYQ() {
   const [generating, setGenerating] = useState(false);
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [topicFilter, setTopicFilter] = useState<string>("all");
+  const [aiOverride, setAiOverride] = useState<any>({});
   const [topics, setTopics] = useState<{ id: string; title: string }[]>([]);
 
   const reload = async () => {
@@ -68,7 +70,7 @@ export default function CoursePYQ() {
 
   const genAnswer = async (pyqId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", { body: { pyqId } });
+      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", { body: { pyqId, aiOverride } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Answer generated");
@@ -79,7 +81,7 @@ export default function CoursePYQ() {
   const generate = async () => {
     setGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyq", { body: { courseId: course.id, count: 10 } });
+      const { data, error } = await supabase.functions.invoke("generate-pyq", { body: { courseId: course.id, count: 10, aiOverride } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success(`Added ${data.inserted} AI-generated questions`);
@@ -132,6 +134,7 @@ export default function CoursePYQ() {
         </div>
         {isAdmin && (
           <div className="flex gap-2 flex-wrap">
+            <AiOverridePopover value={aiOverride} onChange={setAiOverride} />
             <Button variant="neon" size="sm" onClick={generate} disabled={generating}>
               {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />} AI generate
             </Button>

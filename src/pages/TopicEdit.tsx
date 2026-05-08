@@ -11,6 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlockEditor, type Block } from "@/components/BlockEditor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AiOverridePopover } from "@/components/AiControls";
 import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,6 +29,7 @@ export default function TopicEdit() {
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(5);
+  const [aiOverride, setAiOverride] = useState<any>({});
   const [customInstruction, setCustomInstruction] = useState("");
   const [versions, setVersions] = useState<any[]>([]);
   const [vLoading, setVLoading] = useState(false);
@@ -125,7 +127,7 @@ export default function TopicEdit() {
   const generateFresh = async () => {
     setAiBusy("generate");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level } });
+      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level, aiOverride } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Fresh lesson generated");
@@ -138,7 +140,7 @@ export default function TopicEdit() {
   const transform = async (action: TransformAction, customLevel?: number) => {
     setAiBusy(action);
     try {
-      const body: any = { topicId: topic.id, action };
+      const body: any = { topicId: topic.id, action, aiOverride };
       if (action === "level") body.level = customLevel ?? level;
       if (customInstruction.trim()) body.customInstruction = customInstruction.trim();
       const { data, error } = await supabase.functions.invoke("transform-content", { body });
@@ -243,11 +245,14 @@ export default function TopicEdit() {
             </div>
           </div>
 
-          <div className="border-t border-border/50 mt-4 pt-4 flex items-center justify-between">
+          <div className="border-t border-border/50 mt-4 pt-4 flex items-center justify-between gap-2 flex-wrap">
             <div className="text-xs text-muted-foreground">Replace everything with a fresh AI-generated lesson</div>
-            <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh}>
-              {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
-            </Button>
+            <div className="flex items-center gap-2">
+              <AiOverridePopover value={aiOverride} onChange={setAiOverride} />
+              <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh}>
+                {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
+              </Button>
+            </div>
           </div>
         </div>
 
