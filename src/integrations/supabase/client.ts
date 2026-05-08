@@ -1152,7 +1152,7 @@ Also write exactly 4 MCQs (4 options, 1 correct).`;
           let failedLesson: { title: string; error: string } | null = null;
           for (const topic of createdTopics) {
             try {
-              const lesson = await generateCompactLesson(topic, body.title, courseOutline, sourceText);
+              const lesson = await generateCompactLesson(topic, body.title, courseOutline, sourceText, ai);
               await patchTopic(topic.id, {
                 content: lesson.content,
                 quiz: lesson.quiz,
