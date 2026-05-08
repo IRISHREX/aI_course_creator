@@ -37,7 +37,7 @@ export async function getUserAiKeys(userId: string): Promise<DecryptedAiKey[]> {
   return rows.map((row) => ({
     id: String(row._id),
     provider: row.provider,
-    keyPreview: row.keyPreview,
+    keyPreview: row.keyPreview ?? null,
     apiKey: decryptApiKey(row.encryptedKey),
   }));
 }

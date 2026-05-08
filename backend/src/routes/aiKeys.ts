@@ -1,8 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Agent } from "undici";
 import { UserAiKey } from "../models.js";
 import { requireAuth, requireRole, AuthedRequest } from "../auth.js";
 import { decryptApiKey, saveUserAiKey } from "../aiKeys.js";
+
+const undiciAgent = new Agent({ connect: { family: 4, timeout: 10000 } });
 
 export const aiKeysRouter = Router();
 
@@ -15,6 +18,7 @@ const adminOnly = [requireAuth, requireRole("admin", "super_admin")] as const;
 
 async function checkGeminiKey(apiKey: string) {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    dispatcher: undiciAgent,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

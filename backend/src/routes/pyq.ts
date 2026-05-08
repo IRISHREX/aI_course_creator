@@ -76,6 +76,7 @@ pyqRouter.post("/:id/topics", requireAuth, requireRole("admin", "super_admin"), 
 });
 
 pyqRouter.delete("/:id/topics/:topicId", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  await CoursePyq.updateOne({ _id: req.params.id }, { $pull: { topicIds: toObjectId(req.params.topicId) } });
+  const topicId = Array.isArray(req.params.topicId) ? req.params.topicId[0] : req.params.topicId;
+  await CoursePyq.updateOne({ _id: req.params.id }, { $pull: { topicIds: toObjectId(topicId) } });
   res.json({ ok: true });
 });
