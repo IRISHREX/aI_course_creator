@@ -134,6 +134,7 @@ export default function CoursePYQ() {
         </div>
         {isAdmin && (
           <div className="flex gap-2 flex-wrap">
+            <AiOverridePopover value={aiOverride} onChange={setAiOverride} />
             <Button variant="neon" size="sm" onClick={generate} disabled={generating}>
               {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />} AI generate
             </Button>
