@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Plus, Sparkles, Trash2, Loader2, Save, Lock, Tag, FileQuestion } from "lucide-react";
+import { AiOverridePopover } from "@/components/AiControls";
 import { toast } from "sonner";
 
 interface PYQ {
