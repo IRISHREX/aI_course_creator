@@ -127,7 +127,7 @@ export default function TopicEdit() {
   const generateFresh = async () => {
     setAiBusy("generate");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level } });
+      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level, aiOverride } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Fresh lesson generated");
