@@ -49,8 +49,11 @@ authRouter.post("/login", async (req, res) => {
   const { email, password } = parsed.data;
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
-  const ok = await bcrypt.compare(password, user.passwordHash);
+
+  const passwordHash = typeof user.passwordHash === "string" ? user.passwordHash : String(user.passwordHash ?? "");
+  const ok = await bcrypt.compare(password, passwordHash);
   if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+
   const token = signToken({ sub: user.id, email: user.email });
   res.json({ token, user: { id: user.id, email: user.email, displayName: user.displayName } });
 });

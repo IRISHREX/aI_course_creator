@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import * as THREE from "three";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
@@ -27,9 +28,104 @@ export default function TopicPage() {
   const [neighbors, setNeighbors] = useState<{ prev?: Topic; next?: Topic }>({});
   const [generating, setGenerating] = useState(false);
   const [pageIdx, setPageIdx] = useState(0);
+  const [pageTurnDirection, setPageTurnDirection] = useState<"next" | "prev">("next");
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [genMindmap, setGenMindmap] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
+  const terrainContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let animationId: number | null = null;
+    let renderer: THREE.WebGLRenderer | null = null;
+    let cleanupResize: (() => void) | null = null;
+    let mounted = true;
+
+    const container = terrainContainerRef.current;
+    if (!container) return;
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.domElement.style.position = "absolute";
+    renderer.domElement.style.inset = "0";
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
+    renderer.domElement.style.zIndex = "-1";
+    renderer.domElement.style.pointerEvents = "none";
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 0.01, 1000);
+    camera.position.set(0, 2, 15);
+    scene.fog = new THREE.Fog(0x000000, 0, 45);
+
+    const ambientLight = new THREE.AmbientLight(0x202020);
+    scene.add(ambientLight);
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 5);
+    directionalLight1.position.set(0.5, 0.0, 2);
+    scene.add(directionalLight1);
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 1.5);
+    directionalLight2.position.set(-0.5, -0.5, -2);
+    scene.add(directionalLight2);
+
+    const width = 40;
+    const height = 40;
+    const segments = 120;
+    const geometry = new THREE.PlaneGeometry(width, height, segments, segments);
+    const positions = geometry.attributes.position;
+
+    const noise = (x: number, y: number) => {
+      const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+      return n - Math.floor(n);
+    };
+
+    for (let i = 0; i < positions.count; i += 1) {
+      const x = positions.getX(i);
+      const y = positions.getY(i);
+      const value = noise(x * 0.3, y * 0.3) * 2.5;
+      positions.setZ(i, value);
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+
+    const material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = -2;
+    scene.add(mesh);
+
+    const onRenderFcts: Array<(delta: number) => void> = [];
+    onRenderFcts.push((delta) => { mesh.rotation.z += 0.2 * delta; });
+    onRenderFcts.push(() => { if (renderer) renderer.render(scene, camera); });
+
+    cleanupResize = () => {
+      if (!renderer) return;
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+    };
+    window.addEventListener("resize", cleanupResize);
+
+    const animate = (nowMsec: number) => {
+      if (!mounted) return;
+      animationId = requestAnimationFrame(animate);
+      const lastTimeMsec = (animate as any).lastTimeMsec || (nowMsec - 1000 / 60);
+      const deltaMsec = Math.min(200, nowMsec - lastTimeMsec);
+      (animate as any).lastTimeMsec = nowMsec;
+      onRenderFcts.forEach((fn) => fn(deltaMsec / 1000));
+    };
+    animationId = requestAnimationFrame(animate);
+
+    return () => {
+      mounted = false;
+      if (animationId) cancelAnimationFrame(animationId);
+      window.removeEventListener("resize", cleanupResize!);
+      if (renderer?.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+      geometry.dispose();
+      material.dispose();
+      renderer?.dispose();
+    };
+  }, [slug]);
 
   // Resume from URL hash: #p=2&w=14
   useEffect(() => {
@@ -118,7 +214,8 @@ export default function TopicPage() {
   const linkPrefix = `/course/${courseSlug}`;
 
   return (
-    <div className="container max-w-5xl py-10">
+    <div className="container max-w-5xl py-10 relative">
+      <div ref={terrainContainerRef} className="fixed inset-0 -z-20 overflow-hidden pointer-events-none" />
       <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
         <Button asChild variant="ghost" size="sm">
           <Link to={linkPrefix}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
@@ -159,7 +256,13 @@ export default function TopicPage() {
       )}
 
       {/* Render current page with karaoke offsets */}
-      <div className="space-y-5">
+      <motion.div
+        key={pageIdx}
+        initial={{ opacity: 0, x: pageTurnDirection === "next" ? 30 : -30, rotateY: pageTurnDirection === "next" ? -10 : 10 }}
+        animate={{ opacity: 1, x: 0, rotateY: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="space-y-5"
+      >
         {currentPage && (() => {
           let off = 0;
           return currentPage.blocks.map((b: any, i: number) => {
@@ -176,18 +279,44 @@ export default function TopicPage() {
             );
           });
         })()}
-      </div>
+      </motion.div>
 
       {/* Pagination footer */}
       {pages.length > 1 && (
-        <div className="flex items-center justify-between mt-8 gap-2">
-          <Button variant="ghost" disabled={pageIdx === 0} onClick={() => { setPageIdx(p => p - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Previous page
-          </Button>
-          <span className="text-xs font-mono text-muted-foreground">{pageIdx + 1} / {pages.length}</span>
-          <Button variant="hero" disabled={pageIdx === pages.length - 1} onClick={() => { setPageIdx(p => p + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
-            Next page <ArrowRight className="h-4 w-4 ml-1" />
-          </Button>
+        <div className="mt-8 flex justify-center">
+          <div className="flex flex-wrap items-center gap-3 rounded-full border border-white/15 bg-white/5 px-4 py-3 shadow-2xl shadow-black/10 backdrop-blur-xl">
+            <Button
+              variant="ghost"
+              disabled={pageIdx === 0}
+              onClick={() => {
+                if (pageIdx === 0) return;
+                setPageTurnDirection("prev");
+                setPageIdx((p) => p - 1);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" /> Previous page
+            </Button>
+
+            <span className="text-xs font-mono text-muted-foreground px-2">
+              {pageIdx + 1} / {pages.length}
+            </span>
+
+            <Button
+              variant="ghost"
+              disabled={pageIdx === pages.length - 1}
+              onClick={() => {
+                if (pageIdx === pages.length - 1) return;
+                setPageTurnDirection("next");
+                setPageIdx((p) => p + 1);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
+            >
+              Next page <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -228,13 +357,32 @@ export default function TopicPage() {
         </div>
       )}
 
-      <div className="mt-8 flex justify-between gap-4">
-        {neighbors.prev ? (
-          <Button asChild variant="ghost"><Link to={`${linkPrefix}/topic/${neighbors.prev.slug}`}><ArrowLeft className="h-4 w-4 mr-1" />{neighbors.prev.title}</Link></Button>
-        ) : <span />}
-        {neighbors.next && (
-          <Button asChild variant="ghost"><Link to={`${linkPrefix}/topic/${neighbors.next.slug}`}>{neighbors.next.title}<ArrowRight className="h-4 w-4 ml-1" /></Link></Button>
-        )}
+      <div className="mt-8 flex justify-center">
+        <div className="flex flex-wrap items-center justify-center gap-4 rounded-full border border-white/10 bg-white/5 px-4 py-3 shadow-2xl shadow-black/10 backdrop-blur-xl">
+          {neighbors.prev ? (
+            <Button
+              asChild
+              variant="ghost"
+              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
+            >
+              <Link to={`${linkPrefix}/topic/${neighbors.prev.slug}`}><ArrowLeft className="h-4 w-4 mr-1" />{neighbors.prev.title}</Link>
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">Start of course</span>
+          )}
+
+          {neighbors.next ? (
+            <Button
+              asChild
+              variant="ghost"
+              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
+            >
+              <Link to={`${linkPrefix}/topic/${neighbors.next.slug}`}>{neighbors.next.title}<ArrowRight className="h-4 w-4 ml-1" /></Link>
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">End of course</span>
+          )}
+        </div>
       </div>
     </div>
   );

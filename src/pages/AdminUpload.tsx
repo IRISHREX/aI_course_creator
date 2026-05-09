@@ -19,6 +19,11 @@ export default function AdminUpload() {
   const [rawText, setRawText] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualDescription, setManualDescription] = useState("");
+  const [manualIndex, setManualIndex] = useState("");
+  const [manualBusy, setManualBusy] = useState(false);
+
   if (loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   if (!isAdmin) return (
     <div className="container max-w-md py-20 text-center">
@@ -38,6 +43,102 @@ export default function AdminUpload() {
       toast.success(`Extracted ${text.length.toLocaleString()} characters from ${file.name}`);
     } catch (e: any) {
       toast.error(e.message || "Could not read file");
+    }
+  };
+
+  const slugify = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || `course-${Date.now()}`;
+
+  const parseManualIndex = (text: string) => {
+    const units: Array<{ unit: number; title: string; lessons: Array<{ title: string; summary: string }> }> = [];
+    let currentUnit = { unit: 1, title: "Unit 1", lessons: [] as Array<{ title: string; summary: string }> };
+    let unitCount = 0;
+    let hasUnitHeading = false;
+
+    text.split(/\r?\n/).forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (!line) return;
+      const headingMatch = line.match(/^(?:Unit|Chapter|Section)\s*(\d+)\s*[:\-–—]?\s*(.*)$/i);
+      if (headingMatch) {
+        if (currentUnit.lessons.length || currentUnit.title !== `Unit ${unitCount + 1}`) units.push(currentUnit);
+        const unitNumber = Number(headingMatch[1]) || unitCount + 1;
+        currentUnit = { unit: unitNumber, title: headingMatch[2].trim() || `Unit ${unitNumber}`, lessons: [] };
+        unitCount = Math.max(unitCount, unitNumber);
+        hasUnitHeading = true;
+        return;
+      }
+
+      const lessonTitle = line.replace(/^[\-\*\u2022]\s*/, "").replace(/^\d+[\.|\)]\s*/, "").trim();
+      if (!lessonTitle) return;
+      if (!hasUnitHeading && currentUnit.title === `Unit ${unitCount + 1}` && currentUnit.lessons.length === 0) {
+        currentUnit.title = `Unit ${unitCount + 1}`;
+      }
+      currentUnit.lessons.push({ title: lessonTitle, summary: "" });
+    });
+
+    if (currentUnit.lessons.length || units.length === 0) units.push(currentUnit);
+    return units.map((unit, index) => ({ ...unit, unit: unit.unit || index + 1, title: unit.title || `Unit ${index + 1}` }));
+  };
+
+  const createManualCourse = async () => {
+    if (!manualTitle.trim()) { toast.error("Course title required"); return; }
+    if (!manualDescription.trim()) { toast.error("Course description required"); return; }
+    if (!manualIndex.trim()) { toast.error("Course index required"); return; }
+
+    const units = parseManualIndex(manualIndex.trim());
+    const lessonCount = units.reduce((sum, u) => sum + u.lessons.length, 0);
+    if (lessonCount === 0) { toast.error("Enter at least one lesson in the course index."); return; }
+
+    setManualBusy(true);
+    try {
+      let candidate = slugify(manualTitle);
+      let suffix = 1;
+      while (true) {
+        const { data: existing, error: checkError } = await supabase.from("courses").select("id").eq("slug", candidate).maybeSingle();
+        if (checkError) throw checkError;
+        if (!existing) break;
+        candidate = `${slugify(manualTitle)}-${suffix++}`;
+      }
+
+      const { data: createdCourse, error: courseError } = await supabase.from("courses").insert({
+        slug: candidate,
+        title: manualTitle.trim(),
+        description: manualDescription.trim(),
+        cover_emoji: emoji,
+        order_index: Date.now() % 1000,
+        source_text: manualIndex.trim().slice(0, 200000),
+        generation_status: "ready",
+        toc: units.map((unit) => ({ unit: unit.unit, title: unit.title, summary: "", lessons: unit.lessons.map((lesson) => ({ title: lesson.title, summary: lesson.summary })) })),
+      }).select().single();
+      if (courseError) throw courseError;
+      if (!createdCourse) throw new Error("Failed to create course");
+
+      const rows: any[] = [];
+      units.forEach((unit) => {
+        unit.lessons.forEach((lesson, lessonIndex) => {
+          const lessonSlug = `${candidate}-${slugify(lesson.title)}`;
+          rows.push({
+            course_id: createdCourse.id,
+            slug: lessonSlug,
+            unit: unit.unit,
+            order_index: lessonIndex,
+            title: lesson.title,
+            summary: lesson.summary || "",
+            content: [],
+            quiz: [],
+            generation_status: "ready",
+          });
+        });
+      });
+
+      const { error: topicError } = await supabase.from("topics").insert(rows);
+      if (topicError) throw topicError;
+
+      toast.success(`Course "${manualTitle}" created with ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}.`);
+      nav(`/course/${candidate}`);
+    } catch (e: any) {
+      toast.error(e.message || "Manual creation failed");
+    } finally {
+      setManualBusy(false);
     }
   };
 
@@ -98,6 +199,41 @@ export default function AdminUpload() {
         <Button onClick={generate} variant="hero" size="lg" disabled={busy} className="w-full">
           {busy ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" /> AI is structuring your course…</> : <><Upload className="h-4 w-4 mr-1" /> Generate course with AI</>}
         </Button>
+      </div>
+
+      <div className="mt-12 border-t border-border pt-10 space-y-5">
+        <div>
+          <h2 className="font-display text-2xl font-bold mb-2">Manual course editor</h2>
+          <p className="text-muted-foreground">Create a course directly with title, description, and a lesson index outline.</p>
+        </div>
+
+        <div className="glass rounded-2xl p-5 space-y-5">
+          <div className="grid sm:grid-cols-[1fr_120px] gap-3">
+            <div>
+              <Label>Course title</Label>
+              <Input value={manualTitle} onChange={e => setManualTitle(e.target.value)} placeholder="e.g. Cloud Computing" />
+            </div>
+            <div>
+              <Label>Emoji</Label>
+              <Input value={emoji} onChange={e => setEmoji(e.target.value)} maxLength={2} className="text-center text-xl" />
+            </div>
+          </div>
+
+          <div>
+            <Label>Description</Label>
+            <Textarea rows={3} value={manualDescription} onChange={e => setManualDescription(e.target.value)} placeholder="Write a short course description…" />
+          </div>
+
+          <div>
+            <Label>Course index</Label>
+            <Textarea rows={8} value={manualIndex} onChange={e => setManualIndex(e.target.value)} placeholder="Add lesson titles here, one per line. Use Unit headings like 'Unit 1: Fundamentals' if you want grouping." className="font-mono text-xs" />
+            <p className="text-xs text-muted-foreground mt-2">One lesson title per line is enough. Optional unit headers can be used to group lessons.</p>
+          </div>
+
+          <Button onClick={createManualCourse} variant="secondary" size="lg" disabled={manualBusy} className="w-full">
+            {manualBusy ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" /> Creating manual course…</> : "Create course manually"}
+          </Button>
+        </div>
       </div>
     </div>
   );
