@@ -17,7 +17,7 @@ export default function Auth() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (user) nav("/map"); }, [user, nav]);
+  useEffect(() => { if (user) nav("/"); }, [user, nav]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +27,7 @@ export default function Auth() {
         const { error } = await supabase.auth.signUp({
           email, password,
           options: {
-            emailRedirectTo: window.location.origin + "/map",
+            emailRedirectTo: window.location.origin + "/",
             data: { display_name: name || email.split("@")[0] },
           },
         });
