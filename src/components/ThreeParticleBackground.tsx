@@ -1,11 +1,6 @@
 import { useEffect, useRef } from "react";
+import * as THREE from "three";
 import { cn } from "@/lib/utils";
-
-declare global {
-  interface Window {
-    THREE?: any;
-  }
-}
 
 type ThreeParticleBackgroundProps = {
   className?: string;
@@ -16,9 +11,8 @@ export function ThreeParticleBackground({ className }: ThreeParticleBackgroundPr
 
   useEffect(() => {
     const mount = mountRef.current;
-    const THREE = window.THREE;
 
-    if (!mount || !THREE) return;
+    if (!mount) return;
 
     let mousePos = { x: 0.5, y: 0.5 };
     let phase = 0;

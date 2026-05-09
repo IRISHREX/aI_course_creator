@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
-
-declare global {
-  interface Window {
-    THREE?: any;
-  }
-}
 
 type LessonTerrainBackgroundProps = {
   className?: string;
@@ -32,9 +27,8 @@ export function LessonTerrainBackground({ className }: LessonTerrainBackgroundPr
 
   useEffect(() => {
     const mount = mountRef.current;
-    const THREE = window.THREE;
 
-    if (!mount || !THREE) return;
+    if (!mount) return;
 
     let frameId = 0;
     let lastTimeMsec: number | null = null;
@@ -70,10 +64,14 @@ export function LessonTerrainBackground({ className }: LessonTerrainBackgroundPr
     scene.add(fillLight);
 
     const geometry = new THREE.PlaneGeometry(20, 20, 128, 128);
-    geometry.vertices.forEach((vertex: any) => {
-      vertex.z = terrainHeight(vertex.x, vertex.y);
-    });
-    geometry.computeFaceNormals();
+    const positionAttribute = geometry.attributes.position as THREE.BufferAttribute;
+
+    for (let i = 0; i < positionAttribute.count; i += 1) {
+      const x = positionAttribute.getX(i);
+      const y = positionAttribute.getY(i);
+      positionAttribute.setZ(i, terrainHeight(x, y));
+    }
+
     geometry.computeVertexNormals();
 
     const meshes = palette.colors.map((color, index) => {
