@@ -3,21 +3,25 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 export type ThemeName = "dark" | "light" | "paper" | "retro";
 
 export const THEMES: { id: ThemeName; label: string; icon: string }[] = [
-  { id: "dark", label: "Dark", icon: "🌌" },
-  { id: "light", label: "Light", icon: "☀️" },
-  { id: "paper", label: "Paper", icon: "📜" },
-  { id: "retro", label: "Retro", icon: "🖥️" },
+  { id: "paper", label: "Paper", icon: "Paper" },
+  { id: "dark", label: "Dark", icon: "Dark" },
+  { id: "light", label: "Light", icon: "Light" },
+  { id: "retro", label: "Retro", icon: "Retro" },
 ];
 
 const KEY = "signal-theme";
 
-interface Ctx { theme: ThemeName; setTheme: (t: ThemeName) => void }
-const ThemeContext = createContext<Ctx>({ theme: "dark", setTheme: () => {} });
+interface Ctx {
+  theme: ThemeName;
+  setTheme: (t: ThemeName) => void;
+}
+
+const ThemeContext = createContext<Ctx>({ theme: "paper", setTheme: () => {} });
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const [theme, setThemeState] = useState<ThemeName>(() => {
-    if (typeof window === "undefined") return "dark";
-    return (localStorage.getItem(KEY) as ThemeName) || "dark";
+    if (typeof window === "undefined") return "paper";
+    return (localStorage.getItem(KEY) as ThemeName) || "paper";
   });
 
   useEffect(() => {

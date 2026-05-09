@@ -24,10 +24,7 @@ export const ThemeSwitcher = () => {
             onClick={() => setTheme(t.id as ThemeName)}
             className="cursor-pointer flex items-center justify-between"
           >
-            <span className="flex items-center gap-2">
-              <span>{t.icon}</span>
-              <span>{t.label}</span>
-            </span>
+            <span>{t.label}</span>
             {theme === t.id && <Check className="h-3.5 w-3.5 text-primary" />}
           </DropdownMenuItem>
         ))}

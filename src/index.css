@@ -87,35 +87,38 @@
 
   /* ============ THEME: PAPER (sepia / book) ============ */
   [data-theme="paper"] {
-    --background: 38 40% 92%;
+    --background: 38 42% 91%;
     --foreground: 30 30% 18%;
-    --card: 38 50% 96%;
+    --card: 38 45% 94%;
     --card-foreground: 30 30% 18%;
     --popover: 38 50% 96%;
     --popover-foreground: 30 30% 18%;
-    --primary: 25 70% 40%;
+    --primary: 22 68% 39%;
     --primary-foreground: 38 50% 96%;
-    --primary-glow: 25 70% 55%;
-    --secondary: 15 50% 35%;
+    --primary-glow: 18 86% 62%;
+    --secondary: 18 52% 35%;
     --secondary-foreground: 38 50% 96%;
     --muted: 38 30% 86%;
-    --muted-foreground: 30 25% 35%;
-    --accent: 25 60% 45%;
+    --muted-foreground: 31 31% 31%;
+    --accent: 22 60% 42%;
     --accent-foreground: 38 50% 96%;
     --border: 38 25% 78%;
     --input: 38 30% 88%;
-    --ring: 25 70% 40%;
-    --gradient-primary: linear-gradient(135deg, hsl(25 70% 40%), hsl(15 50% 35%));
-    --gradient-hero: linear-gradient(180deg, hsl(38 40% 92%), hsl(38 35% 88%));
-    --gradient-card: linear-gradient(135deg, hsl(38 50% 96% / 0.95), hsl(38 45% 93% / 0.95));
-    --shadow-glow: 0 4px 16px hsl(25 70% 40% / 0.12);
-    --shadow-glow-purple: 0 4px 16px hsl(15 50% 35% / 0.12);
+    --ring: 22 68% 39%;
+    --gradient-primary: linear-gradient(135deg, hsl(24 73% 41%), hsl(16 53% 35%));
+    --gradient-hero: linear-gradient(180deg, hsl(38 42% 91%), hsl(38 35% 88%));
+    --gradient-card: linear-gradient(135deg, hsl(38 48% 95% / 0.84), hsl(38 40% 91% / 0.72));
+    --shadow-glow: 0 10px 30px hsl(22 68% 39% / 0.16);
+    --shadow-glow-purple: 0 10px 30px hsl(18 52% 35% / 0.12);
     --shadow-elevated: 0 8px 30px -10px hsl(30 40% 25% / 0.2);
   }
   [data-theme="paper"] body {
     font-family: 'Georgia', 'Cambria', 'Times New Roman', serif;
   }
   [data-theme="paper"] .grid-bg { background-image: none; }
+  [data-theme="paper"] .glass {
+    backdrop-filter: blur(6px);
+  }
 
   /* ============ THEME: RETRO (CRT / terminal) ============ */
   [data-theme="retro"] {
@@ -243,15 +246,12 @@
 
 .three-home-canvas {
   position: absolute;
-  top: 1.5rem;
-  right: 1.5rem;
-  width: min(420px, calc(100vw - 3rem));
-  height: min(420px, calc(100vw - 3rem));
-  border-radius: 2rem;
-  overflow: hidden;
+  top: clamp(7rem, 18vh, 10rem);
+  right: max(4rem, calc((100vw - 1180px) / 2));
+  width: min(42vw, 520px);
+  height: min(42vw, 520px);
   pointer-events: none;
-  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.16), transparent 40%), rgba(14, 23, 47, 0.7);
-  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.35);
+  z-index: 0;
 }
 
 .three-page-background {
@@ -259,12 +259,45 @@
   inset: 0;
   z-index: -10;
   pointer-events: none;
-  background: linear-gradient(180deg, #11e8bb 0%, #8200c9 100%);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 18%, hsl(var(--primary) / 0.12), transparent 26rem),
+    radial-gradient(circle at 88% 12%, hsl(var(--secondary) / 0.12), transparent 24rem),
+    var(--gradient-hero);
 }
 
-#canvas {
-  width: 100%;
-  height: 100%;
+.three-page-background span {
+  position: absolute;
+  border: 1px solid hsl(var(--primary) / 0.14);
+  border-radius: 999px;
+  opacity: 0.6;
+}
+
+.three-page-background span:nth-child(1) {
+  width: 28rem;
+  height: 28rem;
+  top: 9%;
+  right: 8%;
+}
+
+.three-page-background span:nth-child(2) {
+  width: 18rem;
+  height: 18rem;
+  bottom: 8%;
+  left: 6%;
+}
+
+.three-page-background span:nth-child(3) {
+  width: 9rem;
+  height: 9rem;
+  top: 46%;
+  left: 48%;
 }
 
 .animate-fade-in { animation: fade-in 0.5s ease-out; }
+
+@media (max-width: 1023px) {
+  .three-home-canvas {
+    display: none;
+  }
+}
