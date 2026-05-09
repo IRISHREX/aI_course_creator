@@ -15,9 +15,25 @@ Express + Prisma + PostgreSQL + JWT auth. Replaces Lovable Cloud / Supabase.
 cd backend
 cp .env.example .env       # fill DATABASE_URL, JWT_SECRET
 npm install
-npx prisma migrate dev --name init
+npm run prisma:generate:auto
+npm run prisma:migrate-dev:auto -- --name init
 npm run dev                # http://localhost:8080
 ```
+
+### Production / Postgres
+
+This repo currently keeps local MySQL as the default schema, but the Prisma helper can detect the provider from `DATABASE_URL`.
+
+```bash
+cd backend
+npm install
+npm run prisma:generate:auto
+npm run prisma:push:auto
+npm run build
+npm start
+```
+
+If your `backend/.env` uses a Postgres URL, the auto script will use `prisma/schema.postgres.prisma`.
 
 ## Deploy
 

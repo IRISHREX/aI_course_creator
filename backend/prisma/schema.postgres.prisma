@@ -1,0 +1,180 @@
+// Prisma schema mirroring the existing Supabase schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppRole {
+  user
+  admin
+  super_admin
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  displayName  String?    @map("display_name")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  roles        UserRole[]
+  aiKeys       UserAiKey[]
+  bookmarks    Bookmark[]
+  progress     TopicProgress[]
+
+  @@map("users")
+}
+
+model UserAiKey {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  provider      String   @default("google")
+  encryptedKey  String   @db.Text @map("encrypted_key")
+  keyPreview    String?  @map("key_preview")
+  status        String   @default("active")
+  lastError     String?  @db.Text @map("last_error")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, updatedAt])
+  @@map("user_ai_keys")
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  role      AppRole
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+model Course {
+  id               String   @id @default(uuid())
+  slug             String   @unique
+  title            String
+  description      String   @db.Text
+  coverEmoji       String?  @default("📡") @map("cover_emoji")
+  orderIndex       Int      @default(0) @map("order_index")
+  sourceText       String?  @map("source_text")
+  generationStatus String   @default("ready") @map("generation_status")
+  tags             Json     @default("[]")
+  mindmap          Json?
+  toc              Json?    @default("[]")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  topics           Topic[]
+  pyqs             CoursePyq[]
+
+  @@map("courses")
+}
+
+model Topic {
+  id               String   @id @default(uuid())
+  courseId         String   @map("course_id")
+  slug             String   @unique
+  unit             Int
+  orderIndex       Int      @map("order_index")
+  title            String
+  summary          String   @db.Text
+  content          Json     @default("[]")
+  quiz             Json     @default("[]")
+  mindmap          Json?
+  visualization    String?  @db.Text
+  difficultyLevel  Int      @default(5) @map("difficulty_level")
+  generationStatus String   @default("ready") @map("generation_status")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  course           Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  versions         TopicVersion[]
+  bookmarks        Bookmark[]
+  progress         TopicProgress[]
+  pyqLinks         PyqTopic[]
+
+  @@map("topics")
+}
+
+model TopicVersion {
+  id            String   @id @default(uuid())
+  topicId       String   @map("topic_id")
+  title         String
+  summary       String   @db.Text
+  content       Json     @default("[]")
+  quiz          Json     @default("[]")
+  mindmap       Json?
+  visualization String?  @db.Text
+  note          String?  @db.Text
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  topic         Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("topic_versions")
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  topicId   String   @map("topic_id")
+  courseId  String   @map("course_id")
+  pageIndex Int      @default(0) @map("page_index")
+  wordIndex Int      @default(0) @map("word_index")
+  label     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("bookmarks")
+}
+
+model TopicProgress {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  topicId       String   @map("topic_id")
+  viewed        Boolean  @default(false)
+  passed        Boolean  @default(false)
+  attempts      Int      @default(0)
+  bestQuizScore Int      @default(0) @map("best_quiz_score")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic         Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@map("topic_progress")
+}
+
+model CoursePyq {
+  id              String   @id @default(uuid())
+  courseId        String   @map("course_id")
+  topicId         String?  @map("topic_id")
+  question        String   @db.Text
+  answer          String   @db.Text
+  marks           Int?
+  year            Int?
+  source          String?
+  ingestionSource String?  @default("manual") @map("ingestion_source")
+  orderIndex      Int      @default(0) @map("order_index")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topicLinks      PyqTopic[]
+
+  @@map("course_pyq")
+}
+
+model PyqTopic {
+  id        String   @id @default(uuid())
+  pyqId     String   @map("pyq_id")
+  topicId   String   @map("topic_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  pyq       CoursePyq @relation(fields: [pyqId], references: [id], onDelete: Cascade)
+  topic     Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([pyqId, topicId])
+  @@map("pyq_topics")
+}

@@ -3,12 +3,14 @@ import { motion } from "framer-motion";
 import { Radio, BookOpen, Sparkles, Award, Brain, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCourses } from "@/hooks/useCourses";
+import ThreeSphereHome from "@/components/ThreeSphereHome";
 
 const Index = () => {
   const { courses } = useCourses();
 
   return (
-    <div className="relative">
+    <div className="relative overflow-hidden">
+      <ThreeSphereHome />
       <section className="relative overflow-hidden">
         <div className="container py-24 md:py-32 grid md:grid-cols-2 gap-10 items-center">
           <div>

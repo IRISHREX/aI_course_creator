@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { TopNav } from "@/components/TopNav";
+import ThreePageBackground from "@/components/ThreePageBackground";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Courses from "./pages/Courses";
@@ -26,6 +27,40 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const Content = () => {
+  const location = useLocation();
+
+  return (
+    <ThemeProvider>
+      {location.pathname !== "/" && <ThreePageBackground />}
+      <div className="min-h-screen flex flex-col">
+        <TopNav />
+        <main className="flex-1">
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/courses" element={<Courses />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/upload" element={<AdminUpload />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/pyq-upload" element={<AdminPYQUpload />} />
+            <Route path="/bookmarks" element={<Bookmarks />} />
+            <Route path="/course/:courseSlug" element={<CourseDetail />} />
+            <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
+            <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
+            <Route path="/course/:courseSlug/certificate" element={<Certificate />} />
+            <Route path="/course/:courseSlug/pyq" element={<CoursePYQ />} />
+            <Route path="/course/:courseSlug/topic/:slug" element={<TopicPage />} />
+            <Route path="/course/:courseSlug/topic/:slug/edit" element={<TopicEdit />} />
+            <Route path="/course/:courseSlug/topic/:slug/quiz" element={<QuizPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+      </div>
+    </ThemeProvider>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -33,32 +68,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <ThemeProvider>
-          <div className="min-h-screen flex flex-col">
-            <TopNav />
-            <main className="flex-1">
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/courses" element={<Courses />} />
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/upload" element={<AdminUpload />} />
-                <Route path="/admin/users" element={<AdminUsers />} />
-                <Route path="/admin/pyq-upload" element={<AdminPYQUpload />} />
-                <Route path="/bookmarks" element={<Bookmarks />} />
-                <Route path="/course/:courseSlug" element={<CourseDetail />} />
-                <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
-                <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
-                <Route path="/course/:courseSlug/certificate" element={<Certificate />} />
-                <Route path="/course/:courseSlug/pyq" element={<CoursePYQ />} />
-                <Route path="/course/:courseSlug/topic/:slug" element={<TopicPage />} />
-                <Route path="/course/:courseSlug/topic/:slug/edit" element={<TopicEdit />} />
-                <Route path="/course/:courseSlug/topic/:slug/quiz" element={<QuizPage />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </main>
-          </div>
-          </ThemeProvider>
+          <Content />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
