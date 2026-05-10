@@ -6,7 +6,7 @@ const ThreeSphereHome = () => {
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || window.matchMedia("(max-width: 1023px)").matches) return;
+    if (!container) return;
 
     const mousePos = { x: 0.5, y: 0.5 };
     let phase = 0;
@@ -36,11 +36,12 @@ const ThreeSphereHome = () => {
       depthWrite: false,
     });
 
-    const pitchSegments = 60;
+    const compact = window.matchMedia("(max-width: 1023px)").matches;
+    const pitchSegments = compact ? 34 : 60;
     const elevationSegments = pitchSegments / 2;
     const particles = pitchSegments * elevationSegments;
     const side = Math.pow(particles, 1 / 3);
-    const radius = 16;
+    const radius = compact ? 11 : 16;
     const parentContainer = new THREE.Object3D();
     const particleMesh = new THREE.InstancedMesh(geometry, material, particles);
     const dummy = new THREE.Object3D();
@@ -86,8 +87,8 @@ const ThreeSphereHome = () => {
     particleMesh.instanceMatrix.needsUpdate = true;
 
     const resize = () => {
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+      const width = Math.max(1, container.clientWidth);
+      const height = Math.max(1, container.clientHeight);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
@@ -159,7 +160,7 @@ const ThreeSphereHome = () => {
     };
   }, []);
 
-  return <div ref={containerRef} className="three-home-canvas hidden lg:block" aria-hidden="true" />;
+  return <div ref={containerRef} className="three-home-canvas" aria-hidden="true" />;
 };
 
 export default ThreeSphereHome;

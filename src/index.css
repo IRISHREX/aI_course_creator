@@ -246,8 +246,8 @@
 
 .three-home-canvas {
   position: absolute;
-  top: clamp(7rem, 18vh, 10rem);
-  right: max(4rem, calc((100vw - 1180px) / 2));
+  top: clamp(5rem, 15vh, 10rem);
+  right: max(1rem, calc((100vw - 1180px) / 2));
   width: min(42vw, 520px);
   height: min(42vw, 520px);
   pointer-events: none;
@@ -266,38 +266,20 @@
     var(--gradient-hero);
 }
 
-.three-page-background span {
-  position: absolute;
-  border: 1px solid hsl(var(--primary) / 0.14);
-  border-radius: 999px;
-  opacity: 0.6;
-}
-
-.three-page-background span:nth-child(1) {
-  width: 28rem;
-  height: 28rem;
-  top: 9%;
-  right: 8%;
-}
-
-.three-page-background span:nth-child(2) {
-  width: 18rem;
-  height: 18rem;
-  bottom: 8%;
-  left: 6%;
-}
-
-.three-page-background span:nth-child(3) {
-  width: 9rem;
-  height: 9rem;
-  top: 46%;
-  left: 48%;
+.three-page-background canvas {
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 0.8;
 }
 
 .animate-fade-in { animation: fade-in 0.5s ease-out; }
 
 @media (max-width: 1023px) {
   .three-home-canvas {
-    display: none;
+    top: 5rem;
+    right: -5rem;
+    width: 20rem;
+    height: 20rem;
+    opacity: 0.35;
   }
 }

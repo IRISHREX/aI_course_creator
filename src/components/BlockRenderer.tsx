@@ -18,9 +18,12 @@ interface Props {
   text?: string;
 }
 
-/** Strip ** markers (used when computing tokens for TTS). */
-function stripBold(s: string): string {
-  return s.replace(/\*\*(.+?)\*\*/g, "$1");
+/** Strip lightweight inline markers (used when computing tokens for TTS). */
+function stripMarkup(s: string): string {
+  return s
+    .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/`(.+?)`/g, "$1");
 }
 
 /**
@@ -29,19 +32,41 @@ function stripBold(s: string): string {
  */
 function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className = "" }:
   { value: string; baseIndex: number; activeIndex: number | null | undefined; onWordClick?: (i: number) => void; className?: string }) {
-  // Strip ** but remember bold ranges over the *stripped* string
-  const boldRanges: Array<[number, number]> = [];
+  // Strip markers but remember style ranges over the stripped string.
+  const ranges: Array<[number, number, "bold" | "blue" | "red"]> = [];
   let stripped = "";
   let i = 0;
   while (i < value.length) {
-    if (value[i] === "*" && value[i + 1] === "*") {
+    if (value.startsWith("***", i)) {
+      const end = value.indexOf("***", i + 3);
+      if (end !== -1) {
+        const inner = value.slice(i + 3, end);
+        const start = stripped.length;
+        stripped += inner;
+        ranges.push([start, stripped.length, "red"]);
+        i = end + 3;
+        continue;
+      }
+    }
+    if (value.startsWith("**", i)) {
       const end = value.indexOf("**", i + 2);
       if (end !== -1) {
         const inner = value.slice(i + 2, end);
         const start = stripped.length;
         stripped += inner;
-        boldRanges.push([start, stripped.length]);
+        ranges.push([start, stripped.length, "bold"]);
         i = end + 2;
+        continue;
+      }
+    }
+    if (value[i] === "`") {
+      const end = value.indexOf("`", i + 1);
+      if (end !== -1) {
+        const inner = value.slice(i + 1, end);
+        const start = stripped.length;
+        stripped += inner;
+        ranges.push([start, stripped.length, "blue"]);
+        i = end + 1;
         continue;
       }
     }
@@ -49,7 +74,15 @@ function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className
     i++;
   }
 
-  const isBold = (pos: number) => boldRanges.some(([s, e]) => pos >= s && pos < e);
+  const styleAt = (start: number, length: number) => {
+    const hits = ranges
+      .filter(([s, e]) => start < e && start + length > s)
+      .map(([, , style]) => style);
+    if (hits.includes("red")) return "red";
+    if (hits.includes("blue")) return "blue";
+    if (hits.includes("bold")) return "bold";
+    return null;
+  };
 
   // Walk stripped string, alternating words/whitespace. Assign word indices.
   const out: React.ReactNode[] = [];
@@ -65,9 +98,12 @@ function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className
     } else {
       const idx = baseIndex + wordI;
       const active = activeIndex === idx;
-      // Render the word; if any character is in a bold range, wrap whole word in <strong>.
-      const anyBold = Array.from({ length: tok.length }, (_, k) => isBold(start + k)).some(Boolean);
-      const inner = anyBold ? <strong>{tok}</strong> : tok;
+      const markerStyle = styleAt(start, tok.length);
+      const innerClass =
+        markerStyle === "red" ? "font-semibold text-red-500" :
+        markerStyle === "blue" ? "font-medium text-blue-500" :
+        "";
+      const inner = markerStyle === "bold" ? <strong>{tok}</strong> : <span className={innerClass}>{tok}</span>;
       out.push(
         <span
           key={`w${key++}`}
@@ -85,16 +121,16 @@ function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className
 }
 
 export function countWords(s: string): number {
-  return (stripBold(s).match(/\S+/g) || []).length;
+  return (stripMarkup(s).match(/\S+/g) || []).length;
 }
 
 export function blockToText(b: any): string {
   if (!b) return "";
-  if (b.type === "text") return stripBold(b.value || "");
-  if (b.type === "highlight") return "Key point. " + stripBold(b.value || "");
+  if (b.type === "text") return stripMarkup(b.value || "");
+  if (b.type === "highlight") return "Key point. " + stripMarkup(b.value || "");
   if (b.type === "list") {
-    const head = b.title ? stripBold(b.title) + "." : "";
-    const items = (b.items || []).map((it: string, i: number) => `${i + 1}. ${stripBold(it)}`).join(". ");
+    const head = b.title ? stripMarkup(b.title) + "." : "";
+    const items = (b.items || []).map((it: string, i: number) => `${i + 1}. ${stripMarkup(it)}`).join(". ");
     return [head, items].filter(Boolean).join(" ");
   }
   if (b.type === "timeline") {

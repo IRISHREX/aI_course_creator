@@ -81,6 +81,9 @@ export default function CourseDetail() {
           <Button asChild variant="ghost" size="sm">
             <Link to={`/course/${course.slug}/pyq`}><FileQuestion className="h-4 w-4 mr-1" /> PYQs {pyqCount > 0 && <span className="ml-1 text-xs font-mono text-primary">({pyqCount})</span>}</Link>
           </Button>
+          <Button asChild variant="neon" size="sm">
+            <Link to={`/course/${course.slug}/quiz`}><Brain className="h-4 w-4 mr-1" /> Full course MCQ</Link>
+          </Button>
           <Button onClick={downloadDocx} variant="neon" disabled={downloading}>
             <Download className="h-4 w-4 mr-1" /> {downloading ? "Building…" : "Download .docx"}
           </Button>

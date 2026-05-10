@@ -484,7 +484,7 @@ function normalizeQuiz(quiz: unknown) {
       return { q, options, answer };
     })
     .filter(Boolean)
-    .slice(0, 4);
+    .slice(0, 10);
 }
 
 async function saveAiKey(apiKey: string) {
@@ -819,10 +819,10 @@ export const supabase = {
         if (name === "generate-quiz") {
           const data = await aiJson(
             "Return only valid JSON in this shape: {\"questions\":[{\"q\":\"\",\"options\":[\"\",\"\",\"\",\"\"],\"answer\":0}]}. Generate concise course quiz questions.",
-            `Topic: ${body.title}\nSummary: ${body.summary}\nContent: ${JSON.stringify(body.content).slice(0, 4000)}\nGenerate 3 questions.`,
+            `Topic: ${body.title}\nSummary: ${body.summary}\nContent: ${JSON.stringify(body.content).slice(0, 4000)}\nGenerate ${Math.min(Math.max(Number(body.count) || 10, 1), 10)} readable questions. Maximum 10.`,
             { questions: [] },
           );
-          return { data, error: null };
+          return { data: { questions: normalizeQuiz(data.questions).slice(0, 10) }, error: null };
         }
         if (name === "generate-mindmap") {
           const topic = body.topicId ? await getTopic(body.topicId) : null;

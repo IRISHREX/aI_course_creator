@@ -58,7 +58,8 @@ export default function TopicEdit() {
     setSaving(true);
     try {
       const content = JSON.parse(contentJson);
-      const quiz = JSON.parse(quizJson);
+      const parsedQuiz = JSON.parse(quizJson);
+      const quiz = (Array.isArray(parsedQuiz) ? parsedQuiz : []).slice(0, 10);
       // Snapshot previous state to history before update
       await supabase.from("topic_versions").insert({
         topic_id: topic.id,
@@ -291,7 +292,7 @@ export default function TopicEdit() {
             </TabsContent>
             <TabsContent value="json" className="mt-3">
               <Textarea rows={14} value={contentJson} onChange={e => setContentJson(e.target.value)} className="font-mono text-xs" />
-              <p className="text-xs text-muted-foreground mt-1">Block types: text, highlight, list, timeline, table, flowchart, chart, image, math, code. Use **word** in text/highlight/list to bold.</p>
+              <p className="text-xs text-muted-foreground mt-1">Block types: text, highlight, list, timeline, table, flowchart, chart, image, math, code. Use **word** for bold, `word` for blue, and ***word*** for red.</p>
             </TabsContent>
           </Tabs>
         </div>

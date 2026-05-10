@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Edit3, FileText, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Edit3, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
 export default function CourseEdit() {
@@ -30,6 +31,9 @@ export default function CourseEdit() {
   const [reRawText, setReRawText] = useState("");
   const [resetLessons, setResetLessons] = useState(true);
   const [reUploading, setReUploading] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     if (course) {
@@ -129,6 +133,81 @@ export default function CourseEdit() {
       }
     } catch (e: any) {
       toast.error(e.message || "Failed to add lesson");
+    }
+  };
+
+  const slugify = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || `lesson-${Date.now()}`;
+
+  const parseBulkLessons = (text: string) => {
+    const rows: Array<{ unit: number; title: string; summary: string }> = [];
+    let unit = 1;
+
+    text.split(/\r?\n/).forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (!line) return;
+
+      const unitMatch = line.match(/^(?:unit|chapter|section)\s*(\d+)\s*[:\-–—]?\s*(.*)$/i);
+      if (unitMatch) {
+        unit = Number(unitMatch[1]) || unit;
+        return;
+      }
+
+      const clean = line.replace(/^[-*•]\s*/, "").replace(/^\d+[\.)]\s*/, "").trim();
+      const [titlePart, ...summaryParts] = clean.split(/\s*(?:::|--)\s*/);
+      const title = titlePart?.trim();
+      if (title) rows.push({ unit, title, summary: summaryParts.join(" ").trim() });
+    });
+
+    return rows;
+  };
+
+  const createBulkLessons = async () => {
+    const parsed = parseBulkLessons(bulkText);
+    if (!parsed.length) {
+      toast.error("Add at least one lesson title");
+      return;
+    }
+
+    setBulkBusy(true);
+    try {
+      const existingByUnit = topics.reduce<Record<number, number>>((acc, topic) => {
+        acc[topic.unit] = Math.max(acc[topic.unit] ?? -1, topic.order_index ?? -1);
+        return acc;
+      }, {});
+      const nextByUnit = { ...existingByUnit };
+      const seenSlugs = new Set(topics.map((topic) => topic.slug));
+
+      const rows = parsed.map((lesson, index) => {
+        const base = `${course.slug}-${slugify(lesson.title)}`;
+        let slug = base;
+        let suffix = 2;
+        while (seenSlugs.has(slug)) slug = `${base}-${suffix++}`;
+        seenSlugs.add(slug);
+        nextByUnit[lesson.unit] = (nextByUnit[lesson.unit] ?? -1) + 1;
+
+        return {
+          course_id: course.id,
+          slug,
+          unit: lesson.unit,
+          order_index: nextByUnit[lesson.unit],
+          title: lesson.title,
+          summary: lesson.summary,
+          content: [],
+          quiz: [],
+          generation_status: "ready",
+        };
+      });
+
+      const { error } = await supabase.from("topics").insert(rows as any);
+      if (error) throw error;
+      toast.success(`Added ${rows.length} lesson${rows.length === 1 ? "" : "s"}`);
+      setBulkText("");
+      setBulkOpen(false);
+      await refreshTopics();
+    } catch (e: any) {
+      toast.error(e.message || "Bulk lesson creation failed");
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -306,10 +385,36 @@ export default function CourseEdit() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
         <div className="flex gap-2">
+          <Button onClick={() => setBulkOpen(true)} variant="outline"><Layers3 className="h-4 w-4 mr-1" /> Bulk lessons</Button>
           <Button onClick={() => addTopic({ aiGenerate: false })} variant="ghost"><Plus className="h-4 w-4 mr-1" /> Empty lesson</Button>
           <Button onClick={() => addTopic({ aiGenerate: true })} variant="hero"><Sparkles className="h-4 w-4 mr-1" /> Add lesson + AI generate</Button>
         </div>
       </div>
+
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bulk lesson input</DialogTitle>
+            <DialogDescription>
+              Paste one lesson per line. Use unit headings like "Unit 2: Networks"; add summaries with "::" or "--".
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            rows={12}
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            className="font-mono text-xs"
+            placeholder={"Unit 1: Fundamentals\n1. Introduction :: Overview and outcomes\n2. Core concepts\n\nUnit 2: Practice\n- Worked examples -- Step-by-step cases"}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBulkOpen(false)} disabled={bulkBusy}>Cancel</Button>
+            <Button variant="hero" onClick={createBulkLessons} disabled={bulkBusy}>
+              {bulkBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Layers3 className="h-4 w-4 mr-1" />}
+              Add lessons
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
 
       <div className="glass rounded-2xl overflow-hidden">

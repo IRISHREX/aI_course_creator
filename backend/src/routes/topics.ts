@@ -40,23 +40,33 @@ const UpsertTopic = z.object({
   generationStatus: z.string().optional(),
 });
 
+function normalizeTopicInput(input: any) {
+  if (!input || typeof input !== "object") return input;
+  return {
+    ...input,
+    courseId: input.courseId ?? input.course_id,
+    orderIndex: input.orderIndex ?? input.order_index,
+    generationStatus: input.generationStatus ?? input.generation_status,
+  };
+}
+
 topicsRouter.post("/", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
   if (Array.isArray(req.body)) {
-    const parsed = req.body.map((item) => UpsertTopic.safeParse(item));
+    const parsed = req.body.map((item) => UpsertTopic.safeParse(normalizeTopicInput(item)));
     const invalid = parsed.find((result) => !result.success);
     if (invalid) return res.status(400).json({ error: invalid.error.flatten() });
     const topics = await prisma.$transaction(parsed.map((result) => prisma.topic.create({ data: result.data as any })));
     return res.json({ topics });
   }
 
-  const parsed = UpsertTopic.safeParse(req.body);
+  const parsed = UpsertTopic.safeParse(normalizeTopicInput(req.body));
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const topic = await prisma.topic.create({ data: parsed.data as any });
   res.json({ topic });
 });
 
 topicsRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), async (req: AuthedRequest, res) => {
-  const parsed = UpsertTopic.partial().safeParse(req.body);
+  const parsed = UpsertTopic.partial().safeParse(normalizeTopicInput(req.body));
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const note = (req.body?.versionNote as string) || null;
 

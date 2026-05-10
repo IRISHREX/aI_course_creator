@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { TopNav } from "@/components/TopNav";
 import ThreePageBackground from "@/components/ThreePageBackground";
+import { AdminLayout } from "@/components/AdminLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Courses from "./pages/Courses";
@@ -40,16 +41,19 @@ const Content = () => {
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/courses" element={<Courses />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/upload" element={<AdminUpload />} />
-            <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/admin/pyq-upload" element={<AdminPYQUpload />} />
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="upload" element={<AdminUpload />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="pyq-upload" element={<AdminPYQUpload />} />
+            </Route>
             <Route path="/bookmarks" element={<Bookmarks />} />
             <Route path="/course/:courseSlug" element={<CourseDetail />} />
             <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
             <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
             <Route path="/course/:courseSlug/certificate" element={<Certificate />} />
             <Route path="/course/:courseSlug/pyq" element={<CoursePYQ />} />
+            <Route path="/course/:courseSlug/quiz" element={<QuizPage />} />
             <Route path="/course/:courseSlug/topic/:slug" element={<TopicPage />} />
             <Route path="/course/:courseSlug/topic/:slug/edit" element={<TopicEdit />} />
             <Route path="/course/:courseSlug/topic/:slug/quiz" element={<QuizPage />} />

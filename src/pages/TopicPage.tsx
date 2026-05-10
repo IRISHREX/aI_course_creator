@@ -169,10 +169,10 @@ export default function TopicPage() {
       });
       if (error) throw error;
       if (data?.questions?.length) {
-        const merged = [...topic.quiz, ...data.questions];
-        await supabase.from("topics").update({ quiz: merged }).eq("id", topic.id);
-        setTopic({ ...topic, quiz: merged });
-        toast.success(`Added ${data.questions.length} AI questions`);
+        const fresh = data.questions.slice(0, 10);
+        await supabase.from("topics").update({ quiz: fresh }).eq("id", topic.id);
+        setTopic({ ...topic, quiz: fresh });
+        toast.success(`Replaced old MCQs with ${fresh.length} fresh question${fresh.length === 1 ? "" : "s"}`);
       }
     } catch (e: any) { toast.error(e.message || "AI generation failed"); }
     finally { setGenerating(false); }
@@ -347,7 +347,7 @@ export default function TopicPage() {
           <div className="flex gap-2">
             {isAdmin && (
               <Button variant="neon" size="sm" onClick={generateExtraQuiz} disabled={generating}>
-                <Sparkles className="h-4 w-4 mr-1" /> {generating ? "Generating…" : "AI: add questions"}
+                <Sparkles className="h-4 w-4 mr-1" /> {generating ? "Generating..." : "AI: regenerate MCQs"}
               </Button>
             )}
             <Button variant="hero" size="lg" onClick={() => nav(`${linkPrefix}/topic/${topic.slug}/quiz`)}>

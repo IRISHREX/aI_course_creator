@@ -7,7 +7,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, BookOpen, FileQuestion, Upload, Shield, Bookmark, KeyRound, Activity, Trash2, Save, RotateCw } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  Bookmark,
+  BookOpen,
+  FileQuestion,
+  KeyRound,
+  RotateCw,
+  Save,
+  Trash2,
+  Upload,
+  Users,
+} from "lucide-react";
 
 type AiKeyState = {
   id: string;
@@ -40,9 +52,7 @@ export default function AdminDashboard() {
         supabase.from("topics").select("id", { count: "exact", head: true }),
         supabase.from("course_pyq").select("id", { count: "exact", head: true }),
       ]);
-      setStats({
-        users: u.count || 0, courses: c.count || 0, topics: t.count || 0, pyqs: p.count || 0,
-      });
+      setStats({ users: u.count || 0, courses: c.count || 0, topics: t.count || 0, pyqs: p.count || 0 });
     })();
   }, []);
 
@@ -56,6 +66,20 @@ export default function AdminDashboard() {
     if (!isAdmin) return;
     refreshAiKey().catch(() => undefined);
   }, [isAdmin]);
+
+  const checkKey = async () => {
+    setChecking(true);
+    try {
+      const data = await supabase.aiKeys.check();
+      await refreshAiKey();
+      if (data.check?.ok) toast.success("Gemini key is active");
+      else toast.error(data.check?.message || "Gemini key check failed");
+    } catch (e: any) {
+      toast.error(e.message || "Gemini key check failed");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const saveKey = async () => {
     if (!apiKey.trim()) {
@@ -77,20 +101,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const checkKey = async () => {
-    setChecking(true);
-    try {
-      const data = await supabase.aiKeys.check();
-      await refreshAiKey();
-      if (data.check?.ok) toast.success("Gemini key is active");
-      else toast.error(data.check?.message || "Gemini key check failed");
-    } catch (e: any) {
-      toast.error(e.message || "Gemini key check failed");
-    } finally {
-      setChecking(false);
-    }
-  };
-
   const deleteKey = async (id?: string) => {
     setKeyBusy(true);
     try {
@@ -105,7 +115,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
+  if (loading) return <div className="container py-20 text-muted-foreground">Loading...</div>;
   if (!isAdmin) return null;
 
   const cards = [
@@ -115,127 +125,110 @@ export default function AdminDashboard() {
     { label: "PYQs", value: stats.pyqs, icon: FileQuestion },
   ];
 
+  const quickActions = [
+    { label: "Upload course material", desc: "Generate courses from PDFs, docs, or text", icon: Upload, to: "/admin/upload" },
+    { label: "Generate PYQs", desc: "Extract and tag questions to lessons", icon: FileQuestion, to: "/admin/pyq-upload" },
+    { label: "Manage courses", desc: "Edit lessons, tags, and content blocks", icon: BookOpen, to: "/courses" },
+    { label: "My bookmarks", desc: "Resume saved reading positions", icon: Bookmark, to: "/bookmarks" },
+    ...(isSuperAdmin ? [{ label: "User management", desc: "Promote or demote admins", icon: Users, to: "/admin/users" }] : []),
+  ];
+
   return (
-    <div className="container max-w-6xl py-10">
-      <div className="flex items-start justify-between mb-8 flex-wrap gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-bold flex items-center gap-2">
-            <Shield className="h-7 w-7 text-primary" /> Admin Dashboard
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {isSuperAdmin ? "Super admin — full control" : "Admin — content & PYQ management"}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-        {cards.map(c => (
-          <div key={c.label} className="glass rounded-2xl p-5">
-            <c.icon className="h-5 w-5 text-primary mb-2" />
-            <div className="text-3xl font-display font-bold">{c.value}</div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wider">{c.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="glass rounded-2xl p-5 mb-8">
-        <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-          <div>
-            <div className="font-display font-bold flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-primary" />
-              Gemini API keys
+    <div className="mx-auto max-w-7xl space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/70 bg-card/60 p-5">
+            <div>
+              <h1 className="font-display text-3xl font-bold">Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Manage content, users, PYQs, and generation keys from one workspace.</p>
             </div>
-            <div className="text-xs text-muted-foreground">
-              Saved keys are tried in order; if one fails, generation switches to the next active key.
-            </div>
+            <Badge variant={isSuperAdmin ? "default" : "outline"}>{isSuperAdmin ? "Full control" : "Content access"}</Badge>
           </div>
-          <Badge
-            variant={aiKey?.status === "active" ? "default" : aiKey ? "destructive" : "outline"}
-            className="capitalize"
-          >
-            {aiKeys.length ? `${aiKeys.filter((key) => key.status === "active").length}/${aiKeys.length} active` : "not set"}
-          </Badge>
-        </div>
 
-        {aiKeys.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {aiKeys.map((key, index) => (
-              <div key={key.id} className="grid gap-2 rounded-lg border border-border/60 p-3 text-sm md:grid-cols-[auto_1fr_auto_auto_auto] md:items-center">
-                <Badge variant={key.status === "active" ? "default" : "destructive"} className="capitalize">
-                  {key.status}
-                </Badge>
-                <div>
-                  <div className="font-mono">{index + 1}. {key.keyPreview || "saved"}</div>
-                  {key.lastError && <div className="text-xs text-destructive mt-1">{key.lastError}</div>}
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {cards.map((card) => (
+              <div key={card.label} className="rounded-lg border border-border/70 bg-card/70 p-5 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <card.icon className="h-5 w-5 text-primary" />
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{card.label}</span>
                 </div>
-                <div className="text-xs text-muted-foreground capitalize">{key.provider}</div>
-                <div className="text-xs text-muted-foreground">{key.updatedAt ? new Date(key.updatedAt).toLocaleString() : "Unknown"}</div>
-                <Button onClick={() => deleteKey(key.id)} variant="ghost" size="sm" disabled={keyBusy || checking} className="text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </Button>
+                <div className="text-3xl font-display font-bold">{card.value.toLocaleString()}</div>
               </div>
             ))}
           </div>
-        )}
 
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
-          <div>
-            <Label htmlFor="gemini-key">Add key</Label>
-            <Input
-              id="gemini-key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Paste Gemini API key"
-              autoComplete="off"
-              className="mt-2"
-            />
+          <div className="rounded-lg border border-border/70 bg-card/70 p-5">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-display font-bold flex items-center gap-2">
+                  <KeyRound className="h-5 w-5 text-primary" />
+                  Gemini API keys
+                </div>
+                <div className="text-xs text-muted-foreground">Saved keys are tried in order; failed keys rotate to the next active key.</div>
+              </div>
+              <Badge variant={aiKey?.status === "active" ? "default" : aiKey ? "destructive" : "outline"} className="capitalize">
+                {aiKeys.length ? `${aiKeys.filter((key) => key?.status === "active").length}/${aiKeys.length} active` : "not set"}
+              </Badge>
+            </div>
+
+            {aiKeys.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {aiKeys.map((key, index) => key && (
+                  <div key={key.id} className="grid gap-2 rounded-lg border border-border/60 bg-background/30 p-3 text-sm md:grid-cols-[auto_1fr_auto_auto_auto] md:items-center">
+                    <Badge variant={key.status === "active" ? "default" : "destructive"} className="capitalize">{key.status}</Badge>
+                    <div>
+                      <div className="font-mono">{index + 1}. {key.keyPreview || "saved"}</div>
+                      {key.lastError && <div className="text-xs text-destructive mt-1">{key.lastError}</div>}
+                    </div>
+                    <div className="text-xs text-muted-foreground capitalize">{key.provider}</div>
+                    <div className="text-xs text-muted-foreground">{key.updatedAt ? new Date(key.updatedAt).toLocaleString() : "Unknown"}</div>
+                    <Button onClick={() => deleteKey(key.id)} variant="ghost" size="sm" disabled={keyBusy || checking} className="text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
+              <div>
+                <Label htmlFor="gemini-key">Add key</Label>
+                <Input
+                  id="gemini-key"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Paste Gemini API key"
+                  autoComplete="off"
+                  className="mt-2"
+                />
+              </div>
+              <Button onClick={saveKey} disabled={keyBusy || checking}>
+                {keyBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Add
+              </Button>
+              <Button onClick={checkKey} variant="outline" disabled={!aiKeys.length || keyBusy || checking}>
+                {checking ? <RotateCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+                Check all
+              </Button>
+              <Button onClick={() => deleteKey()} variant="destructive" disabled={!aiKeys.length || keyBusy || checking}>
+                <Trash2 className="h-4 w-4" />
+                Delete all
+              </Button>
+            </div>
           </div>
-          <Button onClick={saveKey} disabled={keyBusy || checking} className="md:mb-0">
-            {keyBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Add
-          </Button>
-          <Button onClick={checkKey} variant="outline" disabled={!aiKeys.length || keyBusy || checking}>
-            {checking ? <RotateCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
-            Check all
-          </Button>
-          <Button onClick={() => deleteKey()} variant="destructive" disabled={!aiKeys.length || keyBusy || checking}>
-            <Trash2 className="h-4 w-4" />
-            Delete all
-          </Button>
-        </div>
-      </div>
 
-      <div className="grid md:grid-cols-2 gap-3">
-        <Link to="/admin/upload" className="glass rounded-2xl p-5 hover:bg-primary/5 transition">
-          <Upload className="h-5 w-5 text-primary mb-2" />
-          <div className="font-display font-bold">Upload course material</div>
-          <div className="text-xs text-muted-foreground">Generate courses from PDFs / docs / text</div>
-        </Link>
-        <Link to="/admin/pyq-upload" className="glass rounded-2xl p-5 hover:bg-primary/5 transition">
-          <FileQuestion className="h-5 w-5 text-primary mb-2" />
-          <div className="font-display font-bold">Generate PYQs from doc / image</div>
-          <div className="text-xs text-muted-foreground">Upload PDF / image, AI extracts &amp; tags lessons</div>
-        </Link>
-        <Link to="/courses" className="glass rounded-2xl p-5 hover:bg-primary/5 transition">
-          <BookOpen className="h-5 w-5 text-primary mb-2" />
-          <div className="font-display font-bold">Manage courses</div>
-          <div className="text-xs text-muted-foreground">Edit lessons, tags, content blocks</div>
-        </Link>
-        <Link to="/bookmarks" className="glass rounded-2xl p-5 hover:bg-primary/5 transition">
-          <Bookmark className="h-5 w-5 text-primary mb-2" />
-          <div className="font-display font-bold">My bookmarks</div>
-          <div className="text-xs text-muted-foreground">Resume your reading</div>
-        </Link>
-        {isSuperAdmin && (
-          <Link to="/admin/users" className="glass rounded-2xl p-5 hover:bg-primary/5 transition border border-primary/30">
-            <Users className="h-5 w-5 text-primary mb-2" />
-            <div className="font-display font-bold">User management</div>
-            <div className="text-xs text-muted-foreground">Promote / demote admins, view all users</div>
-          </Link>
-        )}
-      </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {quickActions.map((action) => (
+              <Link key={action.label} to={action.to} className="group rounded-lg border border-border/70 bg-card/70 p-5 transition hover:border-primary/50 hover:bg-primary/5">
+                <action.icon className="mb-2 h-5 w-5 text-primary" />
+                <div className="flex items-center justify-between font-display font-bold">
+                  {action.label}
+                  <ArrowRight className="h-4 w-4 opacity-0 transition group-hover:opacity-100" />
+                </div>
+                <div className="text-xs text-muted-foreground">{action.desc}</div>
+              </Link>
+            ))}
+          </div>
     </div>
   );
 }
