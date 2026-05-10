@@ -41,6 +41,14 @@ const UpsertTopic = z.object({
 });
 
 topicsRouter.post("/", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
+  if (Array.isArray(req.body)) {
+    const parsed = req.body.map((item) => UpsertTopic.safeParse(item));
+    const invalid = parsed.find((result) => !result.success);
+    if (invalid) return res.status(400).json({ error: invalid.error.flatten() });
+    const topics = await prisma.$transaction(parsed.map((result) => prisma.topic.create({ data: result.data as any })));
+    return res.json({ topics });
+  }
+
   const parsed = UpsertTopic.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const topic = await prisma.topic.create({ data: parsed.data as any });

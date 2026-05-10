@@ -10,6 +10,26 @@ import { toast } from "sonner";
 import { ArrowLeft, FileText, Sparkles, Upload, Lock } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
+const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+const TOKEN_KEY = "ignouprep.auth.token";
+
+async function apiCall(path: string, init: RequestInit = {}) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(init.headers || {}),
+  };
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const error: any = new Error(data?.error || `API request failed (${res.status})`);
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
 export default function AdminUpload() {
   const { isAdmin, loading } = useIsAdmin();
   const nav = useNavigate();
@@ -93,45 +113,56 @@ export default function AdminUpload() {
       let candidate = slugify(manualTitle);
       let suffix = 1;
       while (true) {
-        const { data: existing, error: checkError } = await supabase.from("courses").select("id").eq("slug", candidate).maybeSingle();
-        if (checkError) throw checkError;
-        if (!existing) break;
-        candidate = `${slugify(manualTitle)}-${suffix++}`;
+        try {
+          await apiCall(`/courses/${encodeURIComponent(candidate)}`);
+          candidate = `${slugify(manualTitle)}-${suffix++}`;
+        } catch (e: any) {
+          if (e?.status === 404) break;
+          throw e;
+        }
       }
 
-      const { data: createdCourse, error: courseError } = await supabase.from("courses").insert({
-        slug: candidate,
-        title: manualTitle.trim(),
-        description: manualDescription.trim(),
-        cover_emoji: emoji,
-        order_index: Date.now() % 1000,
-        source_text: manualIndex.trim().slice(0, 200000),
-        generation_status: "ready",
-        toc: units.map((unit) => ({ unit: unit.unit, title: unit.title, summary: "", lessons: unit.lessons.map((lesson) => ({ title: lesson.title, summary: lesson.summary })) })),
-      }).select().single();
-      if (courseError) throw courseError;
-      if (!createdCourse) throw new Error("Failed to create course");
+      const toc = units.map((unit) => ({ unit: unit.unit, title: unit.title, summary: "", lessons: unit.lessons.map((lesson) => ({ title: lesson.title, summary: lesson.summary })) }));
+      
+      const createdCourseResponse = await apiCall("/courses", {
+        method: "POST",
+        body: JSON.stringify({
+          slug: candidate,
+          title: manualTitle.trim(),
+          description: manualDescription.trim(),
+          coverEmoji: emoji,
+          orderIndex: Date.now() % 1000,
+          sourceText: manualIndex.trim().slice(0, 200000),
+          generationStatus: "ready",
+          toc: toc,
+        }),
+      });
+      
+      if (!createdCourseResponse?.course) throw new Error("Failed to create course");
+      const createdCourse = createdCourseResponse.course;
 
       const rows: any[] = [];
       units.forEach((unit) => {
         unit.lessons.forEach((lesson, lessonIndex) => {
           const lessonSlug = `${candidate}-${slugify(lesson.title)}`;
           rows.push({
-            course_id: createdCourse.id,
+            courseId: createdCourse.id,
             slug: lessonSlug,
             unit: unit.unit,
-            order_index: lessonIndex,
+            orderIndex: lessonIndex,
             title: lesson.title,
             summary: lesson.summary || "",
             content: [],
             quiz: [],
-            generation_status: "ready",
+            generationStatus: "ready",
           });
         });
       });
 
-      const { error: topicError } = await supabase.from("topics").insert(rows);
-      if (topicError) throw topicError;
+      await apiCall("/topics", {
+        method: "POST",
+        body: JSON.stringify(rows),
+      });
 
       toast.success(`Course "${manualTitle}" created with ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}.`);
       nav(`/course/${candidate}`);

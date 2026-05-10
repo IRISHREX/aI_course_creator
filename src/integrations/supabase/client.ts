@@ -132,11 +132,18 @@ class BackendQuery {
   private op: "select" | "insert" | "update" | "delete" | "upsert" = "select";
   private payload: any;
   private countOnly = false;
+  private returnData = false;
 
   constructor(private table: string) {}
 
   select(_columns = "*", options?: { count?: string; head?: boolean }) {
-    this.op = "select";
+    // Don't override the operation if we're already doing a write operation
+    if (this.op === "select") {
+      this.op = "select";
+    } else {
+      // For insert/update/upsert/delete, just mark that we want to return data
+      this.returnData = true;
+    }
     this.countOnly = Boolean(options?.count && options?.head);
     return this;
   }
@@ -168,7 +175,7 @@ class BackendQuery {
 
   insert(payload: any) {
     this.op = "insert";
-    this.payload = Array.isArray(payload) ? payload[0] : payload;
+    this.payload = payload;
     return this;
   }
 
@@ -300,8 +307,14 @@ class BackendQuery {
 
   private async insertRow() {
     const body = toApi(this.payload);
-    if (this.table === "courses") return { data: fromApi((await api("/courses", { method: "POST", body: JSON.stringify(body) })).course) };
-    if (this.table === "topics") return { data: fromApi((await api("/topics", { method: "POST", body: JSON.stringify(body) })).topic) };
+    if (this.table === "courses") {
+      const response = await api("/courses", { method: "POST", body: JSON.stringify(body) });
+      return { data: fromApi(response.course ?? response.courses ?? response) };
+    }
+    if (this.table === "topics") {
+      const response = await api("/topics", { method: "POST", body: JSON.stringify(body) });
+      return { data: fromApi(response.topic ?? response.topics ?? response) };
+    }
     if (this.table === "bookmarks") return { data: fromApi((await api("/bookmarks", { method: "POST", body: JSON.stringify(body) })).bookmark) };
     if (this.table === "course_pyq") return { data: fromApi((await api("/pyq", { method: "POST", body: JSON.stringify(body) })).pyq) };
     if (this.table === "pyq_topics") return { data: fromApi((await api(`/pyq/${body.pyqId}/topics`, { method: "POST", body: JSON.stringify({ topicId: body.topicId }) })).link) };
