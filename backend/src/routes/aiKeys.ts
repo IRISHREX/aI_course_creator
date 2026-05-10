@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, AuthedRequest } from "../auth.js";
 import { decryptApiKey, saveUserAiKey } from "../aiKeys.js";
+import { body, query } from "../validation.js";
 
 export const aiKeysRouter = Router();
 
@@ -14,14 +15,17 @@ const SaveKey = z.object({
 const adminOnly = [requireAuth, requireRole("admin", "super_admin")] as const;
 
 async function checkGeminiKey(apiKey: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: controller.signal,
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: "Reply with exactly: OK" }] }],
       generationConfig: { maxOutputTokens: 4, temperature: 0 },
     }),
-  });
+  }).finally(() => clearTimeout(timeout));
   const data = await r.json().catch(() => null);
   if (!r.ok) {
     const message = data?.error?.message || data?.error || "Gemini key check failed";
@@ -47,14 +51,9 @@ aiKeysRouter.get("/", ...adminOnly, async (req: AuthedRequest, res) => {
 });
 
 aiKeysRouter.post("/", ...adminOnly, async (req: AuthedRequest, res) => {
-  try {
-    const parsed = SaveKey.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const key = await saveUserAiKey(req.user!.id, parsed.data.apiKey, parsed.data.provider);
-    res.json({ key });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || "Could not save Gemini API key" });
-  }
+  const parsed = body(SaveKey, req);
+  const key = await saveUserAiKey(req.user!.id, parsed.apiKey, parsed.provider);
+  res.json({ key });
 });
 
 aiKeysRouter.post("/check", ...adminOnly, async (req: AuthedRequest, res) => {
@@ -80,7 +79,7 @@ aiKeysRouter.post("/check", ...adminOnly, async (req: AuthedRequest, res) => {
 });
 
 aiKeysRouter.delete("/", ...adminOnly, async (req: AuthedRequest, res) => {
-  const id = typeof req.query.id === "string" ? req.query.id : undefined;
+  const { id } = query(z.object({ id: z.string().uuid().optional() }), req);
   await prisma.userAiKey.deleteMany({ where: { userId: req.user!.id, ...(id ? { id } : {}) } });
   res.json({ ok: true });
 });

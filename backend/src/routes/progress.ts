@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, AuthedRequest } from "../auth.js";
+import { body } from "../validation.js";
 
 export const progressRouter = Router();
 
@@ -22,9 +23,7 @@ const ProgressBody = z.object({
 });
 
 progressRouter.put("/", requireAuth, async (req: AuthedRequest, res) => {
-  const parsed = ProgressBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { topicId, ...data } = parsed.data;
+  const { topicId, ...data } = body(ProgressBody, req);
   const progress = await prisma.topicProgress.upsert({
     where: { userId_topicId: { userId: req.user!.id, topicId } },
     update: data,

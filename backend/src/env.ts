@@ -6,6 +6,16 @@ function req(name: string): string {
   return v;
 }
 
+function int(name: string, fallback: number) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
 function databaseUrl(): string {
   const value = req("DATABASE_URL");
 
@@ -34,7 +44,8 @@ export const env = {
   JWT_SECRET: req("JWT_SECRET"),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || "7d",
   NODE_ENV: process.env.NODE_ENV || "development",
-  PORT: parseInt(process.env.PORT || "8080", 10),
+  PORT: int("PORT", 8080),
+  JSON_BODY_LIMIT: process.env.JSON_BODY_LIMIT || "10mb",
   CORS_ORIGIN: (process.env.CORS_ORIGIN || "*").split(",").map(s => s.trim()),
   LOVABLE_API_KEY: process.env.LOVABLE_API_KEY || "",
   GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || "",

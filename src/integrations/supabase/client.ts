@@ -4,6 +4,14 @@ type Order = { key: string; ascending: boolean };
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
 const TOKEN_KEY = "ignouprep.auth.token";
 const AUTH_EVENT = "ignouprep:auth";
+const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 120000);
+
+class ApiError extends Error {
+  status?: number;
+  code?: string;
+  detail?: unknown;
+  requestId?: string | null;
+}
 
 const keyMap: Record<string, string> = {
   course_id: "courseId",
@@ -49,21 +57,35 @@ function authHeaders() {
 }
 
 async function api(path: string, init: RequestInit = {}) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   const headers = {
     "Content-Type": "application/json",
     ...authHeaders(),
     ...(init.headers || {}),
   };
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    const error: any = new Error(data?.error || `API request failed (${res.status})`);
-    error.status = res.status;
-    error.code = data?.code;
-    error.detail = data?.detail;
+  try {
+    const res = await fetch(`${API_URL}${path}`, { ...init, headers, signal: init.signal ?? controller.signal });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const error = new ApiError(data?.error || `API request failed (${res.status})`);
+      error.status = res.status;
+      error.code = data?.code;
+      error.detail = data?.detail;
+      error.requestId = data?.requestId || res.headers.get("x-request-id");
+      throw error;
+    }
+    return data;
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new ApiError("Request timed out. Please try again.");
+      timeoutError.code = "REQUEST_TIMEOUT";
+      throw timeoutError;
+    }
     throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
-  return data;
 }
 
 function currentUserFromToken(token: string | null) {
@@ -92,9 +114,16 @@ async function makeSession() {
     const { user, roles } = await api("/auth/me");
     return {
       access_token: token,
+      refresh_token: "",
+      expires_in: 0,
+      expires_at: undefined,
+      token_type: "bearer" as const,
       user: {
         id: user.id,
+        aud: "authenticated",
+        role: "authenticated",
         email: user.email,
+        created_at: user.createdAt || new Date(0).toISOString(),
         user_metadata: { display_name: user.displayName },
         app_metadata: { roles },
       },
@@ -128,7 +157,7 @@ class BackendQuery {
   private filters: Filter[] = [];
   private orders: Order[] = [];
   private limitCount?: number;
-  private single = false;
+  private singleRow = false;
   private op: "select" | "insert" | "update" | "delete" | "upsert" = "select";
   private payload: any;
   private countOnly = false;
@@ -169,7 +198,12 @@ class BackendQuery {
   }
 
   maybeSingle() {
-    this.single = true;
+    this.singleRow = true;
+    return this;
+  }
+
+  single() {
+    this.singleRow = true;
     return this;
   }
 
@@ -185,7 +219,7 @@ class BackendQuery {
     return this;
   }
 
-  upsert(payload: any) {
+  upsert(payload: any, _options?: any) {
     this.op = "upsert";
     this.payload = payload;
     return this;
@@ -285,7 +319,7 @@ class BackendQuery {
     }
     const count = Array.isArray(data) ? data.length : data ? 1 : 0;
     if (this.countOnly) return { data: null, count };
-    return { data: this.single ? (Array.isArray(data) ? data[0] ?? null : data ?? null) : data, count };
+    return { data: this.singleRow ? (Array.isArray(data) ? data[0] ?? null : data ?? null) : data, count };
   }
 
   private async tryStatsCount() {
@@ -500,24 +534,24 @@ async function requestReplacementAiKey(message: string) {
   await saveAiKey(apiKey.trim());
 }
 
-async function aiJson(system: string, user: string, fallback: any) {
+function isAiKeyRecoverable(error: any) {
+  return error?.code === "AI_KEY_REQUIRED" || error?.code === "AI_KEY_LIMIT";
+}
+
+function aiErrorMessage(error: any, fallback: string) {
+  if (error?.code === "REQUEST_TIMEOUT") return "AI request timed out. Try a smaller input or run it again.";
+  return error?.message || fallback;
+}
+
+async function withAiKeyRecovery<T>(operation: () => Promise<T>) {
   let askedForKey = false;
   while (true) {
     try {
-      const data = await api("/ai/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [{ role: "system", content: system }, { role: "user", content: user }],
-          temperature: 0.2,
-        }),
-      });
-      const text = data.choices?.[0]?.message?.content || "";
-      return parseJsonPayload(text, fallback);
+      return await operation();
     } catch (error: any) {
-      if (!askedForKey && (error.code === "AI_KEY_REQUIRED" || error.code === "AI_KEY_LIMIT")) {
+      if (!askedForKey && isAiKeyRecoverable(error)) {
         askedForKey = true;
-        await requestReplacementAiKey(error.message || "AI API key required or limit exceeded.");
+        await requestReplacementAiKey(aiErrorMessage(error, "AI API key required or limit exceeded."));
         continue;
       }
       throw error;
@@ -525,39 +559,78 @@ async function aiJson(system: string, user: string, fallback: any) {
   }
 }
 
+async function aiChatContent(messages: Array<{ role: string; content: any }>, temperature = 0.2) {
+  const data = await withAiKeyRecovery(() => api("/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages,
+      temperature,
+    }),
+  }));
+  const content = data.choices?.[0]?.message?.content || "";
+  if (!content.trim()) throw new Error("AI returned an empty response.");
+  return content;
+}
+
+async function aiJson(system: string, user: string, fallback: any) {
+  const text = await aiChatContent([{ role: "system", content: system }, { role: "user", content: user }]);
+  const parsed = parseJsonPayload(text, fallback);
+  if (parsed !== fallback) return parsed;
+
+  const repairText = await aiChatContent([
+    { role: "system", content: "Return only valid JSON. Repair the assistant output into valid JSON that matches the requested shape." },
+    { role: "user", content: `Requested shape fallback:\n${JSON.stringify(fallback)}\n\nAssistant output:\n${text}` },
+  ], 0);
+  const repaired = parseJsonPayload(repairText, fallback);
+  if (repaired === fallback) throw new Error("AI returned JSON that could not be parsed.");
+  return repaired;
+}
+
 async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any) {
-  let askedForKey = false;
-  while (true) {
-    try {
-      const data = await api("/ai/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [{ role: "system", content: `${system}\nAlways call the ${toolName} tool.` }, { role: "user", content: user }],
-          temperature: 0.2,
-          tools: [{
-            type: "function",
-            function: {
-              name: toolName,
-              parameters,
-            },
-          }],
-          tool_choice: { type: "function", function: { name: toolName } },
-        }),
-      });
-      const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-      if (args) return JSON.parse(args);
-      const text = data.choices?.[0]?.message?.content || "";
-      return parseJsonPayload(text, fallback);
-    } catch (error: any) {
-      if (!askedForKey && (error.code === "AI_KEY_REQUIRED" || error.code === "AI_KEY_LIMIT")) {
-        askedForKey = true;
-        await requestReplacementAiKey(error.message || "AI API key required or limit exceeded.");
-        continue;
+  return withAiKeyRecovery(async () => {
+    const data = await api("/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "system", content: `${system}\nAlways call the ${toolName} tool.` }, { role: "user", content: user }],
+        temperature: 0.2,
+        tools: [{
+          type: "function",
+          function: {
+            name: toolName,
+            parameters,
+          },
+        }],
+        tool_choice: { type: "function", function: { name: toolName } },
+      }),
+    });
+    const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (args) {
+      try {
+        return JSON.parse(args);
+      } catch {
+        return parseJsonPayload(args, fallback);
       }
-      throw error;
     }
-  }
+    const text = data.choices?.[0]?.message?.content || "";
+    if (!text.trim()) throw new Error("AI returned an empty response.");
+    const parsed = parseJsonPayload(text, fallback);
+    if (parsed === fallback) throw new Error("AI returned JSON that could not be parsed.");
+    return parsed;
+  });
+}
+
+function ensureRequired(value: unknown, label: string) {
+  const text = cleanString(value);
+  if (!text) throw new Error(`${label} is required`);
+  return text;
+}
+
+function asPositiveCount(value: unknown, fallback: number, max: number) {
+  const count = Number(value);
+  if (!Number.isFinite(count)) return fallback;
+  return Math.min(Math.max(Math.round(count), 1), max);
 }
 
 function slugify(value: string) {
@@ -1063,9 +1136,9 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
     },
   },
   storage: {
-    from() {
+    from(_bucket?: string) {
       return {
-        async upload() {
+        async upload(_path?: string, _file?: File | Blob, _options?: any) {
           return { error: new Error("Storage uploads are not configured on the backend API yet") };
         },
         getPublicUrl(path: string) {

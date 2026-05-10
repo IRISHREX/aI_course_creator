@@ -2,11 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole, AuthedRequest } from "../auth.js";
+import { IdParam, params, query } from "../validation.js";
+import { HttpError } from "../http.js";
 
 export const topicsRouter = Router();
 
 topicsRouter.get("/", async (req, res) => {
-  const courseId = req.query.courseId ? String(req.query.courseId) : undefined;
+  const { courseId } = query(z.object({ courseId: z.string().uuid().optional() }), req);
   const topics = await prisma.topic.findMany({
     where: courseId ? { courseId } : {},
     orderBy: [{ unit: "asc" }, { orderIndex: "asc" }],
@@ -15,14 +17,16 @@ topicsRouter.get("/", async (req, res) => {
 });
 
 topicsRouter.get("/by-slug/:slug", async (req, res) => {
-  const topic = await prisma.topic.findUnique({ where: { slug: String(req.params.slug) } });
-  if (!topic) return res.status(404).json({ error: "Not found" });
+  const { slug } = params(z.object({ slug: z.string().min(1).max(220) }), req);
+  const topic = await prisma.topic.findUnique({ where: { slug } });
+  if (!topic) throw new HttpError(404, "Topic not found", "TOPIC_NOT_FOUND");
   res.json({ topic });
 });
 
 topicsRouter.get("/:id", async (req, res) => {
-  const topic = await prisma.topic.findUnique({ where: { id: String(req.params.id) } });
-  if (!topic) return res.status(404).json({ error: "Not found" });
+  const { id } = params(IdParam, req);
+  const topic = await prisma.topic.findUnique({ where: { id } });
+  if (!topic) throw new HttpError(404, "Topic not found", "TOPIC_NOT_FOUND");
   res.json({ topic });
 });
 
@@ -52,29 +56,26 @@ function normalizeTopicInput(input: any) {
 
 topicsRouter.post("/", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
   if (Array.isArray(req.body)) {
-    const parsed = req.body.map((item) => UpsertTopic.safeParse(normalizeTopicInput(item)));
-    const invalid = parsed.find((result) => !result.success);
-    if (invalid) return res.status(400).json({ error: invalid.error.flatten() });
-    const topics = await prisma.$transaction(parsed.map((result) => prisma.topic.create({ data: result.data as any })));
+    const parsed = req.body.map((item) => UpsertTopic.parse(normalizeTopicInput(item)));
+    const topics = await prisma.$transaction(parsed.map((item) => prisma.topic.create({ data: item as any })));
     return res.json({ topics });
   }
 
-  const parsed = UpsertTopic.safeParse(normalizeTopicInput(req.body));
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const topic = await prisma.topic.create({ data: parsed.data as any });
+  const parsed = UpsertTopic.parse(normalizeTopicInput(req.body));
+  const topic = await prisma.topic.create({ data: parsed as any });
   res.json({ topic });
 });
 
 topicsRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), async (req: AuthedRequest, res) => {
-  const parsed = UpsertTopic.partial().safeParse(normalizeTopicInput(req.body));
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { id } = params(IdParam, req);
+  const parsed = UpsertTopic.partial().parse(normalizeTopicInput(req.body));
   const note = (req.body?.versionNote as string) || null;
 
   const result = await prisma.$transaction(async (tx) => {
-    const topicId = String(req.params.id);
+    const topicId = id;
     const before = await tx.topic.findUnique({ where: { id: topicId } });
-    if (!before) throw new Error("Not found");
-    const topic = await tx.topic.update({ where: { id: topicId }, data: parsed.data as any });
+    if (!before) throw new HttpError(404, "Topic not found", "TOPIC_NOT_FOUND");
+    const topic = await tx.topic.update({ where: { id: topicId }, data: parsed as any });
     await tx.topicVersion.create({
       data: {
         topicId: before.id, title: before.title, summary: before.summary,
@@ -89,21 +90,23 @@ topicsRouter.patch("/:id", requireAuth, requireRole("admin", "super_admin"), asy
 });
 
 topicsRouter.delete("/:id", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  await prisma.topic.delete({ where: { id: String(req.params.id) } });
+  const { id } = params(IdParam, req);
+  await prisma.topic.delete({ where: { id } });
   res.json({ ok: true });
 });
 
 topicsRouter.get("/:id/versions", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
+  const { id } = params(IdParam, req);
   const versions = await prisma.topicVersion.findMany({
-    where: { topicId: String(req.params.id) }, orderBy: { createdAt: "desc" },
+    where: { topicId: id }, orderBy: { createdAt: "desc" },
   });
   res.json({ versions });
 });
 
 topicsRouter.post("/:id/revert/:versionId", requireAuth, requireRole("admin", "super_admin"), async (req, res) => {
-  const topicId = String(req.params.id);
-  const v = await prisma.topicVersion.findUnique({ where: { id: String(req.params.versionId) } });
-  if (!v || v.topicId !== topicId) return res.status(404).json({ error: "Version not found" });
+  const { id: topicId, versionId } = params(z.object({ id: z.string().uuid(), versionId: z.string().uuid() }), req);
+  const v = await prisma.topicVersion.findUnique({ where: { id: versionId } });
+  if (!v || v.topicId !== topicId) throw new HttpError(404, "Version not found", "VERSION_NOT_FOUND");
   const topic = await prisma.topic.update({
     where: { id: topicId },
     data: {

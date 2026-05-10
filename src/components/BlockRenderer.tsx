@@ -26,6 +26,8 @@ function stripMarkup(s: string): string {
     .replace(/`(.+?)`/g, "$1");
 }
 
+const stripBold = stripMarkup;
+
 /**
  * Render text with **bold** markers expanded, while assigning per-word data-w indices
  * starting at baseIndex. Each whitespace-separated token = one word index, regardless of bold.

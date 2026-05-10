@@ -4,6 +4,8 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { signToken, requireAuth, AuthedRequest } from "../auth.js";
 import { env } from "../env.js";
+import { HttpError } from "../http.js";
+import { body } from "../validation.js";
 
 export const authRouter = Router();
 
@@ -14,13 +16,11 @@ const Creds = z.object({
 });
 
 authRouter.post("/signup", async (req, res) => {
-  const parsed = Creds.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { email, password, displayName } = parsed.data;
+  const { email, password, displayName } = body(Creds, req);
   const lower = email.toLowerCase();
 
   const existing = await prisma.user.findUnique({ where: { email: lower } });
-  if (existing) return res.status(409).json({ error: "Email already in use" });
+  if (existing) throw new HttpError(409, "Email already in use", "EMAIL_IN_USE");
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
@@ -44,15 +44,13 @@ authRouter.post("/signup", async (req, res) => {
 });
 
 authRouter.post("/login", async (req, res) => {
-  const parsed = Creds.pick({ email: true, password: true }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { email, password } = parsed.data;
+  const { email, password } = body(Creds.pick({ email: true, password: true }), req);
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  if (!user) return res.status(401).json({ error: "Invalid credentials" });
+  if (!user) throw new HttpError(401, "Invalid credentials", "INVALID_CREDENTIALS");
 
   const passwordHash = typeof user.passwordHash === "string" ? user.passwordHash : String(user.passwordHash ?? "");
   const ok = await bcrypt.compare(password, passwordHash);
-  if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+  if (!ok) throw new HttpError(401, "Invalid credentials", "INVALID_CREDENTIALS");
 
   const token = signToken({ sub: user.id, email: user.email });
   res.json({ token, user: { id: user.id, email: user.email, displayName: user.displayName } });
@@ -67,11 +65,10 @@ authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
 });
 
 authRouter.patch("/me", requireAuth, async (req: AuthedRequest, res) => {
-  const parsed = z.object({ displayName: z.string().min(1).max(120) }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const parsed = body(z.object({ displayName: z.string().min(1).max(120) }), req);
   const user = await prisma.user.update({
     where: { id: req.user!.id },
-    data: { displayName: parsed.data.displayName },
+    data: { displayName: parsed.displayName },
     select: { id: true, email: true, displayName: true, createdAt: true },
   });
   res.json({ user, roles: req.user!.roles });

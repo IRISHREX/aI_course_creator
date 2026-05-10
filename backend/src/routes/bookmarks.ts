@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, AuthedRequest } from "../auth.js";
+import { body, IdParam, params } from "../validation.js";
 
 export const bookmarksRouter = Router();
 
@@ -21,15 +22,15 @@ const Body = z.object({
 });
 
 bookmarksRouter.post("/", requireAuth, async (req: AuthedRequest, res) => {
-  const parsed = Body.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const parsed = body(Body, req);
   const bookmark = await prisma.bookmark.create({
-    data: { ...parsed.data, userId: req.user!.id } as any,
+    data: { ...parsed, userId: req.user!.id } as any,
   });
   res.json({ bookmark });
 });
 
 bookmarksRouter.delete("/:id", requireAuth, async (req: AuthedRequest, res) => {
-  await prisma.bookmark.deleteMany({ where: { id: String(req.params.id), userId: req.user!.id } });
+  const { id } = params(IdParam, req);
+  await prisma.bookmark.deleteMany({ where: { id, userId: req.user!.id } });
   res.json({ ok: true });
 });

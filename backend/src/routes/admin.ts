@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole } from "../auth.js";
+import { body, IdParam, params, query } from "../validation.js";
 
 export const adminRouter = Router();
 
@@ -14,10 +15,19 @@ adminRouter.get("/stats", requireAuth, requireRole("admin", "super_admin"), asyn
 });
 
 adminRouter.get("/users", requireAuth, requireRole("super_admin"), async (req, res) => {
-  const q = String(req.query.q || "").toLowerCase();
+  const { q } = query(z.object({ q: z.string().max(120).optional().default("") }), req);
+  const search = q.toLowerCase();
   const users = await prisma.user.findMany({
-    where: q ? { OR: [{ email: { contains: q } }, { displayName: { contains: q } }] } : {},
-    include: { roles: true }, orderBy: { createdAt: "desc" }, take: 200,
+    where: search ? { OR: [{ email: { contains: search } }, { displayName: { contains: search } }] } : {},
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      createdAt: true,
+      roles: { select: { id: true, role: true, createdAt: true, userId: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
   });
   res.json({ users });
 });
@@ -29,9 +39,7 @@ const RoleBody = z.object({
 });
 
 adminRouter.post("/roles", requireAuth, requireRole("super_admin"), async (req, res) => {
-  const parsed = RoleBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { userId, role, grant } = parsed.data;
+  const { userId, role, grant } = body(RoleBody, req);
   if (grant) {
     await prisma.userRole.upsert({
       where: { userId_role: { userId, role } },
@@ -44,6 +52,7 @@ adminRouter.post("/roles", requireAuth, requireRole("super_admin"), async (req, 
 });
 
 adminRouter.delete("/users/:id", requireAuth, requireRole("super_admin"), async (req, res) => {
-  await prisma.user.delete({ where: { id: String(req.params.id) } });
+  const { id } = params(IdParam, req);
+  await prisma.user.delete({ where: { id } });
   res.json({ ok: true });
 });
