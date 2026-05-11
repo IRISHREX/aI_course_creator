@@ -13,7 +13,7 @@ import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark } from "lucide-react";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -32,6 +32,7 @@ export default function TopicPage() {
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [genMindmap, setGenMindmap] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
+  const [readerZoom, setReaderZoom] = useState(100);
   const terrainContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -214,21 +215,24 @@ export default function TopicPage() {
   const linkPrefix = `/course/${courseSlug}`;
 
   return (
-    <div className="container max-w-5xl py-10 relative">
+    <div className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10">
       <div ref={terrainContainerRef} className="fixed inset-0 -z-20 overflow-hidden pointer-events-none" />
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <Button asChild variant="ghost" size="sm">
-          <Link to={linkPrefix}><ArrowLeft className="h-4 w-4 mr-1" /> {course?.title || "Course"}</Link>
+      <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 md:flex-row md:items-center md:justify-between">
+        <Button asChild variant="ghost" size="sm" className="max-w-full justify-start px-2">
+          <Link to={linkPrefix} className="min-w-0">
+            <ArrowLeft className="h-4 w-4 shrink-0 mr-1" />
+            <span className="truncate">{course?.title || "Course"}</span>
+          </Link>
         </Button>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-5 gap-1.5 sm:flex sm:items-center sm:gap-2">
           <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} />
           {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
-          <Button variant="ghost" size="sm" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page">
+          <Button variant="ghost" size="icon" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
             {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
           </Button>
           {isAdmin && (
-            <Button asChild variant="neon" size="sm">
-              <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Edit</Link>
+            <Button asChild variant="neon" size="icon" aria-label="Edit lesson">
+              <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4" /></Link>
             </Button>
           )}
         </div>
@@ -236,50 +240,63 @@ export default function TopicPage() {
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="text-xs font-mono text-primary tracking-widest mb-2">UNIT {topic.unit} · LESSON {topic.order_index}</div>
-        <h1 className="font-display text-3xl md:text-5xl font-bold">{topic.title}</h1>
-        <p className="text-lg text-muted-foreground mt-3">{topic.summary}</p>
+        <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl md:text-5xl">{topic.title}</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base md:text-lg">{topic.summary}</p>
       </motion.div>
 
-      <div className="my-8"><Visualization kind={topic.visualization} /></div>
+      <div className="my-5 sm:my-8"><Visualization kind={topic.visualization} /></div>
 
       {/* Pagination header */}
       {pages.length > 1 && (
-        <div className="flex items-center justify-between mb-4 glass rounded-xl p-3">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl p-3 glass">
           <div className="text-xs font-mono text-muted-foreground">Page {pageIdx + 1} of {pages.length}</div>
-          <div className="flex gap-1">
-            {pages.map((_, i) => (
-              <button key={i} onClick={() => setPageIdx(i)}
-                className={`h-2 w-8 rounded-full transition-colors ${i === pageIdx ? "bg-primary" : "bg-muted hover:bg-primary/40"}`} />
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="hidden min-w-0 gap-1 sm:flex">
+              {pages.map((_, i) => (
+                <button key={i} onClick={() => setPageIdx(i)}
+                  className={`h-2 w-5 rounded-full transition-colors sm:w-8 ${i === pageIdx ? "bg-primary" : "bg-muted hover:bg-primary/40"}`} />
+              ))}
+            </div>
+            <div className="flex items-center gap-1 rounded-md border border-border/60 bg-background/40 p-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setReaderZoom((z) => Math.max(85, z - 10))} aria-label="Zoom out">
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <span className="w-8 text-center font-mono text-[10px] text-muted-foreground">{readerZoom}%</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setReaderZoom((z) => Math.min(130, z + 10))} aria-label="Zoom in">
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Render current page with karaoke offsets */}
-      <motion.div
-        key={pageIdx}
-        initial={{ opacity: 0, x: pageTurnDirection === "next" ? 30 : -30, rotateY: pageTurnDirection === "next" ? -10 : 10 }}
-        animate={{ opacity: 1, x: 0, rotateY: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-        className="space-y-5"
-      >
-        {currentPage && (() => {
-          let off = 0;
-          return currentPage.blocks.map((b: any, i: number) => {
-            const wo = off;
-            off += countWords(blockToText(b));
-            return (
-              <BlockRenderer
-                key={i}
-                block={b}
-                wordOffset={wo}
-                activeWordIndex={activeWord}
-                onWordClick={(idx) => karaokeSeek(idx)}
-              />
-            );
-          });
-        })()}
-      </motion.div>
+      <div style={{ fontSize: `${readerZoom}%` }}>
+        <motion.div
+          key={pageIdx}
+          initial={{ opacity: 0, x: pageTurnDirection === "next" ? 30 : -30, rotateY: pageTurnDirection === "next" ? -10 : 10 }}
+          animate={{ opacity: 1, x: 0, rotateY: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="space-y-5"
+        >
+          {currentPage && (() => {
+            let off = 0;
+            return currentPage.blocks.map((b: any, i: number) => {
+              const wo = off;
+              off += countWords(blockToText(b));
+              return (
+                <BlockRenderer
+                  key={i}
+                  block={b}
+                  wordOffset={wo}
+                  activeWordIndex={activeWord}
+                  onWordClick={(idx) => karaokeSeek(idx)}
+                />
+              );
+            });
+          })()}
+        </motion.div>
+      </div>
 
       {/* Pagination footer */}
       {pages.length > 1 && (

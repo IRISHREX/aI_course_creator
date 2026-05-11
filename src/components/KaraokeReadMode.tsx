@@ -128,15 +128,15 @@ export function KaraokeReadMode({ text, onWordIndex }: Props) {
   return (
     <div className="flex items-center gap-1">
       {state === "idle" ? (
-        <Button variant="neon" size="sm" onClick={start} title="Read aloud (click any word to jump)">
-          <Volume2 className="h-4 w-4 mr-1" /> Read
+        <Button variant="neon" size="sm" onClick={start} title="Read aloud (click any word to jump)" className="px-2 sm:px-3">
+          <Volume2 className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Read</span>
         </Button>
       ) : (
         <>
           <Button variant="neon" size="sm" onClick={togglePause}>
             {state === "playing" ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </Button>
-          <Button variant="ghost" size="sm" onClick={stop}><Square className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={stop}><Square className="h-4 w-4" /></Button>
         </>
       )}
       <Popover>

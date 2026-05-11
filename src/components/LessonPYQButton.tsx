@@ -46,11 +46,11 @@ export const LessonPYQButton = ({ topicId, courseId }: { topicId: string; course
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm">
-          <FileQuestion className="h-4 w-4 mr-1" /> PYQ
+        <Button variant="ghost" size="sm" className="px-2 sm:px-3">
+          <FileQuestion className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">PYQ</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[420px] max-h-[70vh] overflow-y-auto" align="end">
+      <PopoverContent className="max-h-[70vh] w-[calc(100vw-1.5rem)] max-w-[420px] overflow-y-auto" align="end">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
         ) : items.length === 0 ? (

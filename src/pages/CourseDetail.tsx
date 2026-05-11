@@ -66,18 +66,18 @@ export default function CourseDetail() {
   };
 
   return (
-    <div className="container py-12">
+    <div className="container overflow-hidden px-3 py-8 sm:px-4 sm:py-12">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link to="/courses"><ArrowLeft className="h-4 w-4 mr-1" /> All courses</Link>
       </Button>
 
-      <div className="flex items-start justify-between flex-wrap gap-4 mb-10">
-        <div>
-          <div className="text-5xl mb-3">{course.cover_emoji}</div>
-          <h1 className="font-display text-4xl md:text-5xl font-bold">{course.title}</h1>
-          <p className="text-muted-foreground mt-2 max-w-2xl">{course.description}</p>
+      <div className="mb-10">
+        <div className="max-w-7xl">
+          <div className="mb-3 text-4xl sm:text-5xl">{course.cover_emoji}</div>
+          <h1 className="font-display text-2xl font-bold leading-tight sm:text-4xl md:text-5xl">{course.title}</h1>
+          <p className="mt-3 max-w-6xl text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-relaxed">{course.description}</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <Button asChild variant="ghost" size="sm">
             <Link to={`/course/${course.slug}/pyq`}><FileQuestion className="h-4 w-4 mr-1" /> PYQs {pyqCount > 0 && <span className="ml-1 text-xs font-mono text-primary">({pyqCount})</span>}</Link>
           </Button>
@@ -88,7 +88,7 @@ export default function CourseDetail() {
             <Download className="h-4 w-4 mr-1" /> {downloading ? "Building…" : "Download .docx"}
           </Button>
           {isAdmin && (
-            <Button asChild variant="hero">
+            <Button asChild variant="hero" className="col-span-2 sm:col-span-1">
               <Link to={`/course/${course.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Manage</Link>
             </Button>
           )}
@@ -97,17 +97,17 @@ export default function CourseDetail() {
 
       {/* Auto Table of Contents */}
       {topics.length > 0 && (
-        <div className="glass rounded-2xl p-5 mb-8">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="glass mb-8 rounded-xl p-4 sm:rounded-2xl sm:p-5">
+          <div className="mb-3 flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-primary" />
-            <h2 className="font-display font-bold text-lg">Table of Contents</h2>
-            <span className="text-xs text-muted-foreground ml-auto">{topics.length} lessons</span>
+            <h2 className="font-display text-base font-bold sm:text-lg">Table of Contents</h2>
+            <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">{topics.length} lessons</span>
           </div>
-          <ol className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+          <ol className="grid gap-x-10 gap-y-1 text-sm sm:grid-cols-2 xl:grid-cols-3">
             {topics.map((t, i) => (
-              <li key={t.id} className="flex gap-2">
-                <span className="font-mono text-xs text-muted-foreground w-10">{t.unit}.{t.order_index}</span>
-                <Link to={`/course/${course.slug}/topic/${t.slug}`} className="hover:text-primary truncate">{t.title}</Link>
+              <li key={t.id} className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-2">
+                <span className="font-mono text-xs text-muted-foreground">{t.unit}.{t.order_index}</span>
+                <Link to={`/course/${course.slug}/topic/${t.slug}`} className="min-w-0 break-words leading-6 hover:text-primary sm:truncate">{t.title}</Link>
               </li>
             ))}
           </ol>

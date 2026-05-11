@@ -202,7 +202,7 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
   if (b.type === "text") {
     return (
       <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
-        className="text-lg leading-relaxed">
+        className="text-[0.95em] leading-7 sm:text-[1.125em] sm:leading-relaxed">
         <HighlightedText value={b.value || ""} baseIndex={wordOffset} activeIndex={activeWordIndex} onWordClick={onWordClick} />
       </motion.p>
     );
@@ -211,9 +211,9 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
   if (b.type === "highlight") {
     return (
       <motion.div initial={{ opacity: 0, x: -10 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
-        className="glass border-l-4 border-primary p-5 rounded-xl flex gap-3">
+        className="glass flex gap-3 rounded-xl border-l-4 border-primary p-4 sm:p-5">
         <Sparkles className="h-5 w-5 text-primary flex-none mt-0.5" />
-        <div className="text-base">
+        <div className="text-[0.9em] leading-7 sm:text-[1em]">
           <HighlightedText value={"Key point. " + (b.value || "")} baseIndex={wordOffset} activeIndex={activeWordIndex} onWordClick={onWordClick} />
         </div>
       </motion.div>
@@ -225,9 +225,9 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
     const titleStripped = b.title ? stripBold(b.title) + "." : "";
     const titleWords = titleStripped ? countWords(titleStripped) : 0;
     return (
-      <div className="glass rounded-2xl p-6">
+      <div className="glass rounded-xl p-4 sm:rounded-2xl sm:p-6">
         {b.title && (
-          <div className="font-display font-bold text-lg mb-4">
+          <div className="mb-4 font-display text-[1em] font-bold sm:text-[1.125em]">
             <HighlightedText value={b.title + "."} baseIndex={off} activeIndex={activeWordIndex} onWordClick={onWordClick} />
           </div>
         )}
@@ -236,7 +236,7 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
             const prev = b.items.slice(0, j).reduce((acc: number, s: string, k: number) => acc + countWords(`${k + 1}. ${s}`), 0);
             const itemBase = off + titleWords + prev + 1; // +1 to skip "j."
             return (
-              <li key={j} className="flex gap-3">
+              <li key={j} className="flex gap-3 text-[0.9em] leading-7 sm:text-[1em]">
                 <span className="h-6 w-6 rounded-full bg-primary/20 text-primary grid place-items-center text-xs font-mono mt-0.5">{j + 1}</span>
                 <span><HighlightedText value={it} baseIndex={itemBase} activeIndex={activeWordIndex} onWordClick={onWordClick} /></span>
               </li>
@@ -249,13 +249,13 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
 
   if (b.type === "timeline") {
     return (
-      <div className="glass rounded-2xl p-6">
+      <div className="glass rounded-xl p-4 sm:rounded-2xl sm:p-6">
         <div className="space-y-3">
           {(b.items || []).map((it: any, j: number) => (
-            <div key={j} className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-gradient-primary grid place-items-center font-display font-bold text-primary-foreground shadow-glow">{it.label}</div>
+            <div key={j} className="flex items-center gap-3 sm:gap-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-primary font-display text-sm font-bold text-primary-foreground shadow-glow sm:h-12 sm:w-12 sm:text-base">{it.label}</div>
               <div className="flex-1 h-px bg-border" />
-              <div className="flex-1 text-sm">{it.desc}</div>
+              <div className="flex-1 text-sm leading-6">{it.desc}</div>
             </div>
           ))}
         </div>

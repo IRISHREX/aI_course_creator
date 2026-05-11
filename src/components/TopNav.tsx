@@ -17,16 +17,16 @@ export const TopNav = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-40 glass border-b border-border/60">
-      <div className="container flex h-16 items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2 group">
-          <div className="relative h-9 w-9 rounded-xl bg-gradient-primary grid place-items-center shadow-glow">
-            <Radio className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
+    <header className="sticky top-0 z-40 glass border-b border-border/60 overflow-hidden">
+      <div className="container flex h-16 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
+        <Link to="/" className="flex min-w-0 items-center gap-2 group">
+          <div className="relative grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-gradient-primary shadow-glow sm:h-9 sm:w-9">
+            <Radio className="h-4 w-4 text-primary-foreground sm:h-5 sm:w-5" strokeWidth={2.5} />
             <span className="absolute inset-0 rounded-xl border border-primary/40 animate-pulse-glow" />
           </div>
-          <div>
-            <div className="font-display font-bold text-lg leading-none">Signal</div>
-            <div className="text-[10px] text-muted-foreground tracking-widest uppercase">Academy</div>
+          <div className="min-w-0">
+            <div className="font-display text-base font-bold leading-none sm:text-lg">Signal</div>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground sm:text-[10px]">Academy</div>
           </div>
         </Link>
 
@@ -47,7 +47,7 @@ export const TopNav = () => {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <ThemeSwitcher />
           {user ? (
             <>
@@ -55,7 +55,7 @@ export const TopNav = () => {
                 {user.email?.split("@")[0]}
                 {isSuperAdmin ? <span className="ml-1 text-primary">· super</span> : isAdmin && <span className="ml-1 text-primary">· admin</span>}
               </span>
-              <Button variant="ghost" size="sm" onClick={signOut}>
+              <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
                 <LogOut className="h-4 w-4" />
               </Button>
             </>
@@ -68,7 +68,7 @@ export const TopNav = () => {
           )}
         </div>
       </div>
-      <nav className="md:hidden flex items-center justify-around border-t border-border/60 py-2">
+      <nav className="grid grid-cols-3 border-t border-border/60 py-2 md:hidden">
         {navItems.map((it) => (
           <NavLink key={it.to} to={it.to}
             className={({ isActive }) =>
