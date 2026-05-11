@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, FileText, Sparkles, Upload, Lock } from "lucide-react";
@@ -12,6 +13,55 @@ import { extractTextFromFile } from "@/lib/extractText";
 
 const API_URL = (import.meta.env.VITE_API_URL || "https://ai-course-creator-be.onrender.com").replace(/\/$/, "");
 const TOKEN_KEY = "ignouprep.auth.token";
+
+type LessonInput = { title: string; summary: string };
+type UnitInput = { unit: number; title: string; lessons: LessonInput[] };
+type ManualParsed = { title: string; description: string; emojiValue: string; units: UnitInput[] };
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function readLesson(rawLesson: unknown): LessonInput {
+  const lesson = asRecord(rawLesson);
+  return {
+    title: (typeof rawLesson === "string" ? rawLesson : readString(lesson.title)).trim(),
+    summary: (typeof rawLesson === "string" ? "" : readString(lesson.summary)).trim(),
+  };
+}
+
+function normalizeUnits(units: UnitInput[]) {
+  const grouped = units.reduce<UnitInput[]>((acc, unit) => {
+    const unitNumber = Number(unit.unit) || acc.length + 1;
+    const existing = acc.find((item) => item.unit === unitNumber);
+    const lessons = unit.lessons.filter((lesson) => lesson.title);
+    if (!lessons.length) return acc;
+    if (existing) existing.lessons.push(...lessons);
+    else acc.push({ unit: unitNumber, title: unit.title || `Unit ${unitNumber}`, lessons });
+    return acc;
+  }, []);
+
+  return grouped
+    .sort((a, b) => a.unit - b.unit)
+    .map((unit, index) => ({
+      ...unit,
+      unit: unit.unit || index + 1,
+      title: unit.title || `Unit ${unit.unit || index + 1}`,
+    }));
+}
 
 async function apiCall(path: string, init: RequestInit = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
@@ -23,7 +73,7 @@ async function apiCall(path: string, init: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const error: any = new Error(data?.error || `API request failed (${res.status})`);
+    const error = new Error(readString(asRecord(data).error) || `API request failed (${res.status})`) as Error & { status?: number };
     error.status = res.status;
     throw error;
   }
@@ -42,7 +92,10 @@ export default function AdminUpload() {
   const [manualTitle, setManualTitle] = useState("");
   const [manualDescription, setManualDescription] = useState("");
   const [manualIndex, setManualIndex] = useState("");
+  const [manualJson, setManualJson] = useState("");
+  const [manualMode, setManualMode] = useState<"outline" | "json">("outline");
   const [manualBusy, setManualBusy] = useState(false);
+  const manualRequestRef = useRef(false);
 
   if (loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   if (!isAdmin) return (
@@ -61,8 +114,8 @@ export default function AdminUpload() {
       if (!text.trim()) throw new Error("No text extracted");
       setRawText(text);
       toast.success(`Extracted ${text.length.toLocaleString()} characters from ${file.name}`);
-    } catch (e: any) {
-      toast.error(e.message || "Could not read file");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Could not read file"));
     }
   };
 
@@ -87,66 +140,137 @@ export default function AdminUpload() {
         return;
       }
 
-      const lessonTitle = line.replace(/^[\-\*\u2022]\s*/, "").replace(/^\d+[\.|\)]\s*/, "").trim();
+      const cleanLine = line
+        .replace(/^[-*\u2022]\s*/, "")
+        .replace(/^\d+(?:\.\d+)?[\.)]?\s*/, "")
+        .trim();
+      const [titlePart, ...summaryParts] = cleanLine.split(/\s*(?:::|--)\s*/);
+      const lessonTitle = titlePart.trim();
       if (!lessonTitle) return;
       if (!hasUnitHeading && currentUnit.title === `Unit ${unitCount + 1}` && currentUnit.lessons.length === 0) {
         currentUnit.title = `Unit ${unitCount + 1}`;
       }
-      currentUnit.lessons.push({ title: lessonTitle, summary: "" });
+      currentUnit.lessons.push({ title: lessonTitle, summary: summaryParts.join(" ").trim() });
     });
 
     if (currentUnit.lessons.length || units.length === 0) units.push(currentUnit);
-    return units.map((unit, index) => ({ ...unit, unit: unit.unit || index + 1, title: unit.title || `Unit ${index + 1}` }));
+    return normalizeUnits(units.map((unit, index) => ({ ...unit, unit: unit.unit || index + 1, title: unit.title || `Unit ${index + 1}` })));
+  };
+
+  const parseManualJson = (text: string): ManualParsed => {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error("Manual JSON is not valid.");
+    }
+
+    const root = asRecord(payload);
+    const course = asRecord(root.course);
+    const source = Object.keys(course).length ? { ...course, ...root } : root;
+    const title = (readString(source.title) || manualTitle).trim();
+    const description = (readString(source.description) || manualDescription).trim();
+    const emojiValue = (readString(source.emoji) || readString(source.coverEmoji) || emoji).trim() || emoji;
+    const rawUnits = readArray(source.units).length ? readArray(source.units) : readArray(source.toc);
+    const flatLessons = readArray(source.lessons).length ? readArray(source.lessons) : readArray(source.topics);
+
+    const units = rawUnits.length
+      ? rawUnits.map((rawUnit, unitIndex): UnitInput => {
+          const unit = asRecord(rawUnit);
+          const rawLessons = readArray(unit.lessons).length ? readArray(unit.lessons) : readArray(unit.topics);
+          return {
+            unit: Number(unit.unit) || unitIndex + 1,
+            title: (readString(unit.title) || `Unit ${unitIndex + 1}`).trim(),
+            lessons: rawLessons.map(readLesson).filter((lesson) => lesson.title),
+          };
+        }).filter((unit) => unit.lessons.length)
+      : flatLessons.map((rawLesson): UnitInput => {
+          const lesson = asRecord(rawLesson);
+          const unitNumber = Number(lesson.unit) || 1;
+          const parsedLesson = readLesson(rawLesson);
+          return {
+            unit: unitNumber,
+            title: (readString(lesson.unitTitle) || `Unit ${unitNumber}`).trim(),
+            lessons: [parsedLesson],
+          };
+        }).filter((unit) => unit.lessons[0].title);
+
+    return { title, description, emojiValue, units: normalizeUnits(units) };
   };
 
   const createManualCourse = async () => {
-    if (!manualTitle.trim()) { toast.error("Course title required"); return; }
-    if (!manualDescription.trim()) { toast.error("Course description required"); return; }
-    if (!manualIndex.trim()) { toast.error("Course index required"); return; }
+    if (manualRequestRef.current || manualBusy) return;
 
-    const units = parseManualIndex(manualIndex.trim());
+    let parsedManual: ManualParsed;
+    try {
+      parsedManual = manualMode === "json"
+        ? parseManualJson(manualJson.trim())
+        : {
+            title: manualTitle.trim(),
+            description: manualDescription.trim(),
+            emojiValue: emoji,
+            units: parseManualIndex(manualIndex.trim()),
+          };
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Could not read manual course input"));
+      return;
+    }
+
+    const { title: courseTitle, description: courseDescription, emojiValue, units } = parsedManual;
+    if (!courseTitle) { toast.error("Course title required"); return; }
+    if (!courseDescription) { toast.error("Course description required"); return; }
+    if (manualMode === "outline" && !manualIndex.trim()) { toast.error("Course index required"); return; }
+    if (manualMode === "json" && !manualJson.trim()) { toast.error("Course JSON required"); return; }
+
     const lessonCount = units.reduce((sum, u) => sum + u.lessons.length, 0);
     if (lessonCount === 0) { toast.error("Enter at least one lesson in the course index."); return; }
 
+    manualRequestRef.current = true;
     setManualBusy(true);
+    let createdCourseId: string | null = null;
     try {
-      let candidate = slugify(manualTitle);
+      let candidate = slugify(courseTitle);
       let suffix = 1;
       while (true) {
         try {
           await apiCall(`/courses/${encodeURIComponent(candidate)}`);
-          candidate = `${slugify(manualTitle)}-${suffix++}`;
-        } catch (e: any) {
-          if (e?.status === 404) break;
+          candidate = `${slugify(courseTitle)}-${suffix++}`;
+        } catch (e: unknown) {
+          if ((e as { status?: number })?.status === 404) break;
           throw e;
         }
       }
 
       const toc = units.map((unit) => ({ unit: unit.unit, title: unit.title, summary: "", lessons: unit.lessons.map((lesson) => ({ title: lesson.title, summary: lesson.summary })) }));
       
-      const createdCourseResponse = await apiCall("/courses", {
+      const createdCourseResponse = asRecord(await apiCall("/courses", {
         method: "POST",
         body: JSON.stringify({
           slug: candidate,
-          title: manualTitle.trim(),
-          description: manualDescription.trim(),
-          coverEmoji: emoji,
+          title: courseTitle,
+          description: courseDescription,
+          coverEmoji: emojiValue,
           orderIndex: Date.now() % 1000,
-          sourceText: manualIndex.trim().slice(0, 200000),
+          sourceText: (manualMode === "json" ? manualJson : manualIndex).trim().slice(0, 200000),
           generationStatus: "ready",
           toc: toc,
         }),
-      });
+      }));
       
-      if (!createdCourseResponse?.course) throw new Error("Failed to create course");
-      const createdCourse = createdCourseResponse.course;
+      const createdCourse = asRecord(createdCourseResponse.course);
+      if (!createdCourse.id) throw new Error("Failed to create course");
+      createdCourseId = readString(createdCourse.id);
 
-      const rows: any[] = [];
+      const rows: Array<Record<string, unknown>> = [];
+      const slugCounts = new Map<string, number>();
       units.forEach((unit) => {
         unit.lessons.forEach((lesson, lessonIndex) => {
-          const lessonSlug = `${candidate}-${slugify(lesson.title)}`;
+          const baseSlug = `${candidate}-${slugify(lesson.title)}`;
+          const seen = slugCounts.get(baseSlug) || 0;
+          slugCounts.set(baseSlug, seen + 1);
+          const lessonSlug = seen ? `${baseSlug}-${seen + 1}` : baseSlug;
           rows.push({
-            courseId: createdCourse.id,
+            courseId: createdCourseId,
             slug: lessonSlug,
             unit: unit.unit,
             orderIndex: lessonIndex,
@@ -164,12 +288,20 @@ export default function AdminUpload() {
         body: JSON.stringify(rows),
       });
 
-      toast.success(`Course "${manualTitle}" created with ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}.`);
+      toast.success(`Course "${courseTitle}" created with ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}.`);
       nav(`/course/${candidate}`);
-    } catch (e: any) {
-      toast.error(e.message || "Manual creation failed");
+    } catch (e: unknown) {
+      if (createdCourseId) {
+        try {
+          await apiCall(`/courses/${encodeURIComponent(createdCourseId)}`, { method: "DELETE" });
+        } catch {
+          // Best-effort cleanup; keep the original creation error visible.
+        }
+      }
+      toast.error(errorMessage(e, "Manual creation failed"));
     } finally {
       setManualBusy(false);
+      manualRequestRef.current = false;
     }
   };
 
@@ -185,8 +317,8 @@ export default function AdminUpload() {
       if (data?.error) throw new Error(data.error);
       toast.success(`Course "${title}" created with ${data.topicCount} lessons${data.scannedChunks ? ` after scanning ${data.scannedChunks} chunk${data.scannedChunks === 1 ? "" : "s"}` : ""}`);
       nav(`/course/${data.slug}`);
-    } catch (e: any) {
-      toast.error(e.message || "Generation failed");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Generation failed"));
     } finally { setBusy(false); }
   };
 
@@ -255,11 +387,23 @@ export default function AdminUpload() {
             <Textarea rows={3} value={manualDescription} onChange={e => setManualDescription(e.target.value)} placeholder="Write a short course description…" />
           </div>
 
-          <div>
-            <Label>Course index</Label>
-            <Textarea rows={8} value={manualIndex} onChange={e => setManualIndex(e.target.value)} placeholder="Add lesson titles here, one per line. Use Unit headings like 'Unit 1: Fundamentals' if you want grouping." className="font-mono text-xs" />
-            <p className="text-xs text-muted-foreground mt-2">One lesson title per line is enough. Optional unit headers can be used to group lessons.</p>
-          </div>
+          <Tabs value={manualMode} onValueChange={(value) => setManualMode(value as "outline" | "json")}>
+            <div className="flex items-center justify-between gap-3">
+              <Label>Course index</Label>
+              <TabsList>
+                <TabsTrigger value="outline">Outline</TabsTrigger>
+                <TabsTrigger value="json">JSON</TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="outline" className="mt-2">
+              <Textarea rows={8} value={manualIndex} onChange={e => setManualIndex(e.target.value)} placeholder="Add lesson titles here, one per line. Use Unit headings like 'Unit 1: Fundamentals' if you want grouping." className="font-mono text-xs" />
+              <p className="text-xs text-muted-foreground mt-2">One lesson title per line is enough. Optional unit headers can be used to group lessons.</p>
+            </TabsContent>
+            <TabsContent value="json" className="mt-2">
+              <Textarea rows={12} value={manualJson} onChange={e => setManualJson(e.target.value)} placeholder='{"title":"Cloud Computing","description":"...","units":[{"unit":1,"title":"Fundamentals","lessons":[{"title":"Introduction","summary":""}]}]}' className="font-mono text-xs" />
+              <p className="text-xs text-muted-foreground mt-2">JSON can include title, description, emoji or coverEmoji, and either units/toc with lessons or a flat lessons/topics array.</p>
+            </TabsContent>
+          </Tabs>
 
           <Button onClick={createManualCourse} variant="secondary" size="lg" disabled={manualBusy} className="w-full">
             {manualBusy ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" /> Creating manual course…</> : "Create course manually"}

@@ -8,11 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Edit3, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
+
+type BulkLessonInput = { unit: number; title: string; summary: string };
 
 export default function CourseEdit() {
   const { courseSlug } = useParams();
@@ -32,8 +36,11 @@ export default function CourseEdit() {
   const [resetLessons, setResetLessons] = useState(true);
   const [reUploading, setReUploading] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<"outline" | "json">("outline");
   const [bulkText, setBulkText] = useState("");
+  const [bulkJson, setBulkJson] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (course) {
@@ -55,10 +62,35 @@ export default function CourseEdit() {
   const ready = topics.filter(t => (t as any).generation_status === "ready").length;
   const pending = topics.length - ready;
   const pct = topics.length ? Math.round((ready / topics.length) * 100) : 100;
+  const selectedTopics = topics.filter((topic) => selectedIds.includes(topic.id));
+  const allSelected = topics.length > 0 && selectedIds.length === topics.length;
 
   const refreshTopics = async () => {
     const { data } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
     setTopics((data as any) ?? []);
+  };
+
+  const resequenceTopics = async (sourceTopics = topics, removedIds: string[] = []) => {
+    const removed = new Set(removedIds);
+    const nextTopics = sourceTopics
+      .filter((topic) => !removed.has(topic.id))
+      .sort((a, b) => a.unit === b.unit ? a.order_index - b.order_index : a.unit - b.unit);
+    const byUnit = nextTopics.reduce<Record<number, typeof nextTopics>>((acc, topic) => {
+      (acc[topic.unit] ||= []).push(topic);
+      return acc;
+    }, {});
+
+    const updates: Promise<unknown>[] = [];
+    Object.values(byUnit).forEach((unitTopics) => {
+      unitTopics.forEach((topic, index) => {
+        if (topic.order_index !== index) {
+          updates.push(supabase.from("topics").update({ order_index: index } as any).eq("id", topic.id).then(({ error }) => {
+            if (error) throw error;
+          }));
+        }
+      });
+    });
+    await Promise.all(updates);
   };
 
   const generateOne = async (topicId: string) => {
@@ -74,10 +106,9 @@ export default function CourseEdit() {
     } finally { setGenerating(null); }
   };
 
-  const generateAllRemaining = async () => {
+  const generateTopicBatch = async (items: typeof topics, successMessage: string) => {
     setBatchRunning(true);
-    const pendingTopics = topics.filter(t => (t as any).generation_status !== "ready");
-    for (const t of pendingTopics) {
+    for (const t of items) {
       try {
         const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id } });
         if (error) throw error;
@@ -93,7 +124,16 @@ export default function CourseEdit() {
       }
     }
     setBatchRunning(false);
-    toast.success("Batch generation complete");
+    toast.success(successMessage);
+  };
+
+  const generateAllRemaining = async () => {
+    await generateTopicBatch(topics.filter(t => (t as any).generation_status !== "ready"), "Batch generation complete");
+  };
+
+  const generateSelected = async () => {
+    if (!selectedTopics.length) return;
+    await generateTopicBatch(selectedTopics, `Generated ${selectedTopics.length} selected lesson${selectedTopics.length === 1 ? "" : "s"}`);
   };
 
   const saveCourse = async () => {
@@ -138,8 +178,8 @@ export default function CourseEdit() {
 
   const slugify = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || `lesson-${Date.now()}`;
 
-  const parseBulkLessons = (text: string) => {
-    const rows: Array<{ unit: number; title: string; summary: string }> = [];
+  const parseBulkLessons = (text: string): BulkLessonInput[] => {
+    const rows: BulkLessonInput[] = [];
     let unit = 1;
 
     text.split(/\r?\n/).forEach((rawLine) => {
@@ -161,8 +201,55 @@ export default function CourseEdit() {
     return rows;
   };
 
+  const readJsonString = (value: unknown) => typeof value === "string" ? value : value == null ? "" : String(value);
+
+  const parseBulkJson = (text: string): BulkLessonInput[] => {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error("Bulk lesson JSON is not valid");
+    }
+
+    const root = payload && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
+    const rawUnits = Array.isArray(root.units) ? root.units : Array.isArray(root.toc) ? root.toc : [];
+    const rawFlat = Array.isArray(root.lessons) ? root.lessons : Array.isArray(root.topics) ? root.topics : Array.isArray(payload) ? payload : [];
+
+    if (rawUnits.length) {
+      return rawUnits.flatMap((rawUnit, unitIndex) => {
+        const unitObj = rawUnit && typeof rawUnit === "object" && !Array.isArray(rawUnit) ? rawUnit as Record<string, unknown> : {};
+        const unit = Number(unitObj.unit) || unitIndex + 1;
+        const rawLessons = Array.isArray(unitObj.lessons) ? unitObj.lessons : Array.isArray(unitObj.topics) ? unitObj.topics : [];
+        return rawLessons.map((rawLesson): BulkLessonInput => {
+          const lessonObj = rawLesson && typeof rawLesson === "object" && !Array.isArray(rawLesson) ? rawLesson as Record<string, unknown> : {};
+          return {
+            unit,
+            title: (typeof rawLesson === "string" ? rawLesson : readJsonString(lessonObj.title)).trim(),
+            summary: (typeof rawLesson === "string" ? "" : readJsonString(lessonObj.summary)).trim(),
+          };
+        });
+      }).filter((lesson) => lesson.title);
+    }
+
+    return rawFlat.map((rawLesson): BulkLessonInput => {
+      const lessonObj = rawLesson && typeof rawLesson === "object" && !Array.isArray(rawLesson) ? rawLesson as Record<string, unknown> : {};
+      return {
+        unit: Number(lessonObj.unit) || 1,
+        title: (typeof rawLesson === "string" ? rawLesson : readJsonString(lessonObj.title)).trim(),
+        summary: (typeof rawLesson === "string" ? "" : readJsonString(lessonObj.summary)).trim(),
+      };
+    }).filter((lesson) => lesson.title);
+  };
+
   const createBulkLessons = async () => {
-    const parsed = parseBulkLessons(bulkText);
+    let parsed: BulkLessonInput[];
+    try {
+      parsed = bulkMode === "json" ? parseBulkJson(bulkJson.trim()) : parseBulkLessons(bulkText.trim());
+    } catch (e: any) {
+      toast.error(e.message || "Could not read lesson input");
+      return;
+    }
+
     if (!parsed.length) {
       toast.error("Add at least one lesson title");
       return;
@@ -202,6 +289,7 @@ export default function CourseEdit() {
       if (error) throw error;
       toast.success(`Added ${rows.length} lesson${rows.length === 1 ? "" : "s"}`);
       setBulkText("");
+      setBulkJson("");
       setBulkOpen(false);
       await refreshTopics();
     } catch (e: any) {
@@ -227,7 +315,40 @@ export default function CourseEdit() {
   const deleteTopic = async (id: string, t: string) => {
     if (!confirm(`Delete lesson "${t}"?`)) return;
     const { error } = await supabase.from("topics").delete().eq("id", id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); refreshTopics(); }
+    if (error) toast.error(error.message); else {
+      await resequenceTopics(topics, [id]);
+      setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== id));
+      toast.success("Deleted");
+      refreshTopics();
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (!selectedTopics.length) return;
+    if (!confirm(`Delete ${selectedTopics.length} selected lesson${selectedTopics.length === 1 ? "" : "s"}?`)) return;
+    setBulkBusy(true);
+    try {
+      for (const topic of selectedTopics) {
+        const { error } = await supabase.from("topics").delete().eq("id", topic.id);
+        if (error) throw error;
+      }
+      await resequenceTopics(topics, selectedTopics.map((topic) => topic.id));
+      setSelectedIds([]);
+      toast.success(`Deleted ${selectedTopics.length} lesson${selectedTopics.length === 1 ? "" : "s"}`);
+      await refreshTopics();
+    } catch (e: any) {
+      toast.error(e.message || "Bulk delete failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const toggleSelection = (topicId: string) => {
+    setSelectedIds((ids) => ids.includes(topicId) ? ids.filter((id) => id !== topicId) : [...ids, topicId]);
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? [] : topics.map((topic) => topic.id));
   };
 
   const handleReFile = async (file: File) => {
@@ -386,6 +507,12 @@ export default function CourseEdit() {
         <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
         <div className="flex gap-2">
           <Button onClick={() => setBulkOpen(true)} variant="outline"><Layers3 className="h-4 w-4 mr-1" /> Bulk lessons</Button>
+          {selectedIds.length > 0 && (
+            <>
+              <Button onClick={generateSelected} variant="neon" disabled={batchRunning || bulkBusy}><Sparkles className="h-4 w-4 mr-1" /> Generate selected ({selectedIds.length})</Button>
+              <Button onClick={deleteSelected} variant="destructive" disabled={batchRunning || bulkBusy}><Trash2 className="h-4 w-4 mr-1" /> Delete selected</Button>
+            </>
+          )}
           <Button onClick={() => addTopic({ aiGenerate: false })} variant="ghost"><Plus className="h-4 w-4 mr-1" /> Empty lesson</Button>
           <Button onClick={() => addTopic({ aiGenerate: true })} variant="hero"><Sparkles className="h-4 w-4 mr-1" /> Add lesson + AI generate</Button>
         </div>
@@ -399,17 +526,34 @@ export default function CourseEdit() {
               Paste one lesson per line. Use unit headings like "Unit 2: Networks"; add summaries with "::" or "--".
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            rows={12}
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            className="font-mono text-xs"
-            placeholder={"Unit 1: Fundamentals\n1. Introduction :: Overview and outcomes\n2. Core concepts\n\nUnit 2: Practice\n- Worked examples -- Step-by-step cases"}
-          />
+          <Tabs value={bulkMode} onValueChange={(value) => setBulkMode(value as "outline" | "json")}>
+            <TabsList>
+              <TabsTrigger value="outline">Outline</TabsTrigger>
+              <TabsTrigger value="json">JSON</TabsTrigger>
+            </TabsList>
+            <TabsContent value="outline" className="mt-3">
+              <Textarea
+                rows={12}
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                className="font-mono text-xs"
+                placeholder={"Unit 1: Fundamentals\n1. Introduction :: Overview and outcomes\n2. Core concepts\n\nUnit 2: Practice\n- Worked examples -- Step-by-step cases"}
+              />
+            </TabsContent>
+            <TabsContent value="json" className="mt-3">
+              <Textarea
+                rows={12}
+                value={bulkJson}
+                onChange={(e) => setBulkJson(e.target.value)}
+                className="font-mono text-xs"
+                placeholder='{"units":[{"unit":1,"lessons":[{"title":"Introduction","summary":"Overview"}]},{"unit":2,"lessons":["Practice cases"]}]}'
+              />
+            </TabsContent>
+          </Tabs>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setBulkOpen(false)} disabled={bulkBusy}>Cancel</Button>
             <Button variant="hero" onClick={createBulkLessons} disabled={bulkBusy}>
-              {bulkBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Layers3 className="h-4 w-4 mr-1" />}
+              {bulkBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : bulkMode === "json" ? <FileJson className="h-4 w-4 mr-1" /> : <Layers3 className="h-4 w-4 mr-1" />}
               Add lessons
             </Button>
           </DialogFooter>
@@ -421,6 +565,9 @@ export default function CourseEdit() {
         <table className="w-full text-sm">
           <thead className="bg-muted/30 text-xs font-mono text-muted-foreground uppercase">
             <tr>
+              <th className="text-left p-3 w-10">
+                <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all lessons" />
+              </th>
               <th className="text-left p-3">Unit</th>
               <th className="text-left p-3">Title</th>
               <th className="text-left p-3">Status</th>
@@ -435,6 +582,9 @@ export default function CourseEdit() {
               const blockCount = Array.isArray((t as any).content) ? (t as any).content.length : 0;
               return (
                 <tr key={t.id} className="border-t border-border/50">
+                  <td className="p-3">
+                    <Checkbox checked={selectedIds.includes(t.id)} onCheckedChange={() => toggleSelection(t.id)} aria-label={`Select ${t.title}`} />
+                  </td>
                   <td className="p-3 font-mono">{t.unit}.{t.order_index}</td>
                   <td className="p-3">
                     {t.title}
