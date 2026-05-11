@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { ArrowLeft, FileText, Sparkles, Upload, Lock } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "https://ai-course-creator-be.onrender.com").replace(/\/$/, "");
 const TOKEN_KEY = "ignouprep.auth.token";
 
 async function apiCall(path: string, init: RequestInit = {}) {

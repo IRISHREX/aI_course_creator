@@ -1,7 +1,7 @@
 type Filter = { key: string; value: any; op: "eq" | "in" };
 type Order = { key: string; ascending: boolean };
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "https://ai-course-creator-be.onrender.com").replace(/\/$/, "");
 const TOKEN_KEY = "ignouprep.auth.token";
 const AUTH_EVENT = "ignouprep:auth";
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 120000);
