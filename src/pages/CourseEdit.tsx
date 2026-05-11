@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useCourseBySlug } from "@/hooks/useCourses";
@@ -11,12 +11,30 @@ import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Tag, Trash2, Upload, X, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CheckSquare, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
 type BulkLessonInput = { unit: number; title: string; summary: string };
+
+function ToolButton({
+  label,
+  children,
+  ...props
+}: ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button aria-label={label} title={label} {...props}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function CourseEdit() {
   const { courseSlug } = useParams();
@@ -299,19 +317,6 @@ export default function CourseEdit() {
     }
   };
 
-  const continueLesson = async (topicId: string) => {
-    setGenerating(topicId);
-    try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId, mode: "continue" } });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(`Added ${data.blocks} more blocks`);
-      await refreshTopics();
-    } catch (e: any) {
-      toast.error(e.message || "Continue failed");
-    } finally { setGenerating(null); }
-  };
-
   const deleteTopic = async (id: string, t: string) => {
     if (!confirm(`Delete lesson "${t}"?`)) return;
     const { error } = await supabase.from("topics").delete().eq("id", id);
@@ -503,18 +508,30 @@ export default function CourseEdit() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
-        <div className="flex gap-2">
-          <Button onClick={() => setBulkOpen(true)} variant="outline"><Layers3 className="h-4 w-4 mr-1" /> Bulk lessons</Button>
-          {selectedIds.length > 0 && (
-            <>
-              <Button onClick={generateSelected} variant="neon" disabled={batchRunning || bulkBusy}><Sparkles className="h-4 w-4 mr-1" /> Generate selected ({selectedIds.length})</Button>
-              <Button onClick={deleteSelected} variant="destructive" disabled={batchRunning || bulkBusy}><Trash2 className="h-4 w-4 mr-1" /> Delete selected</Button>
-            </>
-          )}
-          <Button onClick={() => addTopic({ aiGenerate: false })} variant="ghost"><Plus className="h-4 w-4 mr-1" /> Empty lesson</Button>
-          <Button onClick={() => addTopic({ aiGenerate: true })} variant="hero"><Sparkles className="h-4 w-4 mr-1" /> Add lesson + AI generate</Button>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
+          <div className="text-xs text-muted-foreground mt-1">
+            {selectedIds.length ? `${selectedIds.length} selected` : "Select lessons for batch controls"}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-background/50 p-1.5">
+          <ToolButton label={allSelected ? "Clear selection" : "Select all lessons"} onClick={toggleSelectAll} variant="ghost" size="icon">
+            {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+          </ToolButton>
+          <ToolButton label="Bulk lesson input" onClick={() => setBulkOpen(true)} variant="ghost" size="icon">
+            <Layers3 className="h-4 w-4" />
+          </ToolButton>
+          <ToolButton label="Add empty lesson" onClick={() => addTopic({ aiGenerate: false })} variant="ghost" size="icon">
+            <Plus className="h-4 w-4" />
+          </ToolButton>
+          <div className="mx-1 h-6 w-px bg-border" />
+          <ToolButton label={selectedIds.length ? `Generate selected (${selectedIds.length})` : "Select lessons to generate"} onClick={generateSelected} variant="neon" size="icon" disabled={!selectedIds.length || batchRunning || bulkBusy}>
+            {batchRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          </ToolButton>
+          <ToolButton label={selectedIds.length ? `Delete selected (${selectedIds.length})` : "Select lessons to delete"} onClick={deleteSelected} variant="destructive" size="icon" disabled={!selectedIds.length || batchRunning || bulkBusy}>
+            <Trash2 className="h-4 w-4" />
+          </ToolButton>
         </div>
       </div>
 
@@ -597,24 +614,18 @@ export default function CourseEdit() {
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">⏳ Pending</span>
                     )}
                   </td>
-                  <td className="p-3 text-right space-x-1 whitespace-nowrap">
-                    {!isReady && (
-                      <Button variant="neon" size="sm" disabled={isGen || batchRunning} onClick={() => generateOne(t.id)}>
-                        {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Generate</>}
-                      </Button>
-                    )}
-                    {isReady && (
-                      <>
-                        <Button variant="ghost" size="sm" disabled={isGen} onClick={() => continueLesson(t.id)} title="Add more (continue / deeper)">
-                          {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                        </Button>
-                        <Button variant="ghost" size="sm" disabled={isGen} onClick={() => generateOne(t.id)} title="Regenerate from scratch">
-                          {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                        </Button>
-                      </>
-                    )}
-                    <Button asChild variant="ghost" size="sm"><Link to={`/course/${course.slug}/topic/${t.slug}/edit`}><Edit3 className="h-4 w-4" /></Link></Button>
-                    <Button variant="ghost" size="sm" onClick={() => deleteTopic(t.id, t.title)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  <td className="p-3 text-right">
+                    <div className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/40 p-1">
+                      <ToolButton label={isReady ? "Regenerate lesson with AI" : "Generate lesson with AI"} variant="ghost" size="icon" disabled={isGen || batchRunning} onClick={() => generateOne(t.id)}>
+                        {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      </ToolButton>
+                      <ToolButton label="Edit lesson" asChild variant="ghost" size="icon">
+                        <Link to={`/course/${course.slug}/topic/${t.slug}/edit`}><Edit3 className="h-4 w-4" /></Link>
+                      </ToolButton>
+                      <ToolButton label="Delete lesson" variant="ghost" size="icon" onClick={() => deleteTopic(t.id, t.title)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </ToolButton>
+                    </div>
                   </td>
                 </tr>
               );
