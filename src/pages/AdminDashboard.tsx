@@ -138,7 +138,7 @@ export default function AdminDashboard() {
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/70 bg-card/60 p-5">
             <div>
               <h1 className="font-display text-3xl font-bold">Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Manage content, users, PYQs, and generation keys from one workspace.</p>
+              <p className="text-sm text-muted-foreground"></p>
             </div>
             <Badge variant={isSuperAdmin ? "default" : "outline"}>{isSuperAdmin ? "Full control" : "Content access"}</Badge>
           </div>

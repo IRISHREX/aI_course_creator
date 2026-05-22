@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { TopNav } from "@/components/TopNav";
-import ThreePageBackground from "@/components/ThreePageBackground";
+import ThreeBackground from "@/components/ThreeBackground";
 
 const AdminLayout = lazy(() => import("@/components/AdminLayout").then((module) => ({ default: module.AdminLayout })));
 const Index = lazy(() => import("./pages/Index"));
@@ -19,8 +19,10 @@ const AdminUpload = lazy(() => import("./pages/AdminUpload"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminUsers = lazy(() => import("./pages/AdminUsers"));
 const AdminPYQUpload = lazy(() => import("./pages/AdminPYQUpload"));
+const AdminSettings = lazy(() => import("./pages/AdminSettings"));
 const TopicPage = lazy(() => import("./pages/TopicPage"));
 const TopicEdit = lazy(() => import("./pages/TopicEdit"));
+const CourseSettings = lazy(() => import("./pages/CourseSettings"));
 const QuizPage = lazy(() => import("./pages/QuizPage"));
 const CoverageBoard = lazy(() => import("./pages/CoverageBoard"));
 const Certificate = lazy(() => import("./pages/Certificate"));
@@ -37,9 +39,11 @@ const PageFallback = () => (
 const Content = () => {
   const location = useLocation();
 
+  const showThreeBackground = location.pathname !== "/" && !location.pathname.startsWith("/course/");
+
   return (
     <ThemeProvider>
-      {location.pathname !== "/" && <ThreePageBackground />}
+      {showThreeBackground && <ThreeBackground />}
       <div className="min-h-screen flex flex-col">
         <TopNav />
         <main className="flex-1">
@@ -53,10 +57,12 @@ const Content = () => {
                 <Route path="upload" element={<AdminUpload />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="pyq-upload" element={<AdminPYQUpload />} />
+                <Route path="settings" element={<AdminSettings />} />
               </Route>
               <Route path="/bookmarks" element={<Bookmarks />} />
               <Route path="/course/:courseSlug" element={<CourseDetail />} />
               <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
+              <Route path="/course/:courseSlug/settings" element={<CourseSettings />} />
               <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
               <Route path="/course/:courseSlug/certificate" element={<Certificate />} />
               <Route path="/course/:courseSlug/pyq" element={<CoursePYQ />} />

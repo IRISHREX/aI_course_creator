@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: "You generate concise multiple-choice quiz questions for a Mobile Computing course. Always call the provided tool." },
+          { role: "system", content: "You generate concise multiple-choice quiz questions for a AI Based Learning course. Always call the provided tool." },
           { role: "user", content: `Topic: ${title}\nSummary: ${summary}\nContent: ${ctx}\n\nGenerate ${limit} NEW multiple-choice questions (4 options each, exactly one correct). Vary difficulty. Keep every question readable and concise.` },
         ],
         tools: [{

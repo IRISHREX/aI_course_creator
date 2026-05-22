@@ -53,9 +53,9 @@ CREATE POLICY "Courses delete by admin" ON public.courses FOR DELETE TO authenti
 -- 3. Add course_id to topics
 ALTER TABLE public.topics ADD COLUMN course_id uuid REFERENCES public.courses(id) ON DELETE CASCADE;
 
--- Seed Mobile Computing course and link existing topics
+-- Seed AI Based Learning course and link existing topics
 INSERT INTO public.courses (slug, title, description, cover_emoji, order_index)
-VALUES ('mobile-computing', 'Mobile Computing', 'Foundations to 5G — interactive lessons with visualizations, AI quizzes, and a certificate.', '📡', 1);
+VALUES ('mobile-computing', 'AI Based Learning', 'Foundations to 5G — interactive lessons with visualizations, AI quizzes, and a certificate.', '📡', 1);
 
 UPDATE public.topics SET course_id = (SELECT id FROM public.courses WHERE slug = 'mobile-computing')
 WHERE course_id IS NULL;

@@ -4,7 +4,7 @@ import { useTopics, useProgress } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Loader2, Settings2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
@@ -88,9 +88,14 @@ export default function CourseDetail() {
             <Download className="h-4 w-4 mr-1" /> {downloading ? "Building…" : "Download .docx"}
           </Button>
           {isAdmin && (
-            <Button asChild variant="hero" className="col-span-2 sm:col-span-1">
-              <Link to={`/course/${course.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Manage</Link>
-            </Button>
+            <>
+              <Button asChild variant="hero" className="col-span-2 sm:col-span-1">
+                <Link to={`/course/${course.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Manage</Link>
+              </Button>
+              <Button asChild variant="neon" className="col-span-2 sm:col-span-1">
+                <Link to={`/course/${course.slug}/settings`}><Settings2 className="h-4 w-4 mr-1" /> Settings</Link>
+              </Button>
+            </>
           )}
         </div>
       </div>

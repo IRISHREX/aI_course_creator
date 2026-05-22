@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { applyCustomTheme } from "@/lib/appSettings";
 
 export type ThemeName = "dark" | "light" | "paper" | "retro";
 
@@ -28,6 +29,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     const root = document.documentElement;
     root.setAttribute("data-theme", theme);
     localStorage.setItem(KEY, theme);
+    applyCustomTheme();
   }, [theme]);
 
   return <ThemeContext.Provider value={{ theme, setTheme: setThemeState }}>{children}</ThemeContext.Provider>;

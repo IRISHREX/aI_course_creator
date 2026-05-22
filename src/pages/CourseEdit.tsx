@@ -14,10 +14,35 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, CheckSquare, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CheckSquare, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
 type BulkLessonInput = { unit: number; title: string; summary: string };
+
+type DuplicateScanItem = {
+  topicId: string;
+  blockIndex: number;
+  role: "keep" | "delete";
+  note?: string;
+};
+
+type DuplicateScanGroup = {
+  id: string;
+  concept: string;
+  reason?: string;
+  items: DuplicateScanItem[];
+};
+
+const blockPreview = (block: any) => {
+  if (!block || typeof block !== "object") return "";
+  const parts = [
+    block.title,
+    block.value,
+    block.caption,
+    Array.isArray(block.items) ? block.items.map((item: any) => typeof item === "string" ? item : [item?.label, item?.desc].filter(Boolean).join(": ")).join(" ") : "",
+  ];
+  return parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 180);
+};
 
 function ToolButton({
   label,
@@ -59,6 +84,14 @@ export default function CourseEdit() {
   const [bulkJson, setBulkJson] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [duplicateSelectedUnits, setDuplicateSelectedUnits] = useState<number[]>([]);
+  const [duplicateScanning, setDuplicateScanning] = useState(false);
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateScanGroup[]>([]);
+  const [duplicateDeleting, setDuplicateDeleting] = useState<string | null>(null);
+  const duplicateUnitFallback = Array.from(new Set(topics.map(t => Number(t.unit)).filter(Number.isFinite))).sort((a, b) => a - b)[0] || 1;
+  const units = Array.from(new Set(topics.map(t => Number(t.unit)).filter(Number.isFinite))).sort((a, b) => a - b);
+  const selectedDuplicateUnits = duplicateSelectedUnits.length ? duplicateSelectedUnits : [duplicateUnitFallback];
+  const activeDuplicateUnit = selectedDuplicateUnits[0];
 
   useEffect(() => {
     if (course) {
@@ -85,7 +118,83 @@ export default function CourseEdit() {
 
   const refreshTopics = async () => {
     const { data } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
-    setTopics((data as any) ?? []);
+    const nextTopics = (data as any) ?? [];
+    setTopics(nextTopics);
+    return nextTopics;
+  };
+
+  const scanDuplicateConcepts = async () => {
+    setDuplicateScanning(true);
+    setDuplicateGroups([]);
+    try {
+      const { data, error } = await supabase.functions.invoke("scan-lesson-duplicates", {
+        body: { courseId: course.id, units: selectedDuplicateUnits },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setDuplicateGroups(data?.groups || []);
+      if ((data?.groups || []).length) toast.success(`Found ${data.groups.length} repeated concept group${data.groups.length === 1 ? "" : "s"}`);
+      else toast.info("No repeated concept explanations found in the selected units");
+    } catch (e: any) {
+      toast.error(e.message || "Duplicate scan failed");
+    } finally {
+      setDuplicateScanning(false);
+    }
+  };
+
+  const removeDuplicateItemsFromState = (items: DuplicateScanItem[]) => {
+    const keys = new Set(items.map(item => `${item.topicId}:${item.blockIndex}`));
+    setDuplicateGroups(groups => groups
+      .map(group => ({ ...group, items: group.items.filter(item => !keys.has(`${item.topicId}:${item.blockIndex}`)) }))
+      .filter(group => group.items.some(item => item.role === "delete")));
+  };
+
+  const toggleDuplicateUnit = (unit: number) => {
+    setDuplicateGroups([]);
+    setDuplicateSelectedUnits((prev) => {
+      const next = prev.includes(unit) ? prev.filter((u) => u !== unit) : [...prev, unit];
+      return next.length ? next : [unit];
+    });
+  };
+
+  const selectAllDuplicateUnits = () => {
+    setDuplicateGroups([]);
+    setDuplicateSelectedUnits(units.length ? units : [duplicateUnitFallback]);
+  };
+
+  const toggleDuplicateItemRole = (groupId: string, topicId: string, blockIndex: number, role: DuplicateScanItem["role"]) => {
+    setDuplicateGroups((groups) => groups.map((group) => {
+      if (group.id !== groupId) return group;
+      return {
+        ...group,
+        items: group.items.map((item) => item.topicId === topicId && item.blockIndex === blockIndex ? { ...item, role } : item),
+      };
+    }));
+  };
+
+  const deleteDuplicateBlocks = async (items: DuplicateScanItem[], label = "duplicate block") => {
+    const deleteItems = items.filter(item => item.role === "delete");
+    if (!deleteItems.length) return;
+    setDuplicateDeleting(label);
+    try {
+      const byTopic = new Map<string, number[]>();
+      for (const item of deleteItems) byTopic.set(item.topicId, [...(byTopic.get(item.topicId) || []), item.blockIndex]);
+      for (const [topicId, indexes] of byTopic) {
+        const target = topics.find(t => t.id === topicId);
+        if (!target || !Array.isArray((target as any).content)) continue;
+        const removeIndexes = new Set(indexes);
+        const nextContent = ((target as any).content as any[]).filter((_, index) => !removeIndexes.has(index));
+        const { error } = await supabase.from("topics").update({ content: nextContent } as any).eq("id", topicId);
+        if (error) throw error;
+      }
+      removeDuplicateItemsFromState(deleteItems);
+      await refreshTopics();
+      toast.success(`Deleted ${deleteItems.length} repeated content block${deleteItems.length === 1 ? "" : "s"}`);
+    } catch (e: any) {
+      toast.error(e.message || "Could not delete repeated content");
+    } finally {
+      setDuplicateDeleting(null);
+    }
   };
 
   const resequenceTopics = async (sourceTopics = topics, removedIds: string[] = []) => {
@@ -408,7 +517,37 @@ export default function CourseEdit() {
         <Link to={`/course/${course.slug}`}><ArrowLeft className="h-4 w-4 mr-1" /> Back to course</Link>
       </Button>
 
-      <h1 className="font-display text-3xl font-bold mb-6">Manage Course</h1>
+      <div className="mb-6 rounded-3xl border border-border/70 bg-background/80 p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+              <Settings className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="font-display text-3xl font-bold">Manage Course</h1>
+              <p className="text-sm text-muted-foreground mt-1">Quick access to upload source, generate lessons, and clean duplicates.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <Button asChild variant="outline" size="sm" className="justify-start gap-2">
+            <a href="#reupload-source"><Upload className="h-4 w-4" /> Upload source</a>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="justify-start gap-2">
+            <a href="#duplicate-cleanup"><SearchCheck className="h-4 w-4" /> Duplicate cleanup</a>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="justify-start gap-2">
+            <a href="#lesson-generation"><Sparkles className="h-4 w-4" /> Generate lessons</a>
+          </Button>
+          <Button variant="outline" size="sm" className="justify-start gap-2" onClick={() => setBulkOpen(true)}>
+            <FileText className="h-4 w-4" /> Bulk lesson input
+          </Button>
+          <Button asChild variant="outline" size="sm" className="justify-start gap-2">
+            <Link to={`/course/${course.slug}/settings`}><Edit3 className="h-4 w-4" /> Course settings</Link>
+          </Button>
+        </div>
+      </div>
 
       {/* Generation progress */}
       {topics.length > 0 && (
@@ -429,6 +568,135 @@ export default function CourseEdit() {
             )}
           </div>
           <Progress value={pct} className="h-2" />
+        </div>
+      )}
+
+      {topics.length > 0 && (
+        <div id="duplicate-cleanup" className="glass rounded-2xl p-5 mb-6 border border-primary/20">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div>
+              <div className="font-display font-bold flex items-center gap-2">
+                <SearchCheck className="h-4 w-4 text-primary" /> Duplicate concept cleanup
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Compare repeated explanations across units and select which blocks to keep or delete.
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-medium">Compare units:</span>
+                <Button variant={selectedDuplicateUnits.length === units.length ? "secondary" : "outline"} size="sm" onClick={selectAllDuplicateUnits} disabled={!units.length}>
+                  All
+                </Button>
+                {units.map((unit) => (
+                  <Button
+                    key={unit}
+                    variant={selectedDuplicateUnits.includes(unit) ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => toggleDuplicateUnit(unit)}
+                  >
+                    {unit}
+                  </Button>
+                ))}
+              </div>
+              <Button onClick={scanDuplicateConcepts} variant="hero" size="sm" disabled={duplicateScanning}>
+                {duplicateScanning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                Scan selected units
+              </Button>
+            </div>
+          </div>
+
+          {duplicateGroups.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs text-muted-foreground">{duplicateGroups.length} repeated concept group{duplicateGroups.length === 1 ? "" : "s"} marked</div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={!!duplicateDeleting}
+                  onClick={() => {
+                    if (confirm("Delete all AI-marked duplicate blocks? Kept blocks will remain.")) {
+                      deleteDuplicateBlocks(duplicateGroups.flatMap(group => group.items), "all");
+                    }
+                  }}
+                >
+                  {duplicateDeleting === "all" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                  Accept all deletions
+                </Button>
+              </div>
+
+              {duplicateGroups.map(group => (
+                <div key={group.id} className="rounded-xl border border-border/60 bg-background/40 p-3">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <div className="font-medium text-sm">{group.concept}</div>
+                      {group.reason && <div className="text-xs text-muted-foreground mt-0.5">{group.reason}</div>}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!!duplicateDeleting}
+                      onClick={() => deleteDuplicateBlocks(group.items, group.id)}
+                      title="Accept this group and delete marked repeats"
+                    >
+                      {duplicateDeleting === group.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {group.items.map(item => {
+                      const lesson = topics.find(t => t.id === item.topicId);
+                      const block = lesson && Array.isArray((lesson as any).content) ? (lesson as any).content[item.blockIndex] : null;
+                      return (
+                        <div key={`${item.topicId}-${item.blockIndex}`} className={`rounded-lg border p-2 ${item.role === "delete" ? "border-destructive/40 bg-destructive/5" : "border-primary/30 bg-primary/5"}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-mono">
+                              {lesson ? `${lesson.unit}.${lesson.order_index} ${lesson.title}` : "Missing lesson"} · block {item.blockIndex + 1}
+                            </div>
+                            <span className={`text-[10px] uppercase tracking-wide ${item.role === "delete" ? "text-destructive" : "text-primary"}`}>
+                              {item.role === "delete" ? "Delete" : "Keep"}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">{blockPreview(block) || item.note || "No preview available"}</div>
+                          {item.note && <div className="text-[10px] text-muted-foreground mt-1">{item.note}</div>}
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <ToolButton
+                              label={item.role === "keep" ? "Kept" : "Keep this block"}
+                              variant={item.role === "keep" ? "secondary" : "outline"}
+                              size="icon"
+                              onClick={() => toggleDuplicateItemRole(group.id, item.topicId, item.blockIndex, "keep")}
+                              disabled={!!duplicateDeleting}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            </ToolButton>
+                            <ToolButton
+                              label={item.role === "delete" ? "Marked for delete" : "Mark this block for deletion"}
+                              variant={item.role === "delete" ? "destructive" : "outline"}
+                              size="icon"
+                              onClick={() => toggleDuplicateItemRole(group.id, item.topicId, item.blockIndex, "delete")}
+                              disabled={!!duplicateDeleting}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </ToolButton>
+                            {item.role === "delete" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-destructive"
+                                disabled={!!duplicateDeleting}
+                                onClick={() => deleteDuplicateBlocks([item], `${item.topicId}:${item.blockIndex}`)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete now
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -476,7 +744,7 @@ export default function CourseEdit() {
       </div>
 
       {/* Re-upload source */}
-      <div className="glass rounded-2xl p-6 mb-8 border border-primary/20">
+      <div id="reupload-source" className="glass rounded-2xl p-6 mb-8 border border-primary/20">
         <div className="flex items-center gap-2 mb-1">
           <RefreshCw className="h-5 w-5 text-primary" />
           <div className="font-display font-bold text-lg">Re-upload source</div>
@@ -508,7 +776,7 @@ export default function CourseEdit() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+      <div id="lesson-generation" className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
           <div className="text-xs text-muted-foreground mt-1">

@@ -1,3 +1,5 @@
+import { getAppSettings, getCourseSettings } from "@/lib/appSettings";
+
 type Filter = { key: string; value: any; op: "eq" | "in" };
 type Order = { key: string; ascending: boolean };
 
@@ -521,6 +523,53 @@ function normalizeQuiz(quiz: unknown) {
     .slice(0, 10);
 }
 
+function lessonBlockToText(block: any) {
+  if (!block || typeof block !== "object") return "";
+  const pieces: string[] = [];
+  if (typeof block.title === "string") pieces.push(block.title);
+  if (typeof block.value === "string") pieces.push(block.value);
+  if (typeof block.caption === "string") pieces.push(block.caption);
+  if (Array.isArray(block.items)) {
+    for (const item of block.items) {
+      if (typeof item === "string") pieces.push(item);
+      else if (item && typeof item === "object") pieces.push([item.label, item.desc].filter(Boolean).join(": "));
+    }
+  }
+  if (Array.isArray(block.timeline_items)) {
+    for (const item of block.timeline_items) pieces.push([item?.label, item?.desc].filter(Boolean).join(": "));
+  }
+  if (Array.isArray(block.headers)) pieces.push(block.headers.join(" | "));
+  if (Array.isArray(block.rows)) {
+    for (const row of block.rows) if (Array.isArray(row)) pieces.push(row.join(" | "));
+  }
+  return pieces.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeDuplicateScanResult(result: any, topics: any[]) {
+  const topicIds = new Set(topics.map((topic) => String(topic.id)));
+  const groups = Array.isArray(result?.groups) ? result.groups : [];
+  return groups
+    .map((group: any, groupIndex: number) => {
+      const items = Array.isArray(group?.items) ? group.items : [];
+      const normalizedItems = items
+        .map((item: any) => ({
+          topicId: String(item?.topicId || ""),
+          blockIndex: Number(item?.blockIndex),
+          role: item?.role === "keep" ? "keep" : "delete",
+          note: cleanString(item?.note || item?.reason),
+        }))
+        .filter((item: any) => topicIds.has(item.topicId) && Number.isInteger(item.blockIndex) && item.blockIndex >= 0);
+      if (!normalizedItems.some((item: any) => item.role === "delete")) return null;
+      return {
+        id: cleanString(group?.id) || `dup-${groupIndex + 1}`,
+        concept: cleanString(group?.concept) || `Repeated concept ${groupIndex + 1}`,
+        reason: cleanString(group?.reason),
+        items: normalizedItems,
+      };
+    })
+    .filter(Boolean);
+}
+
 async function saveAiKey(apiKey: string) {
   return api("/ai-keys", {
     method: "POST",
@@ -730,6 +779,8 @@ async function buildCourseOutlineFromSource(title: string, sourceText: string) {
 
 Build a complete course map from the scan summaries. Cover all major topics from the source. Use unit overview lessons as x.0 and sub-lessons as x.1, x.2, etc. Create 2-6 units when possible, and 1-6 sub-lessons per unit. Keep lesson titles specific and non-overlapping.`,
     `Course title: ${title}
+${getAppSettings().ai.optimizationPrompt ? `Optimization rule: ${getAppSettings().ai.optimizationPrompt}\n` : ""}
+${getAppSettings().ai.coursePrompt ? `Admin course prompt addition: ${getAppSettings().ai.coursePrompt}\n` : ""}
 
 Whole-document scan summaries:
 ${summaries.join("\n\n")}`,
@@ -944,6 +995,8 @@ Make the root label the course title and organize branches by course concepts.`;
         if (name === "generate-lesson") {
           const topic = await getTopic(body.topicId);
           const customInstruction = cleanString(body.customInstruction || body.instruction);
+          const appSettings = getAppSettings();
+          const courseSettings = getCourseSettings(topic.course_id);
           const userPrompt = `Generate a lesson on: ${topic.title}
 
 Current summary: ${topic.summary || ""}
@@ -951,6 +1004,9 @@ Mode: ${body.mode || "replace"}
 Level: ${body.level || 5}
 
 ${customInstruction ? `Extra instruction from admin: ${customInstruction}\n` : ""}
+${appSettings.ai.optimizationPrompt ? `Global optimization rule: ${appSettings.ai.optimizationPrompt}\n` : ""}
+${appSettings.ai.lessonPrompt ? `Global lesson prompt addition: ${appSettings.ai.lessonPrompt}\n` : ""}
+${courseSettings.lessonPrompt ? `Course lesson prompt addition: ${courseSettings.lessonPrompt}\n` : ""}
 Follow this structure:
 1. Intro (text)
 2. Core Concept (text)
@@ -1002,6 +1058,53 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
             { content: topic.content || [] },
           );
           return { data: { ok: true, content: result.content || topic.content || [] }, error: null };
+        }
+        if (name === "scan-lesson-duplicates") {
+          const allTopics = await getCourseTopics(body.courseId);
+          const selectedUnits = Array.isArray(body.units)
+            ? body.units.map(Number).filter((u) => Number.isFinite(u))
+            : typeof body.unit !== "undefined"
+              ? [Number(body.unit)]
+              : [];
+          const units = selectedUnits.length
+            ? selectedUnits
+            : Array.from(new Set(allTopics.map((topic: any) => Number(topic.unit)).filter(Number.isFinite)));
+          const topics = allTopics
+            .filter((topic: any) => units.includes(Number(topic.unit)) && Array.isArray(topic.content) && topic.content.length > 0)
+            .sort((a: any, b: any) => Number(a.order_index) - Number(b.order_index));
+          if (topics.length < 2) return { data: { ok: true, units, groups: [], scannedLessons: topics.length }, error: null };
+
+          const blocks = topics.flatMap((topic: any) =>
+            (topic.content || []).map((block: any, blockIndex: number) => ({
+              topicId: topic.id,
+              lesson: `${topic.unit}.${topic.order_index} ${topic.title}`,
+              blockIndex,
+              type: block?.type || "unknown",
+              text: lessonBlockToText(block).slice(0, 700),
+            })),
+          ).filter((block: any) => block.text.length >= 40);
+
+          const result = await aiJson(
+            "Return only valid JSON: {\"groups\":[{\"id\":\"\",\"concept\":\"\",\"reason\":\"\",\"items\":[{\"topicId\":\"\",\"blockIndex\":0,\"role\":\"keep|delete\",\"note\":\"\"}]}]}.",
+            `Scan these lesson blocks from ${units.length === 1 ? `unit ${units[0]}` : `units ${units.join(", ")}`} and find concepts explained more than once across different lessons.
+Mark the best original or clearest block as role "keep" and repeated/redundant blocks as role "delete".
+Only flag true repeated concept explanations, not brief references, prerequisites, summaries, quizzes, or complementary details.
+Return blockIndex exactly as provided.
+${getCourseSettings(body.courseId).duplicateCleanupPrompt ? `Course cleanup instruction: ${getCourseSettings(body.courseId).duplicateCleanupPrompt}\n` : ""}
+
+Blocks:
+${JSON.stringify(blocks).slice(0, 12000)}`,
+            { groups: [] },
+          );
+          return {
+            data: {
+              ok: true,
+              units,
+              groups: normalizeDuplicateScanResult(result, topics),
+              scannedLessons: topics.length,
+            },
+            error: null,
+          };
         }
         if (name === "create-topic") {
           const topics = await getCourseTopics(body.courseId);

@@ -3,14 +3,14 @@ import { motion } from "framer-motion";
 import { Award, BookOpen, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCourses } from "@/hooks/useCourses";
-import ThreeSphereHome from "@/components/ThreeSphereHome";
+import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 
 const Index = () => {
   const { courses } = useCourses();
 
   return (
     <div className="relative overflow-hidden">
-      <ThreeSphereHome />
+      <ThreeParticleBackground className="opacity-90" />
 
       <section className="relative overflow-hidden">
         <div className="container min-h-[calc(100vh-4rem)] py-10 md:py-20 grid lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,0.8fr)] gap-8 items-center">
