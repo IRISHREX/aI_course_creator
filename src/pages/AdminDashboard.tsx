@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Bookmark,
   BookOpen,
+  DatabaseBackup,
   FileQuestion,
   KeyRound,
   RotateCw,
@@ -129,6 +130,7 @@ export default function AdminDashboard() {
     { label: "Upload course material", desc: "Generate courses from PDFs, docs, or text", icon: Upload, to: "/admin/upload" },
     { label: "Generate PYQs", desc: "Extract and tag questions to lessons", icon: FileQuestion, to: "/admin/pyq-upload" },
     { label: "Manage courses", desc: "Edit lessons, tags, and content blocks", icon: BookOpen, to: "/courses" },
+    { label: "Data backups", desc: "Export SQL, JSON, dictionary, PDF, or docs files", icon: DatabaseBackup, to: "/admin/backup" },
     { label: "My bookmarks", desc: "Resume saved reading positions", icon: Bookmark, to: "/bookmarks" },
     ...(isSuperAdmin ? [{ label: "User management", desc: "Promote or demote admins", icon: Users, to: "/admin/users" }] : []),
   ];

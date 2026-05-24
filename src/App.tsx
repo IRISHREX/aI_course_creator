@@ -20,6 +20,7 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminUsers = lazy(() => import("./pages/AdminUsers"));
 const AdminPYQUpload = lazy(() => import("./pages/AdminPYQUpload"));
 const AdminSettings = lazy(() => import("./pages/AdminSettings"));
+const AdminBackup = lazy(() => import("./pages/AdminBackup"));
 const TopicPage = lazy(() => import("./pages/TopicPage"));
 const TopicEdit = lazy(() => import("./pages/TopicEdit"));
 const CourseSettings = lazy(() => import("./pages/CourseSettings"));
@@ -58,6 +59,7 @@ const Content = () => {
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="pyq-upload" element={<AdminPYQUpload />} />
                 <Route path="settings" element={<AdminSettings />} />
+                <Route path="backup" element={<AdminBackup />} />
               </Route>
               <Route path="/bookmarks" element={<Bookmarks />} />
               <Route path="/course/:courseSlug" element={<CourseDetail />} />

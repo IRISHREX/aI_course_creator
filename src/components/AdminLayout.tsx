@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   Bookmark,
   BookOpen,
+  DatabaseBackup,
   FileQuestion,
   LayoutDashboard,
   Settings,
@@ -44,6 +45,7 @@ export function AdminLayout() {
     { label: "PYQ upload", icon: FileQuestion, to: "/admin/pyq-upload" },
     { label: "Courses", icon: BookOpen, to: "/courses" },
     { label: "Bookmarks", icon: Bookmark, to: "/bookmarks" },
+    { label: "Backups", icon: DatabaseBackup, to: "/admin/backup" },
     { label: "Settings", icon: Settings, to: "/admin/settings" },
     ...(isSuperAdmin ? [{ label: "Users", icon: Users, to: "/admin/users" }] : []),
   ];
