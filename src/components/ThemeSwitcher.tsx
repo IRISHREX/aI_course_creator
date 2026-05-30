@@ -6,17 +6,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Palette, Check } from "lucide-react";
 
 export const ThemeSwitcher = () => {
   const { theme, setTheme } = useTheme();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" title="Reading theme">
-          <Palette className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Reading theme" className="h-10 w-10 rounded-xl">
+              <Palette className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Reading theme</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="w-44">
         {THEMES.map((t) => (
           <DropdownMenuItem

@@ -41,7 +41,6 @@ const Content = () => {
   const location = useLocation();
 
   const showThreeBackground = location.pathname !== "/" && !location.pathname.startsWith("/course/");
-
   return (
     <ThemeProvider>
       {showThreeBackground && <ThreeBackground />}
