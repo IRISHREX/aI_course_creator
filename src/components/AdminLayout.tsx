@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Bookmark,
@@ -35,37 +37,59 @@ export function AdminLayout() {
     ...(isSuperAdmin ? [{ label: "Users", icon: Users, to: "/admin/users" }] : []),
     { label: "Settings", icon: Settings, to: "/admin/settings" },
   ];
-
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-28 z-30 border-b border-border/70 bg-background/95 px-3 py-2 backdrop-blur-xl shadow-sm shadow-slate-950/10 md:top-16 sm:px-5">
-        <div className="mx-auto max-w-7xl">
-          <nav
-            aria-label="Admin navigation"
-            className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-border/70 bg-card/80 p-1"
-          >
-            {navItems.map((item) => (
-              <Tooltip key={item.label}>
-                <TooltipTrigger asChild>
-                  <NavLink
-                    to={item.to}
-                    end={item.end}
-                    aria-label={item.label}
-                    className={({ isActive }) => cn(
-                      "grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground",
-                      isActive
-                        ? "bg-primary/10 text-primary ring-1 ring-primary/25 shadow-sm"
-                        : "hover:ring-1 hover:ring-border/70",
-                    )}
+        <div className="mx-auto flex max-w-7xl justify-end">
+          <Popover>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Admin options"
+                    className="h-11 w-11 rounded-xl border border-primary/40 bg-card/90 text-primary shadow-sm shadow-primary/10 hover:bg-primary/10 hover:text-primary"
                   >
-                    <item.icon className="h-4 w-4" strokeWidth={2.25} />
-                    <span className="sr-only">{item.label}</span>
-                  </NavLink>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">{item.label}</TooltipContent>
-              </Tooltip>
-            ))}
-          </nav>
+                    <Settings className="h-5 w-5" strokeWidth={2.35} />
+                  </Button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Admin options</TooltipContent>
+            </Tooltip>
+
+            <PopoverContent
+              align="end"
+              side="bottom"
+              sideOffset={8}
+              className="w-[min(25rem,calc(100vw-1rem))] rounded-l-full rounded-r-2xl border-primary/30 bg-card/95 p-3 shadow-xl shadow-primary/10 backdrop-blur-xl"
+            >
+              <nav
+                aria-label="Admin navigation"
+                className="grid grid-cols-4 gap-2 rounded-l-full rounded-r-xl border border-primary/20 bg-primary/5 p-3 pl-8"
+              >
+                {navItems.map((item) => (
+                  <Tooltip key={item.label}>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to={item.to}
+                        end={item.end}
+                        aria-label={item.label}
+                        className={({ isActive }) => cn(
+                          "grid h-11 w-11 place-items-center rounded-xl border border-primary/30 bg-background/90 text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary",
+                          isActive && "border-primary/50 bg-primary/15 text-primary ring-1 ring-primary/25",
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" strokeWidth={2.3} />
+                        <span className="sr-only">{item.label}</span>
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">{item.label}</TooltipContent>
+                  </Tooltip>
+                ))}
+              </nav>
+            </PopoverContent>
+          </Popover>
         </div>
       </header>
 

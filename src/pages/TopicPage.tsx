@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +16,13 @@ import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+
+type MindmapData = ComponentProps<typeof Mindmap>["data"];
+type TopicWithMindmap = Topic & { mindmap?: MindmapData };
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function TopicPage() {
   const { courseSlug, slug } = useParams();
@@ -45,7 +52,7 @@ export default function TopicPage() {
     if (!slug || !course?.id) return;
     (async () => {
       const { data: all } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
-      const list = (all as any as Topic[]) ?? [];
+      const list = (all as unknown as Topic[]) ?? [];
       const idx = list.findIndex(t => t.slug === slug);
       if (idx >= 0) {
         setTopic(list[idx]);
@@ -55,7 +62,9 @@ export default function TopicPage() {
     })();
   }, [slug, course?.id]);
 
-  useEffect(() => { if (topic && user) markViewed(topic.id); /* eslint-disable-next-line */ }, [topic?.id, user?.id]);
+  // markViewed is intentionally keyed to identity changes, not every progress refresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (topic && user) markViewed(topic.id); }, [topic?.id, user?.id]);
 
   const pages = useMemo(() => paginate(topic?.content || []), [topic?.content]);
   const currentPage = pages[pageIdx];
@@ -81,7 +90,7 @@ export default function TopicPage() {
         setTopic({ ...topic, quiz: fresh });
         toast.success(`Replaced old MCQs with ${fresh.length} fresh question${fresh.length === 1 ? "" : "s"}`);
       }
-    } catch (e: any) { toast.error(e.message || "AI generation failed"); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "AI generation failed")); }
     finally { setGenerating(false); }
   };
 
@@ -92,9 +101,9 @@ export default function TopicPage() {
       const { data, error } = await supabase.functions.invoke("generate-mindmap", { body: { topicId: topic.id, courseId: course?.id } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      setTopic({ ...topic, mindmap: data.mindmap } as any);
+      setTopic({ ...topic, mindmap: data.mindmap } as TopicWithMindmap);
       toast.success("Mind map generated");
-    } catch (e: any) { toast.error(e.message || "Failed"); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "Failed")); }
     finally { setGenMindmap(false); }
   };
 
@@ -114,11 +123,31 @@ export default function TopicPage() {
       });
       if (error) throw error;
       toast.success("Bookmarked");
-    } catch (e: any) { toast.error(e.message || "Bookmark failed"); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "Bookmark failed")); }
     finally { setBookmarking(false); }
   };
 
   const linkPrefix = `/course/${courseSlug}`;
+  const goPreviousPage = () => {
+    if (pageIdx > 0) {
+      setPageTurnDirection("prev");
+      setPageIdx((p) => p - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (neighbors.prev) nav(`${linkPrefix}/topic/${neighbors.prev.slug}`);
+  };
+  const goNextPage = () => {
+    if (pageIdx < pages.length - 1) {
+      setPageTurnDirection("next");
+      setPageIdx((p) => p + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (neighbors.next) nav(`${linkPrefix}/topic/${neighbors.next.slug}`);
+  };
+  const canGoPrevious = pageIdx > 0 || Boolean(neighbors.prev);
+  const canGoNext = pageIdx < pages.length - 1 || Boolean(neighbors.next);
 
   return (
     <div className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10">
@@ -142,6 +171,38 @@ export default function TopicPage() {
             </Button>
           )}
         </div>
+      </div>
+
+      <div className="mb-5 grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl sm:grid-cols-2">
+        {neighbors.prev ? (
+          <Button
+            asChild
+            variant="ghost"
+            className="min-w-0 justify-start bg-white/10 text-white/90 hover:bg-white/15"
+          >
+            <Link to={`${linkPrefix}/topic/${neighbors.prev.slug}`} className="min-w-0">
+              <ArrowLeft className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Previous lesson: {neighbors.prev.title}</span>
+            </Link>
+          </Button>
+        ) : (
+          <div className="flex h-10 items-center rounded-xl px-3 text-sm text-muted-foreground">Start of course</div>
+        )}
+
+        {neighbors.next ? (
+          <Button
+            asChild
+            variant="ghost"
+            className="min-w-0 justify-start bg-white/10 text-white/90 hover:bg-white/15 sm:justify-end"
+          >
+            <Link to={`${linkPrefix}/topic/${neighbors.next.slug}`} className="min-w-0">
+              <span className="truncate">Next lesson: {neighbors.next.title}</span>
+              <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
+            </Link>
+          </Button>
+        ) : (
+          <div className="flex h-10 items-center rounded-xl px-3 text-sm text-muted-foreground sm:justify-end">End of course</div>
+        )}
       </div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -176,6 +237,31 @@ export default function TopicPage() {
         </div>
       )}
 
+      {pages.length > 0 && (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!canGoPrevious}
+            onClick={goPreviousPage}
+            aria-label={pageIdx > 0 ? "Previous page" : "Previous lesson"}
+            className="fixed left-1 top-1/2 z-40 h-11 w-11 -translate-y-1/2 rounded-full border border-white/10 bg-background/25 text-white/55 shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-primary/10 hover:text-primary disabled:pointer-events-none disabled:opacity-15 sm:left-5 sm:h-14 sm:w-14 sm:border-white/15 sm:bg-background/70 sm:text-white/90 sm:shadow-2xl sm:shadow-black/20 sm:backdrop-blur-xl"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!canGoNext}
+            onClick={goNextPage}
+            aria-label={pageIdx < pages.length - 1 ? "Next page" : "Next lesson"}
+            className="fixed right-1 top-1/2 z-40 h-11 w-11 -translate-y-1/2 rounded-full border border-white/10 bg-background/25 text-white/55 shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-primary/10 hover:text-primary disabled:pointer-events-none disabled:opacity-15 sm:right-5 sm:h-14 sm:w-14 sm:border-white/15 sm:bg-background/70 sm:text-white/90 sm:shadow-2xl sm:shadow-black/20 sm:backdrop-blur-xl"
+          >
+            <ArrowRight className="h-6 w-6" />
+          </Button>
+        </>
+      )}
+
       {/* Render current page with karaoke offsets */}
       <div style={{ fontSize: `${readerZoom}%` }}>
         <motion.div
@@ -187,7 +273,7 @@ export default function TopicPage() {
         >
           {currentPage && (() => {
             let off = 0;
-            return currentPage.blocks.map((b: any, i: number) => {
+            return currentPage.blocks.map((b: unknown, i: number) => {
               const wo = off;
               off += countWords(blockToText(b));
               return (
@@ -204,45 +290,6 @@ export default function TopicPage() {
         </motion.div>
       </div>
 
-      {/* Pagination footer */}
-      {pages.length > 1 && (
-        <div className="mt-8 flex justify-center">
-          <div className="flex flex-wrap items-center gap-3 rounded-full border border-white/15 bg-white/5 px-4 py-3 shadow-2xl shadow-black/10 backdrop-blur-xl">
-            <Button
-              variant="ghost"
-              disabled={pageIdx === 0}
-              onClick={() => {
-                if (pageIdx === 0) return;
-                setPageTurnDirection("prev");
-                setPageIdx((p) => p - 1);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" /> Previous page
-            </Button>
-
-            <span className="text-xs font-mono text-muted-foreground px-2">
-              {pageIdx + 1} / {pages.length}
-            </span>
-
-            <Button
-              variant="ghost"
-              disabled={pageIdx === pages.length - 1}
-              onClick={() => {
-                if (pageIdx === pages.length - 1) return;
-                setPageTurnDirection("next");
-                setPageIdx((p) => p + 1);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
-            >
-              Next page <ArrowRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Mindmap (only on last page) */}
       {pageIdx === pages.length - 1 && (
         <div className="mt-10 glass rounded-2xl p-6">
@@ -251,11 +298,11 @@ export default function TopicPage() {
             {isAdmin && (
               <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMindmap}>
                 {genMindmap ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                {(topic as any).mindmap ? "Regenerate" : "Generate"} mind map
+                {(topic as TopicWithMindmap).mindmap ? "Regenerate" : "Generate"} mind map
               </Button>
             )}
           </div>
-          {(topic as any).mindmap ? <Mindmap data={(topic as any).mindmap} /> : (
+          {(topic as TopicWithMindmap).mindmap ? <Mindmap data={(topic as TopicWithMindmap).mindmap} /> : (
             <p className="text-sm text-muted-foreground">No mind map yet{isAdmin ? " — click generate." : "."}</p>
           )}
         </div>
@@ -280,33 +327,6 @@ export default function TopicPage() {
         </div>
       )}
 
-      <div className="mt-8 flex justify-center">
-        <div className="flex flex-wrap items-center justify-center gap-4 rounded-full border border-white/10 bg-white/5 px-4 py-3 shadow-2xl shadow-black/10 backdrop-blur-xl">
-          {neighbors.prev ? (
-            <Button
-              asChild
-              variant="ghost"
-              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
-            >
-              <Link to={`${linkPrefix}/topic/${neighbors.prev.slug}`}><ArrowLeft className="h-4 w-4 mr-1" />{neighbors.prev.title}</Link>
-            </Button>
-          ) : (
-            <span className="text-xs text-muted-foreground">Start of course</span>
-          )}
-
-          {neighbors.next ? (
-            <Button
-              asChild
-              variant="ghost"
-              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
-            >
-              <Link to={`${linkPrefix}/topic/${neighbors.next.slug}`}>{neighbors.next.title}<ArrowRight className="h-4 w-4 ml-1" /></Link>
-            </Button>
-          ) : (
-            <span className="text-xs text-muted-foreground">End of course</span>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

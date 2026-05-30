@@ -6,7 +6,7 @@ import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BookOpen, CalendarDays, Check, ChevronDown, Plus, SlidersHorizontal, Sparkles, Tag, Trash2, X } from "lucide-react";
+import { ArrowUpDown, BookOpen, CalendarDays, Check, ChevronDown, Plus, SlidersHorizontal, Sparkles, Tag, Trash2, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
@@ -114,16 +114,14 @@ export default function Courses() {
       </div>
 
       <div className="glass rounded-2xl p-4 mb-8 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/10" title="Filters" aria-label="Filters">
           <SlidersHorizontal className="h-4 w-4 text-primary" />
-          <div className="text-sm font-display font-bold">Filters</div>
         </div>
 
         {allTags.length > 0 && (
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/45" title="Tags" aria-label="Tags">
               <Tag className="h-4 w-4 text-primary" />
-              Tags
             </div>
 
             <Popover>
@@ -163,9 +161,8 @@ export default function Courses() {
         )}
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/45" title="Date" aria-label="Date">
             <CalendarDays className="h-4 w-4 text-primary" />
-            Date
           </div>
           <Select value={dateMode} onValueChange={(value) => setDateMode(value as DateMode)}>
             <SelectTrigger className="h-9 w-[160px] bg-background/70">
@@ -191,7 +188,9 @@ export default function Courses() {
         )}
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="text-sm font-medium">Sort</div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/45" title="Sort" aria-label="Sort">
+            <ArrowUpDown className="h-4 w-4 text-primary" />
+          </div>
           <Select value={sortMode} onValueChange={(value) => setSortMode(value as SortMode)}>
             <SelectTrigger className="h-9 w-[190px] bg-background/70">
               <SelectValue />
@@ -219,8 +218,8 @@ export default function Courses() {
         )}
 
         {hasActiveFilters && (
-          <button onClick={resetFilters} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-            <X className="h-3 w-3" /> Reset filters
+          <button onClick={resetFilters} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/45 text-muted-foreground hover:border-destructive/50 hover:text-destructive" title="Reset filters" aria-label="Reset filters">
+            <X className="h-4 w-4" />
           </button>
         )}
 

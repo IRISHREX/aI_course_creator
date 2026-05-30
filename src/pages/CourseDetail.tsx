@@ -4,11 +4,20 @@ import { useTopics, useProgress } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Loader2, Settings2 } from "lucide-react";
+import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Info, Loader2, Settings2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { type ComponentProps, useEffect, useState } from "react";
+
+type MindmapData = ComponentProps<typeof Mindmap>["data"];
+type CourseWithMindmap = NonNullable<ReturnType<typeof useCourseBySlug>["course"]> & {
+  mindmap?: MindmapData;
+};
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function CourseDetail() {
   const { courseSlug } = useParams();
@@ -18,15 +27,16 @@ export default function CourseDetail() {
   const { isAdmin } = useIsAdmin();
   const [downloading, setDownloading] = useState(false);
   const [genMM, setGenMM] = useState(false);
-  const [mindmap, setMindmap] = useState<any>(null);
+  const [mindmap, setMindmap] = useState<MindmapData>(null);
   const [pyqCount, setPyqCount] = useState(0);
+  const [tocOpen, setTocOpen] = useState(false);
 
   useEffect(() => {
     if (!course?.id) return;
-    setMindmap((course as any).mindmap || null);
+    setMindmap((course as CourseWithMindmap).mindmap || null);
     supabase.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", course.id)
       .then(({ count }) => setPyqCount(count || 0));
-  }, [course?.id]);
+  }, [course]);
 
   if (cLoad || loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
@@ -39,7 +49,7 @@ export default function CourseDetail() {
       if (data?.error) throw new Error(data.error);
       setMindmap(data.mindmap);
       toast.success("Course mind map generated");
-    } catch (e: any) { toast.error(e.message || "Failed"); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "Failed")); }
     finally { setGenMM(false); }
   };
 
@@ -60,8 +70,8 @@ export default function CourseDetail() {
       const a = document.createElement("a");
       a.href = url; a.download = `${course.slug}.docx`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      toast.error(e.message || "Download failed");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Download failed"));
     } finally { setDownloading(false); }
   };
 
@@ -103,19 +113,27 @@ export default function CourseDetail() {
       {/* Auto Table of Contents */}
       {topics.length > 0 && (
         <div className="glass mb-8 rounded-xl p-4 sm:rounded-2xl sm:p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-primary" />
-            <h2 className="font-display text-base font-bold sm:text-lg">Table of Contents</h2>
+          <button
+            type="button"
+            onClick={() => setTocOpen((open) => !open)}
+            aria-expanded={tocOpen}
+            aria-controls="course-table-of-content"
+            className="flex w-full items-center gap-2 rounded-lg text-left transition hover:text-primary"
+          >
+            <Info className="h-5 w-5 shrink-0 text-primary" />
+            <span className="font-display text-base font-bold sm:text-lg">Table of content</span>
             <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">{topics.length} lessons</span>
-          </div>
-          <ol className="grid gap-x-10 gap-y-1 text-sm sm:grid-cols-2 xl:grid-cols-3">
-            {topics.map((t, i) => (
-              <li key={t.id} className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-2">
-                <span className="font-mono text-xs text-muted-foreground">{t.unit}.{t.order_index}</span>
-                <Link to={`/course/${course.slug}/topic/${t.slug}`} className="min-w-0 break-words leading-6 hover:text-primary sm:truncate">{t.title}</Link>
-              </li>
-            ))}
-          </ol>
+          </button>
+          {tocOpen && (
+            <ol id="course-table-of-content" className="mt-4 grid gap-x-10 gap-y-1 border-t border-border/60 pt-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
+              {topics.map((t) => (
+                <li key={t.id} className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-2">
+                  <span className="font-mono text-xs text-muted-foreground">{t.unit}.{t.order_index}</span>
+                  <Link to={`/course/${course.slug}/topic/${t.slug}`} className="min-w-0 break-words leading-6 hover:text-primary sm:truncate">{t.title}</Link>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       )}
 
