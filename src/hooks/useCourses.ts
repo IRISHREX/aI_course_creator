@@ -9,6 +9,8 @@ export interface Course {
   cover_emoji: string | null;
   order_index: number;
   tags?: string[] | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export const useCourses = () => {
