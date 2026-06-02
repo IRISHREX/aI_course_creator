@@ -2,6 +2,11 @@ import { getAppSettings, getCourseSettings } from "@/lib/appSettings";
 
 type Filter = { key: string; value: any; op: "eq" | "in" };
 type Order = { key: string; ascending: boolean };
+type ExportOptions = {
+  includeImages?: boolean;
+  includeGraphs?: boolean;
+  includeCode?: boolean;
+};
 
 const API_URL = (import.meta.env.VITE_API_URL || "https://ai-course-creator-be.onrender.com").replace(/\/$/, "");
 const TOKEN_KEY = "ignouprep.auth.token";
@@ -638,6 +643,16 @@ async function aiJson(system: string, user: string, fallback: any) {
   return repaired;
 }
 
+async function repairJsonPayload(text: string, fallback: any) {
+  const repairText = await aiChatContent([
+    { role: "system", content: "Return only valid JSON. Repair the assistant output into valid JSON that matches the requested shape." },
+    { role: "user", content: `Requested shape fallback:\n${JSON.stringify(fallback)}\n\nAssistant output:\n${text}` },
+  ], 0);
+  const repaired = parseJsonPayload(repairText, fallback);
+  if (repaired === fallback) throw new Error("AI returned JSON that could not be parsed.");
+  return repaired;
+}
+
 async function aiToolJson(system: string, user: string, toolName: string, parameters: any, fallback: any) {
   return withAiKeyRecovery(async () => {
     const data = await api("/ai/chat", {
@@ -661,13 +676,15 @@ async function aiToolJson(system: string, user: string, toolName: string, parame
       try {
         return JSON.parse(args);
       } catch {
-        return parseJsonPayload(args, fallback);
+        const parsed = parseJsonPayload(args, fallback);
+        if (parsed !== fallback) return parsed;
+        return repairJsonPayload(args, fallback);
       }
     }
     const text = data.choices?.[0]?.message?.content || "";
     if (!text.trim()) throw new Error("AI returned an empty response.");
     const parsed = parseJsonPayload(text, fallback);
-    if (parsed === fallback) throw new Error("AI returned JSON that could not be parsed.");
+    if (parsed === fallback) return repairJsonPayload(text, fallback);
     return parsed;
   });
 }
@@ -726,7 +743,16 @@ function exportCleanText(value: unknown) {
     .trim();
 }
 
-function exportBlockLines(block: any): string[] {
+function shouldExportBlock(block: any, options: Required<ExportOptions>) {
+  if (!block || typeof block !== "object") return false;
+  if (block.type === "image") return options.includeImages;
+  if (block.type === "flowchart" || block.type === "chart") return options.includeGraphs;
+  if (block.type === "code") return options.includeCode;
+  return true;
+}
+
+function exportBlockLines(block: any, options: Required<ExportOptions>): string[] {
+  if (!shouldExportBlock(block, options)) return [];
   if (!block || typeof block !== "object") return [];
   if (block.type === "text") return [exportCleanText(block.value)];
   if (block.type === "highlight") return [`Key point: ${exportCleanText(block.value)}`];
@@ -762,11 +788,16 @@ function wrapExportText(text: string, maxChars: number) {
   return lines.length ? lines : [""];
 }
 
-async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], links: any[]) {
+async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], links: any[], rawOptions: ExportOptions = {}) {
+  const options = {
+    includeImages: rawOptions.includeImages !== false,
+    includeGraphs: rawOptions.includeGraphs !== false,
+    includeCode: rawOptions.includeCode !== false,
+  };
   const lines: string[] = [course?.title || "Course", course?.description || ""];
   topics.forEach((topic: any) => {
     lines.push("", `Unit ${topic.unit}`, `${topic.unit}.${topic.order_index} ${topic.title}`, topic.summary || "");
-    (topic.content || []).forEach((block: any) => lines.push(...exportBlockLines(block)));
+    (topic.content || []).forEach((block: any) => lines.push(...exportBlockLines(block, options)));
     if (topic.quiz?.length) {
       lines.push("Quiz");
       topic.quiz.forEach((q: any, qi: number) => {
@@ -869,12 +900,43 @@ function normalizeOutline(result: any) {
   const lessons = Array.isArray(result?.topics) ? result.topics : [];
   return {
     description: String(result?.description || ""),
-    units: lessons.map((lesson: any, index: number) => ({
-      unit: index + 1,
-      title: String(lesson.title || `Unit ${index + 1}`),
-      summary: String(lesson.summary || ""),
-      lessons: [],
-    })),
+    units: lessons.length ? [{
+      unit: 1,
+      title: "Core concepts",
+      summary: String(result?.summary || ""),
+      lessons: lessons.map((lesson: any, index: number) => ({
+        title: typeof lesson === "string" ? lesson : String(lesson?.title || `Lesson ${index + 1}`),
+        summary: typeof lesson === "string" ? "" : String(lesson?.summary || ""),
+      })).filter((lesson: any) => lesson.title),
+    }] : [],
+  };
+}
+
+function headingCandidatesFromSource(sourceText: string) {
+  return sourceText
+    .split(/\n+/)
+    .map((line) => line.replace(/^#+\s*/, "").replace(/^\d+[\).:-]\s*/, "").trim())
+    .filter((line) => line.length >= 4 && line.length <= 90)
+    .filter((line) => !/[.!?]$/.test(line))
+    .slice(0, 18);
+}
+
+function fallbackOutlineFromSource(title: string, sourceText: string, summaries: string[] = []) {
+  const compact = sourceText.replace(/\s+/g, " ").trim();
+  const headings = headingCandidatesFromSource(sourceText);
+  const fallbackTopics = headings.length ? headings : compact.match(/[^.!?]+[.!?]+/g)?.slice(0, 8).map((line) => line.trim().slice(0, 80)) || [];
+  const lessons = fallbackTopics.slice(0, 12).map((topic, index) => ({
+    title: topic || `Lesson ${index + 1}`,
+    summary: compact.slice(index * 220, index * 220 + 220),
+  }));
+  return {
+    description: compact.slice(0, 500) || `Course generated from ${title}`,
+    units: [{
+      unit: 1,
+      title: title || "Course overview",
+      summary: summaries.join("\n").slice(0, 500) || compact.slice(0, 500),
+      lessons: lessons.length ? lessons : [{ title: title || "Course overview", summary: compact.slice(0, 300) }],
+    }],
   };
 }
 
@@ -883,30 +945,86 @@ async function buildCourseOutlineFromSource(title: string, sourceText: string) {
   const summaries: string[] = [];
 
   for (let index = 0; index < chunks.length; index++) {
-    const result = await aiJson(
-      "Return only valid JSON: {\"summary\":\"\",\"topics\":[\"\"]}. Scan this source chunk and list every important topic, subtopic, term, process, formula, and example. Do not create lessons yet.",
-      `Course: ${title}\nChunk ${index + 1} of ${chunks.length}\n\n${chunks[index]}`,
-      { summary: "", topics: [] },
-    );
-    const topicList = Array.isArray(result.topics) ? result.topics.join("; ") : "";
-    summaries.push(`Chunk ${index + 1}: ${result.summary || ""}\nTopics: ${topicList}`);
+    try {
+      const result = await aiJson(
+        "Return only valid JSON: {\"summary\":\"\",\"topics\":[\"\"]}. Scan this source chunk and list every important topic, subtopic, term, process, formula, and example. Do not create lessons yet.",
+        `Course: ${title}\nChunk ${index + 1} of ${chunks.length}\n\n${chunks[index]}`,
+        { summary: "", topics: [] },
+      );
+      const topicList = Array.isArray(result.topics) ? result.topics.join("; ") : "";
+      summaries.push(`Chunk ${index + 1}: ${result.summary || ""}\nTopics: ${topicList}`);
+    } catch {
+      summaries.push(`Chunk ${index + 1}: ${chunks[index].replace(/\s+/g, " ").trim().slice(0, 900)}`);
+    }
   }
 
-  const result = await aiJson(
-    `Return only valid JSON in this shape:
+  try {
+    const result = await aiJson(
+      `Return only valid JSON in this shape:
 {"description":"","units":[{"unit":1,"title":"","summary":"","lessons":[{"title":"","summary":""}]}]}
 
 Build a complete course map from the scan summaries. Cover all major topics from the source. Use unit overview lessons as x.0 and sub-lessons as x.1, x.2, etc. Create 2-6 units when possible, and 1-6 sub-lessons per unit. Keep lesson titles specific and non-overlapping.`,
-    `Course title: ${title}
+      `Course title: ${title}
 ${getAppSettings().ai.optimizationPrompt ? `Optimization rule: ${getAppSettings().ai.optimizationPrompt}\n` : ""}
 ${getAppSettings().ai.coursePrompt ? `Admin course prompt addition: ${getAppSettings().ai.coursePrompt}\n` : ""}
 
 Whole-document scan summaries:
 ${summaries.join("\n\n")}`,
-    { description: "", units: [] },
-  );
+      { description: "", units: [] },
+    );
 
-  return normalizeOutline(result);
+    const outline = normalizeOutline(result);
+    return outline.units.length ? outline : fallbackOutlineFromSource(title, sourceText, summaries);
+  } catch {
+    return fallbackOutlineFromSource(title, sourceText, summaries);
+  }
+}
+
+async function recreateTopicsFromOutline(course: any, outline: any) {
+  const existing = await getCourseTopics(course.id);
+  for (const topic of existing) {
+    await api(`/topics/${encodeURIComponent(topic.id)}`, { method: "DELETE" });
+  }
+
+  let topicCount = 0;
+  const courseSlug = course.slug || slugify(course.title || "course");
+  for (const unit of outline.units || []) {
+    const unitNumber = Number(unit.unit) || topicCount + 1;
+    const unitTitle = String(unit.title || `Unit ${unitNumber}`);
+    await api("/topics", {
+      method: "POST",
+      body: JSON.stringify({
+        courseId: course.id,
+        title: unitTitle,
+        summary: unit.summary || "",
+        unit: unitNumber,
+        orderIndex: 0,
+        slug: `${courseSlug}-${slugify(unitTitle)}-0`,
+        content: [],
+        quiz: [],
+        generationStatus: "pending",
+      }),
+    });
+    topicCount++;
+    for (const [index, lesson] of (unit.lessons || []).entries()) {
+      await api("/topics", {
+        method: "POST",
+        body: JSON.stringify({
+          courseId: course.id,
+          title: lesson.title,
+          summary: lesson.summary || "",
+          unit: unitNumber,
+          orderIndex: index + 1,
+          slug: `${courseSlug}-${slugify(lesson.title)}-${index + 1}`,
+          content: [],
+          quiz: [],
+          generationStatus: "pending",
+        }),
+      });
+      topicCount++;
+    }
+  }
+  return topicCount;
 }
 
 const LESSON_GENERATION_SYSTEM_PROMPT = `You are a structured content generator for an AI learning platform.
@@ -1276,8 +1394,21 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
         }
         if (name === "update-course-source") {
           const source = body.rawText || body.docsUrl || "";
-          await patchCourse(body.courseId, { source_text: source });
-          return { data: { ok: true, sourceLength: source.length, attempts: 1 }, error: null };
+          const course = (await getAllCourses()).find((item: any) => item.id === body.courseId);
+          if (!course) throw new Error("Course not found");
+          let topicCount = 0;
+          if (body.resetLessons) {
+            const outline = await buildCourseOutlineFromSource(course.title || "Course", source);
+            await patchCourse(body.courseId, {
+              source_text: source,
+              description: (outline.description || course.description || "").slice(0, 500),
+              toc: outline.units,
+            });
+            topicCount = await recreateTopicsFromOutline(course, outline);
+          } else {
+            await patchCourse(body.courseId, { source_text: source });
+          }
+          return { data: { ok: true, sourceLength: source.length, attempts: 1, rebuilt: Boolean(body.resetLessons), topicCount }, error: null };
         }
         if (name === "import-doc") {
           const text = body.url || "";
@@ -1347,7 +1478,7 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
           const topics = await getCourseTopics(body.courseId);
           const pyqs = fromApi((await api(`/pyq?courseId=${encodeURIComponent(body.courseId)}`)).pyqs || []);
           const links = fromApi((await api(`/pyq/topics?courseId=${encodeURIComponent(body.courseId)}`)).links || []);
-          return { data: { ok: true, ...await buildLocalCourseExport(course, topics, pyqs, links) }, error: null };
+          return { data: { ok: true, ...await buildLocalCourseExport(course, topics, pyqs, links, body.options) }, error: null };
         }
         if (name === "ingest-pyq") {
           return { data: { ok: true, inserted: 0, tagged: 0 }, error: null };

@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import { KaraokeReadMode, karaokeSeek } from "@/components/KaraokeReadMode";
 import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
-import { paginate, pageReadable } from "@/lib/lessonPaging";
+import { paginate, pageBalanceStats, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
 import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -40,6 +40,7 @@ export default function TopicPage() {
   const [genMindmap, setGenMindmap] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
   const [readerZoom, setReaderZoom] = useState(100);
+  const [autoAdvanceRead, setAutoAdvanceRead] = useState(false);
 
   // Resume from URL hash: #p=2&w=14
   useEffect(() => {
@@ -148,6 +149,17 @@ export default function TopicPage() {
   };
   const canGoPrevious = pageIdx > 0 || Boolean(neighbors.prev);
   const canGoNext = pageIdx < pages.length - 1 || Boolean(neighbors.next);
+  const detectPageBalance = () => {
+    const stats = pageBalanceStats(pages);
+    if (stats.pages <= 1) {
+      toast.info("Single page lesson; no balancing needed");
+      return;
+    }
+    const balanced = stats.spread <= 120;
+    const message = `${balanced ? "Pages look balanced" : "Balanced split applied"}: ${stats.pages} pages, ${stats.min}-${stats.max} words each`;
+    if (balanced) toast.success(message);
+    else toast.info(message);
+  };
 
   return (
     <div className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10">
@@ -159,8 +171,17 @@ export default function TopicPage() {
             <span className="truncate">{course?.title || "Course"}</span>
           </Link>
         </Button>
-        <div className="grid grid-cols-5 gap-1.5 sm:flex sm:items-center sm:gap-2">
-          <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} />
+        <div className="grid grid-cols-6 gap-1.5 sm:flex sm:items-center sm:gap-2">
+          <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} onDone={autoAdvanceRead ? goNextPage : undefined} />
+          <Button
+            variant={autoAdvanceRead ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => setAutoAdvanceRead((value) => !value)}
+            title="Auto next after read mode"
+            aria-label="Auto next after read mode"
+          >
+            <ChevronsRight className="h-4 w-4" />
+          </Button>
           {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
           <Button variant="ghost" size="icon" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
             {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
@@ -225,6 +246,9 @@ export default function TopicPage() {
               ))}
             </div>
             <div className="flex items-center gap-1 rounded-md border border-border/60 bg-background/40 p-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={detectPageBalance} aria-label="Detect page balance" title="Detect page balance">
+                <SearchCheck className="h-3.5 w-3.5" />
+              </Button>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setReaderZoom((z) => Math.max(85, z - 10))} aria-label="Zoom out">
                 <ZoomOut className="h-3.5 w-3.5" />
               </Button>

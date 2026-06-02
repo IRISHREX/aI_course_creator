@@ -19,6 +19,11 @@ import { ArrowLeft, CheckCircle2, CheckSquare, Download, Edit3, FileJson, FileTe
 import { extractTextFromFile } from "@/lib/extractText";
 
 type BulkLessonInput = { unit: number; title: string; summary: string };
+type ExportOptions = {
+  includeImages: boolean;
+  includeGraphs: boolean;
+  includeCode: boolean;
+};
 
 type DuplicateScanItem = {
   topicId: string;
@@ -86,6 +91,11 @@ export default function CourseEdit() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportDrawerOpen, setExportDrawerOpen] = useState(false);
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    includeImages: true,
+    includeGraphs: true,
+    includeCode: true,
+  });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [duplicateSelectedUnits, setDuplicateSelectedUnits] = useState<number[]>([]);
   const [duplicateScanning, setDuplicateScanning] = useState(false);
@@ -257,13 +267,42 @@ export default function CourseEdit() {
     toast.success(successMessage);
   };
 
-  const generateAllRemaining = async () => {
-    await generateTopicBatch(topics.filter(t => (t as any).generation_status !== "ready"), "Batch generation complete");
+  const generateAllRemaining = async (sourceTopics = topics) => {
+    await generateTopicBatch(sourceTopics.filter(t => (t as any).generation_status !== "ready"), "Batch generation complete");
   };
 
   const generateSelected = async () => {
     if (!selectedTopics.length) return;
     await generateTopicBatch(selectedTopics, `Generated ${selectedTopics.length} selected lesson${selectedTopics.length === 1 ? "" : "s"}`);
+  };
+
+  const editTopicMeta = async (topic: typeof topics[number]) => {
+    const unitText = window.prompt("Unit number:", String(topic.unit));
+    if (unitText === null) return;
+    const orderText = window.prompt("Lesson index in this unit (0 for unit overview):", String(topic.order_index));
+    if (orderText === null) return;
+    const titleText = window.prompt("Lesson or unit title:", topic.title);
+    if (titleText === null) return;
+    const summaryText = window.prompt("Short summary:", topic.summary || "");
+    if (summaryText === null) return;
+
+    const unit = Number(unitText);
+    const orderIndex = Number(orderText);
+    if (!Number.isInteger(unit) || unit < 1) { toast.error("Unit must be a positive whole number"); return; }
+    if (!Number.isInteger(orderIndex) || orderIndex < 0) { toast.error("Lesson index must be 0 or higher"); return; }
+    if (!titleText.trim()) { toast.error("Title is required"); return; }
+
+    const { error } = await backendApi.from("topics").update({
+      unit,
+      order_index: orderIndex,
+      title: titleText.trim(),
+      summary: summaryText.trim(),
+    } as any).eq("id", topic.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(orderIndex === 0 ? "Unit title updated" : "Lesson indexing updated");
+      await refreshTopics();
+    }
   };
 
   const saveCourse = async () => {
@@ -496,10 +535,10 @@ export default function CourseEdit() {
       if (data?.error) throw new Error(data.error);
       toast.success(`Source updated (${data.sourceLength.toLocaleString()} chars${data.attempts > 1 ? `, ${data.attempts} attempts` : ""})`);
       setReDocsUrl(""); setReRawText("");
-      await refreshTopics();
+      const nextTopics = await refreshTopics();
       if (resetLessons) {
         toast.info("Re-running generation for all lessons…");
-        await generateAllRemaining();
+        await generateAllRemaining(nextTopics);
       }
     } catch (e: any) {
       toast.error(e.message || "Re-upload failed");
@@ -517,10 +556,14 @@ export default function CourseEdit() {
     URL.revokeObjectURL(url);
   };
 
+  const setExportOption = (key: keyof ExportOptions, value: boolean) => {
+    setExportOptions((current) => ({ ...current, [key]: value }));
+  };
+
   const exportCourse = async (format: "docs" | "pdf") => {
     setExporting(true);
     try {
-      const { data, error } = await backendApi.functions.invoke("export-course", { body: { courseId: course.id } });
+      const { data, error } = await backendApi.functions.invoke("export-course", { body: { courseId: course.id, options: exportOptions } });
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
@@ -787,6 +830,21 @@ export default function CourseEdit() {
                   </DrawerDescription>
                 </DrawerHeader>
                 <div className="grid gap-3 pb-3">
+                  <div className="grid gap-3 rounded-md border border-border/70 p-3">
+                    <Label className="text-xs font-semibold">Include content</Label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={exportOptions.includeImages} onCheckedChange={(checked) => setExportOption("includeImages", Boolean(checked))} />
+                      Images
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={exportOptions.includeGraphs} onCheckedChange={(checked) => setExportOption("includeGraphs", Boolean(checked))} />
+                      Graphs and charts
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={exportOptions.includeCode} onCheckedChange={(checked) => setExportOption("includeCode", Boolean(checked))} />
+                      Code blocks
+                    </label>
+                  </div>
                   <Button onClick={() => exportCourse("docs")} variant="hero" disabled={exporting} className="justify-start gap-2">
                     {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                     Download as Google Docs
@@ -945,6 +1003,9 @@ export default function CourseEdit() {
                     <div className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/40 p-1">
                       <ToolButton label={isReady ? "Regenerate lesson with AI" : "Generate lesson with AI"} variant="ghost" size="icon" disabled={isGen || batchRunning} onClick={() => generateOne(t.id)}>
                         {isGen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      </ToolButton>
+                      <ToolButton label="Edit unit, index, title, and summary" variant="ghost" size="icon" onClick={() => editTopicMeta(t)}>
+                        <SearchCheck className="h-4 w-4" />
                       </ToolButton>
                       <ToolButton label="Edit lesson" asChild variant="ghost" size="icon">
                         <Link to={`/course/${course.slug}/topic/${t.slug}/edit`}><Edit3 className="h-4 w-4" /></Link>

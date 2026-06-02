@@ -11,6 +11,8 @@ interface Props {
   text: string;
   /** Optional: word currently spoken — emit index. */
   onWordIndex?: (index: number | null) => void;
+  autoScroll?: boolean;
+  onDone?: () => void;
 }
 
 const PREFS_KEY = "signal-tts-prefs";
@@ -29,12 +31,13 @@ export function tokenizeWords(text: string): { word: string; start: number; end:
   return out;
 }
 
-export function KaraokeReadMode({ text, onWordIndex }: Props) {
+export function KaraokeReadMode({ text, onWordIndex, autoScroll = true, onDone }: Props) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [state, setState] = useState<"idle" | "playing" | "paused">("idle");
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const startCharRef = useRef(0);
+  const stopRequestedRef = useRef(false);
 
   const tokens = useMemo(() => tokenizeWords(text), [text]);
 
@@ -53,6 +56,7 @@ export function KaraokeReadMode({ text, onWordIndex }: Props) {
   const startFrom = (charOffset: number) => {
     if (!supported || !text.trim()) return;
     window.speechSynthesis.cancel();
+    stopRequestedRef.current = false;
     startCharRef.current = charOffset;
     const slice = text.slice(charOffset);
     const u = new SpeechSynthesisUtterance(slice);
@@ -76,9 +80,20 @@ export function KaraokeReadMode({ text, onWordIndex }: Props) {
         // fallback: nearest >= absChar
         for (let i = 0; i < tokens.length; i++) if (tokens[i].start >= absChar) { found = i; break; }
       }
-      onWordIndex?.(found >= 0 ? found : null);
+      const wordIndex = found >= 0 ? found : null;
+      onWordIndex?.(wordIndex);
+      if (autoScroll && wordIndex !== null) {
+        window.requestAnimationFrame(() => {
+          document.querySelector(`[data-w="${wordIndex}"]`)?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        });
+      }
     };
-    u.onend = () => { setState("idle"); onWordIndex?.(null); };
+    u.onend = () => {
+      const wasStopped = stopRequestedRef.current;
+      setState("idle");
+      onWordIndex?.(null);
+      if (!wasStopped) onDone?.();
+    };
     u.onerror = () => { setState("idle"); onWordIndex?.(null); };
     utterRef.current = u;
     window.speechSynthesis.speak(u);
@@ -112,6 +127,7 @@ export function KaraokeReadMode({ text, onWordIndex }: Props) {
   };
   const stop = () => {
     if (!supported) return;
+    stopRequestedRef.current = true;
     window.speechSynthesis.cancel();
     setState("idle");
     onWordIndex?.(null);

@@ -4,7 +4,14 @@ import { useTopics, useProgress } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Info, Loader2, Settings2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown } from "lucide-react";
 import { backendApi } from "@/integrations/api/client";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
@@ -13,6 +20,12 @@ import { type ComponentProps, useEffect, useState } from "react";
 type MindmapData = ComponentProps<typeof Mindmap>["data"];
 type CourseWithMindmap = NonNullable<ReturnType<typeof useCourseBySlug>["course"]> & {
   mindmap?: MindmapData;
+};
+type ExportFormat = "docs" | "pdf";
+type ExportOptions = {
+  includeImages: boolean;
+  includeGraphs: boolean;
+  includeCode: boolean;
 };
 
 function errorMessage(error: unknown, fallback: string) {
@@ -25,7 +38,12 @@ export default function CourseDetail() {
   const { topics, loading } = useTopics(course?.id);
   const { progress } = useProgress();
   const { isAdmin } = useIsAdmin();
-  const [downloading, setDownloading] = useState(false);
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    includeImages: true,
+    includeGraphs: true,
+    includeCode: true,
+  });
   const [genMM, setGenMM] = useState(false);
   const [mindmap, setMindmap] = useState<MindmapData>(null);
   const [pyqCount, setPyqCount] = useState(0);
@@ -56,23 +74,44 @@ export default function CourseDetail() {
   const byUnit: Record<number, typeof topics> = {};
   topics.forEach(t => { (byUnit[t.unit] ||= []).push(t); });
 
-  const downloadDocx = async () => {
-    setDownloading(true);
+  const setExportOption = (key: keyof ExportOptions, value: boolean) => {
+    setExportOptions((current) => ({ ...current, [key]: value }));
+  };
+
+  const downloadBase64 = (base64: string, mime: string, filename: string) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCourse = async (format: ExportFormat) => {
+    setExporting(format);
     try {
       const { data, error } = await backendApi.functions.invoke("export-course", {
-        body: { courseId: course.id },
+        body: { courseId: course.id, options: exportOptions },
       });
       if (error) throw error;
-      // Function returns base64 docx
-      const bytes = Uint8Array.from(atob(data.docx), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `${course.slug}.docx`; a.click();
-      URL.revokeObjectURL(url);
+      const baseName = data?.filename || course.slug || "course";
+      const docExtension = data?.docExtension || "doc";
+      const docMime = data?.docMime || "application/msword";
+      if (format === "docs") {
+        if (!data?.docx) throw new Error("Google Docs export was not returned");
+        downloadBase64(data.docx, docMime, `${baseName}.${docExtension}`);
+        toast.success("Downloaded Google Docs file");
+      } else {
+        if (!data?.pdf) throw new Error("PDF export was not returned");
+        downloadBase64(data.pdf, "application/pdf", `${baseName}.pdf`);
+        toast.success("Downloaded PDF");
+      }
     } catch (e: unknown) {
       toast.error(errorMessage(e, "Download failed"));
-    } finally { setDownloading(false); }
+    } finally { setExporting(null); }
   };
 
   return (
@@ -94,9 +133,47 @@ export default function CourseDetail() {
           <Button asChild variant="neon" size="sm">
             <Link to={`/course/${course.slug}/quiz`}><Brain className="h-4 w-4 mr-1" /> Full course MCQ</Link>
           </Button>
-          <Button onClick={downloadDocx} variant="neon" disabled={downloading}>
-            <Download className="h-4 w-4 mr-1" /> {downloading ? "Building…" : "Download .docx"}
+          <Button onClick={() => exportCourse("docs")} variant="neon" disabled={Boolean(exporting)}>
+            {exporting === "docs" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
+            Google Docs
           </Button>
+          <Button onClick={() => exportCourse("pdf")} variant="neon" disabled={Boolean(exporting)}>
+            {exporting === "pdf" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileJson className="h-4 w-4 mr-1" />}
+            PDF
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="neon" disabled={Boolean(exporting)} className="gap-1">
+                <Settings2 className="h-4 w-4" />
+                Export options
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Include content</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={exportOptions.includeImages}
+                onCheckedChange={(checked) => setExportOption("includeImages", Boolean(checked))}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Images
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={exportOptions.includeGraphs}
+                onCheckedChange={(checked) => setExportOption("includeGraphs", Boolean(checked))}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Graphs and charts
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={exportOptions.includeCode}
+                onCheckedChange={(checked) => setExportOption("includeCode", Boolean(checked))}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Code blocks
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {isAdmin && (
             <>
               <Button asChild variant="hero" className="col-span-2 sm:col-span-1">
