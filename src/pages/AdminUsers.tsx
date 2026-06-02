@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +27,8 @@ export default function AdminUsers() {
   const load = async () => {
     setLoading(true);
     const [{ data: profiles }, { data: roles }] = await Promise.all([
-      supabase.from("profiles").select("id, display_name, created_at").order("created_at", { ascending: false }),
-      supabase.from("user_roles").select("user_id, role"),
+      backendApi.from("profiles").select("id, display_name, created_at").order("created_at", { ascending: false }),
+      backendApi.from("user_roles").select("user_id, role"),
     ]);
     const byUser = new Map<string, string[]>();
     (roles || []).forEach((r: any) => {
@@ -48,10 +48,10 @@ export default function AdminUsers() {
     setBusyId(userId);
     try {
       if (grant) {
-        const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
+        const { error } = await backendApi.from("user_roles").insert({ user_id: userId, role });
         if (error && !error.message.includes("duplicate")) throw error;
       } else {
-        const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", role);
+        const { error } = await backendApi.from("user_roles").delete().eq("user_id", userId).eq("role", role);
         if (error) throw error;
       }
       toast.success(`${grant ? "Granted" : "Revoked"} ${role}`);

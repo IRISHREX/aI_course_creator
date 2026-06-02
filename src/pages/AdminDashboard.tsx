@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,17 +48,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     (async () => {
       const [u, c, t, p] = await Promise.all([
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("courses").select("id", { count: "exact", head: true }),
-        supabase.from("topics").select("id", { count: "exact", head: true }),
-        supabase.from("course_pyq").select("id", { count: "exact", head: true }),
+        backendApi.from("profiles").select("id", { count: "exact", head: true }),
+        backendApi.from("courses").select("id", { count: "exact", head: true }),
+        backendApi.from("topics").select("id", { count: "exact", head: true }),
+        backendApi.from("course_pyq").select("id", { count: "exact", head: true }),
       ]);
       setStats({ users: u.count || 0, courses: c.count || 0, topics: t.count || 0, pyqs: p.count || 0 });
     })();
   }, []);
 
   const refreshAiKey = async () => {
-    const data = await supabase.aiKeys.get();
+    const data = await backendApi.aiKeys.get();
     setAiKey(data.key);
     setAiKeys(data.keys || (data.key ? [data.key] : []));
   };
@@ -71,7 +71,7 @@ export default function AdminDashboard() {
   const checkKey = async () => {
     setChecking(true);
     try {
-      const data = await supabase.aiKeys.check();
+      const data = await backendApi.aiKeys.check();
       await refreshAiKey();
       if (data.check?.ok) toast.success("Gemini key is active");
       else toast.error(data.check?.message || "Gemini key check failed");
@@ -89,7 +89,7 @@ export default function AdminDashboard() {
     }
     setKeyBusy(true);
     try {
-      const data = await supabase.aiKeys.save(apiKey.trim());
+      const data = await backendApi.aiKeys.save(apiKey.trim());
       setAiKey(data.key);
       setApiKey("");
       await refreshAiKey();
@@ -105,7 +105,7 @@ export default function AdminDashboard() {
   const deleteKey = async (id?: string) => {
     setKeyBusy(true);
     try {
-      await supabase.aiKeys.remove(id);
+      await backendApi.aiKeys.remove(id);
       await refreshAiKey();
       setApiKey("");
       toast.success(id ? "Gemini API key deleted" : "All Gemini API keys deleted");

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowUpDown, BookOpen, CalendarDays, Check, ChevronDown, Plus, SlidersHorizontal, Sparkles, Tag, Trash2, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
 
 type SortMode = "manual" | "newest" | "oldest" | "updated" | "az" | "za";
@@ -92,7 +92,7 @@ export default function Courses() {
 
   const remove = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}" and all its lessons?`)) return;
-    const { error } = await supabase.from("courses").delete().eq("id", id);
+    const { error } = await backendApi.from("courses").delete().eq("id", id);
     if (error) toast.error(error.message); else { toast.success("Course deleted"); refresh(); }
   };
 

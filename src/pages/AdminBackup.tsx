@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useIsAdmin } from "@/hooks/useAdmin";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { Database, Download, FileCode, FileText, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,12 +42,12 @@ export default function AdminBackup() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    supabase.from("profiles").select("id", { count: "exact", head: true }).then((users) => {
+    backendApi.from("profiles").select("id", { count: "exact", head: true }).then((users) => {
       return Promise.all([
         Promise.resolve(users),
-        supabase.from("courses").select("id", { count: "exact", head: true }),
-        supabase.from("topics").select("id", { count: "exact", head: true }),
-        supabase.from("course_pyq").select("id", { count: "exact", head: true }),
+        backendApi.from("courses").select("id", { count: "exact", head: true }),
+        backendApi.from("topics").select("id", { count: "exact", head: true }),
+        backendApi.from("course_pyq").select("id", { count: "exact", head: true }),
       ]);
     }).then(([users, courses, topics, pyqs]) => {
       setStats({
@@ -68,7 +68,7 @@ export default function AdminBackup() {
 
     setBusyFormat(format);
     try {
-      const response = await fetch(`${supabase.apiUrl}/admin/backup?format=${encodeURIComponent(format)}`, {
+      const response = await fetch(`${backendApi.apiUrl}/admin/backup?format=${encodeURIComponent(format)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {

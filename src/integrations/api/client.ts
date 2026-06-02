@@ -717,6 +717,123 @@ async function findPyq(pyqId: string) {
   return null;
 }
 
+function exportCleanText(value: unknown) {
+  return String(value ?? "")
+    .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/`(.+?)`/g, "$1")
+    .replace(/\r/g, "")
+    .trim();
+}
+
+function exportBlockLines(block: any): string[] {
+  if (!block || typeof block !== "object") return [];
+  if (block.type === "text") return [exportCleanText(block.value)];
+  if (block.type === "highlight") return [`Key point: ${exportCleanText(block.value)}`];
+  if (block.type === "list") return [exportCleanText(block.title), ...(block.items || []).map((it: string) => `- ${exportCleanText(it)}`)].filter(Boolean);
+  if (block.type === "timeline") return (block.items || []).map((it: any) => `${exportCleanText(it.label)}: ${exportCleanText(it.desc)}`);
+  if (block.type === "table") return [
+    exportCleanText(block.title),
+    Array.isArray(block.headers) ? block.headers.map(exportCleanText).join(" | ") : "",
+    ...(block.rows || []).map((row: unknown[]) => Array.isArray(row) ? row.map(exportCleanText).join(" | ") : exportCleanText(row)),
+  ].filter(Boolean);
+  if (block.type === "flowchart") return [exportCleanText(block.title), exportCleanText(block.code)].filter(Boolean);
+  if (block.type === "chart") return [exportCleanText(block.title || "Chart"), ...(block.data || []).map((it: any) => `${exportCleanText(it.name)}: ${exportCleanText(it.value)}`)].filter(Boolean);
+  if (block.type === "image") return [exportCleanText(block.caption), exportCleanText(block.url)].filter(Boolean);
+  if (block.type === "math") return [exportCleanText(block.caption), exportCleanText(block.value)].filter(Boolean);
+  if (block.type === "code") return [exportCleanText(block.caption || `${block.language || "Code"} example`), exportCleanText(block.value)].filter(Boolean);
+  return [exportCleanText(block.value || block.title || JSON.stringify(block))].filter(Boolean);
+}
+
+function wrapExportText(text: string, maxChars: number) {
+  const words = exportCleanText(text).split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > maxChars && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [""];
+}
+
+async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], links: any[]) {
+  const lines: string[] = [course?.title || "Course", course?.description || ""];
+  topics.forEach((topic: any) => {
+    lines.push("", `Unit ${topic.unit}`, `${topic.unit}.${topic.order_index} ${topic.title}`, topic.summary || "");
+    (topic.content || []).forEach((block: any) => lines.push(...exportBlockLines(block)));
+    if (topic.quiz?.length) {
+      lines.push("Quiz");
+      topic.quiz.forEach((q: any, qi: number) => {
+        lines.push(`${qi + 1}. ${exportCleanText(q.q || q.question)}`);
+        (q.options || []).forEach((opt: string, oi: number) => {
+          lines.push(`   ${String.fromCharCode(65 + oi)}. ${exportCleanText(opt)}${oi === q.answer ? " [correct]" : ""}`);
+        });
+      });
+    }
+  });
+  if (pyqs.length) {
+    const topicTitleById = new Map(topics.map((topic: any) => [topic.id, topic.title]));
+    const pyqTopicMap = new Map<string, string[]>();
+    links.forEach((link: any) => {
+      const arr = pyqTopicMap.get(link.pyq_id) || [];
+      const title = topicTitleById.get(link.topic_id);
+      if (title) arr.push(title);
+      pyqTopicMap.set(link.pyq_id, arr);
+    });
+    lines.push("", "Previous Year Questions");
+    pyqs.forEach((pyq: any, index: number) => {
+      const tagged = (pyqTopicMap.get(pyq.id) || []).join(", ");
+      lines.push(
+        [pyq.year, pyq.marks ? `${pyq.marks} marks` : "", tagged ? `Lessons: ${tagged}` : ""].filter(Boolean).join(" | "),
+        `${index + 1}. ${exportCleanText(pyq.question)}`,
+      );
+      if (pyq.answer) lines.push(`Answer: ${exportCleanText(pyq.answer)}`);
+    });
+  }
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${exportCleanText(course?.title || "Course")}</title></head><body>${lines.map((line) => {
+    const safe = exportCleanText(line).replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[char]!));
+    if (!safe) return "<br>";
+    if (/^(Unit \\d+|Previous Year Questions|Quiz)$/.test(safe)) return `<h2>${safe}</h2>`;
+    return `<p>${safe}</p>`;
+  }).join("")}</body></html>`;
+
+  const pdfLib = await import("pdf-lib");
+  const pdf = await pdfLib.PDFDocument.create();
+  const font = await pdf.embedFont(pdfLib.StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(pdfLib.StandardFonts.HelveticaBold);
+  let page = pdf.addPage();
+  let y = page.getHeight() - 48;
+  for (const raw of lines) {
+    if (!raw) {
+      y -= 7;
+      continue;
+    }
+    const heading = /^(Unit \d+|Previous Year Questions|Quiz)$/.test(raw);
+    for (const line of wrapExportText(raw, heading ? 64 : 90)) {
+      if (y < 48) {
+        page = pdf.addPage();
+        y = page.getHeight() - 48;
+      }
+      page.drawText(line.slice(0, 120), { x: 48, y, size: heading ? 16 : 10, font: heading ? bold : font, color: pdfLib.rgb(0.08, 0.08, 0.08) });
+      y -= heading ? 20 : 14;
+    }
+  }
+  return {
+    docx: btoa(unescape(encodeURIComponent(html))),
+    pdf: await pdf.saveAsBase64(),
+    filename: course?.slug || "course",
+    docExtension: "doc",
+    docMime: "application/msword",
+  };
+}
+
 function textToBlocks(text: string) {
   const paragraphs = text.split(/\n{2,}/).map((line) => line.trim()).filter(Boolean);
   return paragraphs.slice(0, 10).map((paragraph, index) => ({
@@ -878,7 +995,7 @@ const WRITE_LESSON_PARAMETERS = {
   required: ["content", "quiz"],
 };
 
-export const supabase = {
+export const backendApi = {
   apiUrl: API_URL,
   auth: {
     onAuthStateChange(callback: (_event: string, session: any) => void) {
@@ -1126,7 +1243,7 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
               generationStatus: body.generate ? "pending" : "ready",
             }),
           })).topic);
-          if (body.generate) await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id } });
+          if (body.generate) await backendApi.functions.invoke("generate-lesson", { body: { topicId: topic.id } });
           return { data: { ok: true, topic }, error: null };
         }
         if (name === "generate-pyq") {
@@ -1228,8 +1345,9 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
         if (name === "export-course") {
           const course = (await getAllCourses()).find((item: any) => item.id === body.courseId);
           const topics = await getCourseTopics(body.courseId);
-          const text = `${course?.title || "Course"}\n\n${topics.map((topic: any) => `${topic.title}\n${topic.summary || ""}`).join("\n\n")}`;
-          return { data: { ok: true, docx: btoa(unescape(encodeURIComponent(text))) }, error: null };
+          const pyqs = fromApi((await api(`/pyq?courseId=${encodeURIComponent(body.courseId)}`)).pyqs || []);
+          const links = fromApi((await api(`/pyq/topics?courseId=${encodeURIComponent(body.courseId)}`)).links || []);
+          return { data: { ok: true, ...await buildLocalCourseExport(course, topics, pyqs, links) }, error: null };
         }
         if (name === "ingest-pyq") {
           return { data: { ok: true, inserted: 0, tagged: 0 }, error: null };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ export default function Auth() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { error } = await backendApi.auth.signUp({
           email, password,
           options: {
             emailRedirectTo: window.location.origin + "/",
@@ -34,7 +34,7 @@ export default function Auth() {
         if (error) throw error;
         toast.success("Account created. You're in!");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await backendApi.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");
       }

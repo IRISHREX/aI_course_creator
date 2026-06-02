@@ -5,7 +5,7 @@ import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Info, Loader2, Settings2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
 import { type ComponentProps, useEffect, useState } from "react";
@@ -34,7 +34,7 @@ export default function CourseDetail() {
   useEffect(() => {
     if (!course?.id) return;
     setMindmap((course as CourseWithMindmap).mindmap || null);
-    supabase.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", course.id)
+    backendApi.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", course.id)
       .then(({ count }) => setPyqCount(count || 0));
   }, [course]);
 
@@ -44,7 +44,7 @@ export default function CourseDetail() {
   const generateMindmap = async () => {
     setGenMM(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-mindmap", { body: { courseId: course.id } });
+      const { data, error } = await backendApi.functions.invoke("generate-mindmap", { body: { courseId: course.id } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setMindmap(data.mindmap);
@@ -59,7 +59,7 @@ export default function CourseDetail() {
   const downloadDocx = async () => {
     setDownloading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("export-course", {
+      const { data, error } = await backendApi.functions.invoke("export-course", {
         body: { courseId: course.id },
       });
       if (error) throw error;

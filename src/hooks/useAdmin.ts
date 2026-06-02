@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "./useAuth";
 
 export const useIsAdmin = () => {
@@ -10,7 +10,7 @@ export const useIsAdmin = () => {
   useEffect(() => {
     let active = true;
     if (!user) { setIsAdmin(false); setIsSuperAdmin(false); setLoading(false); return; }
-    supabase.from("user_roles").select("role").eq("user_id", user.id)
+    backendApi.from("user_roles").select("role").eq("user_id", user.id)
       .then(({ data }) => {
         if (!active) return;
         const roles = (data || []).map((r: any) => r.role);

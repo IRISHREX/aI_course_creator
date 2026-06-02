@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProgress, type Topic } from "@/hooks/useTopics";
 import { Button } from "@/components/ui/button";
@@ -47,7 +47,7 @@ export default function QuizPage() {
     setResult(null);
 
     if (slug) {
-      supabase.from("topics").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
+      backendApi.from("topics").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
         const nextTopic = data as any as Topic;
         setTopic(nextTopic);
         setCourseTitle("");
@@ -58,7 +58,7 @@ export default function QuizPage() {
     }
 
     (async () => {
-      const { data: course } = await supabase.from("courses").select("id,title").eq("slug", courseSlug!).maybeSingle();
+      const { data: course } = await backendApi.from("courses").select("id,title").eq("slug", courseSlug!).maybeSingle();
       if (!course?.id) {
         setTopic(null);
         setCourseTitle("");
@@ -66,7 +66,7 @@ export default function QuizPage() {
         setLoadingQuiz(false);
         return;
       }
-      const { data: topics } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
+      const { data: topics } = await backendApi.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
       setTopic(null);
       setCourseTitle((course as any).title || "Course");
       setQuizItems(readableQuiz(((topics as any) || []) as Topic[]));

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,9 @@ export default function CoursePYQ() {
     if (!course?.id) return;
     setLoading(true);
     const [{ data: pyqs }, { data: links }, { data: ts }] = await Promise.all([
-      supabase.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index"),
-      supabase.from("pyq_topics").select("pyq_id, topic_id, course_pyq!inner(course_id)").eq("course_pyq.course_id", course.id),
-      supabase.from("topics").select("id, title").eq("course_id", course.id).order("unit").order("order_index"),
+      backendApi.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index"),
+      backendApi.from("pyq_topics").select("pyq_id, topic_id, course_pyq!inner(course_id)").eq("course_pyq.course_id", course.id),
+      backendApi.from("topics").select("id, title").eq("course_id", course.id).order("unit").order("order_index"),
     ]);
     const linkMap = new Map<string, string[]>();
     (links || []).forEach((l: any) => {
@@ -59,16 +59,16 @@ export default function CoursePYQ() {
   const toggleTag = async (pyqId: string, topicId: string, on: boolean) => {
     if (!isAdmin) return;
     if (on) {
-      await supabase.from("pyq_topics").insert({ pyq_id: pyqId, topic_id: topicId });
+      await backendApi.from("pyq_topics").insert({ pyq_id: pyqId, topic_id: topicId });
     } else {
-      await supabase.from("pyq_topics").delete().eq("pyq_id", pyqId).eq("topic_id", topicId);
+      await backendApi.from("pyq_topics").delete().eq("pyq_id", pyqId).eq("topic_id", topicId);
     }
     reload();
   };
 
   const genAnswer = async (pyqId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", { body: { pyqId } });
+      const { data, error } = await backendApi.functions.invoke("generate-pyq-answer", { body: { pyqId } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Answer generated");
@@ -79,7 +79,7 @@ export default function CoursePYQ() {
   const generate = async () => {
     setGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyq", { body: { courseId: course.id, count: 10 } });
+      const { data, error } = await backendApi.functions.invoke("generate-pyq", { body: { courseId: course.id, count: 10 } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success(`Added ${data.inserted} AI-generated questions${data.tagged ? ` with ${data.tagged} lesson tag(s)` : ""}`);
@@ -91,7 +91,7 @@ export default function CoursePYQ() {
   const addBlank = () => setItems([...items, { question: "", answer: "", order_index: items.length, source: "manual" }]);
   const removeAt = async (i: number) => {
     const it = items[i];
-    if (it.id) await supabase.from("course_pyq").delete().eq("id", it.id);
+    if (it.id) await backendApi.from("course_pyq").delete().eq("id", it.id);
     setItems(items.filter((_, j) => j !== i));
   };
   const update = (i: number, patch: Partial<PYQ>) => {
@@ -104,11 +104,11 @@ export default function CoursePYQ() {
     try {
       for (const it of items) {
         if (it.id) {
-          await supabase.from("course_pyq").update({
+          await backendApi.from("course_pyq").update({
             question: it.question, answer: it.answer, marks: it.marks, year: it.year, order_index: it.order_index,
           }).eq("id", it.id);
         } else if (it.question.trim()) {
-          await supabase.from("course_pyq").insert({
+          await backendApi.from("course_pyq").insert({
             course_id: course.id, question: it.question, answer: it.answer,
             marks: it.marks ?? null, year: it.year ?? null, order_index: it.order_index, source: it.source || "manual",
           });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Bookmark, Trash2, Loader2, Lock, ExternalLink } from "lucide-react";
@@ -26,14 +26,14 @@ export default function Bookmarks() {
   const refresh = async () => {
     if (!user) { setItems([]); setLoading(false); return; }
     setLoading(true);
-    const { data: bms } = await supabase.from("bookmarks").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data: bms } = await backendApi.from("bookmarks").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     const rows = (bms || []) as BookmarkRow[];
     if (rows.length) {
       const tIds = Array.from(new Set(rows.map(r => r.topic_id)));
       const cIds = Array.from(new Set(rows.map(r => r.course_id)));
       const [{ data: topics }, { data: courses }] = await Promise.all([
-        supabase.from("topics").select("id, slug, title").in("id", tIds),
-        supabase.from("courses").select("id, slug, title").in("id", cIds),
+        backendApi.from("topics").select("id, slug, title").in("id", tIds),
+        backendApi.from("courses").select("id, slug, title").in("id", cIds),
       ]);
       const tMap = new Map((topics || []).map(t => [t.id, t]));
       const cMap = new Map((courses || []).map(c => [c.id, c]));
@@ -46,7 +46,7 @@ export default function Bookmarks() {
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user?.id]);
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from("bookmarks").delete().eq("id", id);
+    const { error } = await backendApi.from("bookmarks").delete().eq("id", id);
     if (error) toast.error(error.message); else { toast.success("Removed"); refresh(); }
   };
 

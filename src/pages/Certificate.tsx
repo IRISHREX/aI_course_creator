@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTopics, useProgress } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ export default function Certificate() {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle()
+    backendApi.from("profiles").select("display_name").eq("id", user.id).maybeSingle()
       .then(({ data }) => setName(data?.display_name || user.email?.split("@")[0] || "Learner"));
   }, [user]);
 
@@ -32,7 +32,7 @@ export default function Certificate() {
 
   const saveName = async () => {
     if (!user || !name.trim()) return;
-    await supabase.from("profiles").upsert({ id: user.id, display_name: name.trim() });
+    await backendApi.from("profiles").upsert({ id: user.id, display_name: name.trim() });
     setEditing(false);
   };
 

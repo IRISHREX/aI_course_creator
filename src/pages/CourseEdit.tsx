@@ -10,11 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, CheckSquare, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CheckSquare, Download, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 
 type BulkLessonInput = { unit: number; title: string; summary: string };
@@ -84,6 +85,7 @@ export default function CourseEdit() {
   const [bulkJson, setBulkJson] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportDrawerOpen, setExportDrawerOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [duplicateSelectedUnits, setDuplicateSelectedUnits] = useState<number[]>([]);
   const [duplicateScanning, setDuplicateScanning] = useState(false);
@@ -118,7 +120,7 @@ export default function CourseEdit() {
   const allSelected = topics.length > 0 && selectedIds.length === topics.length;
 
   const refreshTopics = async () => {
-    const { data } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
+    const { data } = await backendApi.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
     const nextTopics = (data as any) ?? [];
     setTopics(nextTopics);
     return nextTopics;
@@ -128,7 +130,7 @@ export default function CourseEdit() {
     setDuplicateScanning(true);
     setDuplicateGroups([]);
     try {
-      const { data, error } = await supabase.functions.invoke("scan-lesson-duplicates", {
+      const { data, error } = await backendApi.functions.invoke("scan-lesson-duplicates", {
         body: { courseId: course.id, units: selectedDuplicateUnits },
       });
       if (error) throw error;
@@ -185,7 +187,7 @@ export default function CourseEdit() {
         if (!target || !Array.isArray((target as any).content)) continue;
         const removeIndexes = new Set(indexes);
         const nextContent = ((target as any).content as any[]).filter((_, index) => !removeIndexes.has(index));
-        const { error } = await supabase.from("topics").update({ content: nextContent } as any).eq("id", topicId);
+        const { error } = await backendApi.from("topics").update({ content: nextContent } as any).eq("id", topicId);
         if (error) throw error;
       }
       removeDuplicateItemsFromState(deleteItems);
@@ -212,7 +214,7 @@ export default function CourseEdit() {
     Object.values(byUnit).forEach((unitTopics) => {
       unitTopics.forEach((topic, index) => {
         if (topic.order_index !== index) {
-          updates.push(supabase.from("topics").update({ order_index: index } as any).eq("id", topic.id).then(({ error }) => {
+          updates.push(backendApi.from("topics").update({ order_index: index } as any).eq("id", topic.id).then(({ error }) => {
             if (error) throw error;
           }));
         }
@@ -224,7 +226,7 @@ export default function CourseEdit() {
   const generateOne = async (topicId: string) => {
     setGenerating(topicId);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId } });
+      const { data, error } = await backendApi.functions.invoke("generate-lesson", { body: { topicId } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Lesson generated");
@@ -238,7 +240,7 @@ export default function CourseEdit() {
     setBatchRunning(true);
     for (const t of items) {
       try {
-        const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: t.id } });
+        const { data, error } = await backendApi.functions.invoke("generate-lesson", { body: { topicId: t.id } });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
         await refreshTopics();
@@ -265,7 +267,7 @@ export default function CourseEdit() {
   };
 
   const saveCourse = async () => {
-    const { error } = await supabase.from("courses").update({
+    const { error } = await backendApi.from("courses").update({
       title, description, cover_emoji: emoji, tags,
     } as any).eq("id", course.id);
     if (error) toast.error(error.message); else toast.success("Course updated");
@@ -286,7 +288,7 @@ export default function CourseEdit() {
     const summaryIn = prompt("Short summary (optional):") || "";
     const unitIn = Number(prompt("Unit number (e.g. 1):", "1") || 1);
     try {
-      const { data, error } = await supabase.functions.invoke("create-topic", {
+      const { data, error } = await backendApi.functions.invoke("create-topic", {
         body: { courseId: course.id, title: titleIn, summary: summaryIn, unit: unitIn, generate: !!opts?.aiGenerate },
       });
       if (error) throw error;
@@ -413,7 +415,7 @@ export default function CourseEdit() {
         };
       });
 
-      const { error } = await supabase.from("topics").insert(rows as any);
+      const { error } = await backendApi.from("topics").insert(rows as any);
       if (error) throw error;
       toast.success(`Added ${rows.length} lesson${rows.length === 1 ? "" : "s"}`);
       setBulkText("");
@@ -429,7 +431,7 @@ export default function CourseEdit() {
 
   const deleteTopic = async (id: string, t: string) => {
     if (!confirm(`Delete lesson "${t}"?`)) return;
-    const { error } = await supabase.from("topics").delete().eq("id", id);
+    const { error } = await backendApi.from("topics").delete().eq("id", id);
     if (error) toast.error(error.message); else {
       await resequenceTopics(topics, [id]);
       setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== id));
@@ -444,7 +446,7 @@ export default function CourseEdit() {
     setBulkBusy(true);
     try {
       for (const topic of selectedTopics) {
-        const { error } = await supabase.from("topics").delete().eq("id", topic.id);
+        const { error } = await backendApi.from("topics").delete().eq("id", topic.id);
         if (error) throw error;
       }
       await resequenceTopics(topics, selectedTopics.map((topic) => topic.id));
@@ -482,7 +484,7 @@ export default function CourseEdit() {
     if (!reDocsUrl.trim() && !reRawText.trim()) { toast.error("Provide a Google Docs URL, paste text, or upload a file"); return; }
     setReUploading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("update-course-source", {
+      const { data, error } = await backendApi.functions.invoke("update-course-source", {
         body: {
           courseId: course.id,
           docsUrl: reDocsUrl.trim() || undefined,
@@ -515,18 +517,27 @@ export default function CourseEdit() {
     URL.revokeObjectURL(url);
   };
 
-  const exportCourse = async () => {
+  const exportCourse = async (format: "docs" | "pdf") => {
     setExporting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("export-course", { body: { courseId: course.id } });
+      const { data, error } = await backendApi.functions.invoke("export-course", { body: { courseId: course.id } });
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
       } else {
         const baseName = data?.filename || course.slug || "course";
-        if (data?.docx) downloadBase64(data.docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", `${baseName}.docx`);
-        if (data?.pdf) downloadBase64(data.pdf, "application/pdf", `${baseName}.pdf`);
-        toast.success("Downloaded Google Docs file and PDF");
+        const docExtension = data?.docExtension || "docx";
+        const docMime = data?.docMime || "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        if (format === "docs") {
+          if (!data?.docx) throw new Error("Docs export was not returned");
+          downloadBase64(data.docx, docMime, `${baseName}.${docExtension}`);
+          toast.success("Downloaded Google Docs file");
+        } else {
+          if (!data?.pdf) throw new Error("PDF export was not returned");
+          downloadBase64(data.pdf, "application/pdf", `${baseName}.pdf`);
+          toast.success("Downloaded PDF");
+        }
+        setExportDrawerOpen(false);
       }
     } catch (e: any) { toast.error(e.message || "Export failed"); }
     finally { setExporting(false); }
@@ -760,10 +771,34 @@ export default function CourseEdit() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button onClick={saveCourse} variant="hero"><Save className="h-4 w-4 mr-1" /> Save course</Button>
-          <Button onClick={exportCourse} variant="neon" disabled={exporting}>
-            {exporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
-            Download Google Docs + PDF
-          </Button>
+          <Drawer open={exportDrawerOpen} onOpenChange={setExportDrawerOpen}>
+            <DrawerTrigger asChild>
+              <Button variant="neon" aria-label="Download course" title="Download course">
+                <Download className="h-4 w-4 mr-1" />
+                Download
+              </Button>
+            </DrawerTrigger>
+            <DrawerContent>
+              <div className="mx-auto w-full max-w-md p-4">
+                <DrawerHeader className="px-0 text-left">
+                  <DrawerTitle>Download course</DrawerTitle>
+                  <DrawerDescription>
+                    Export all lesson content, quizzes, and tagged PYQs.
+                  </DrawerDescription>
+                </DrawerHeader>
+                <div className="grid gap-3 pb-3">
+                  <Button onClick={() => exportCourse("docs")} variant="hero" disabled={exporting} className="justify-start gap-2">
+                    {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                    Download as Google Docs
+                  </Button>
+                  <Button onClick={() => exportCourse("pdf")} variant="outline" disabled={exporting} className="justify-start gap-2">
+                    {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileJson className="h-4 w-4" />}
+                    Download as PDF
+                  </Button>
+                </div>
+              </div>
+            </DrawerContent>
+          </Drawer>
         </div>
       </div>
 

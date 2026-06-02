@@ -1,6 +1,6 @@
 import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useProgress, type Topic } from "@/hooks/useTopics";
@@ -51,7 +51,7 @@ export default function TopicPage() {
   useEffect(() => {
     if (!slug || !course?.id) return;
     (async () => {
-      const { data: all } = await supabase.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
+      const { data: all } = await backendApi.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
       const list = (all as unknown as Topic[]) ?? [];
       const idx = list.findIndex(t => t.slug === slug);
       if (idx >= 0) {
@@ -80,13 +80,13 @@ export default function TopicPage() {
     if (!isAdmin) return;
     setGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-quiz", {
+      const { data, error } = await backendApi.functions.invoke("generate-quiz", {
         body: { title: topic.title, summary: topic.summary, content: topic.content },
       });
       if (error) throw error;
       if (data?.questions?.length) {
         const fresh = data.questions.slice(0, 10);
-        await supabase.from("topics").update({ quiz: fresh }).eq("id", topic.id);
+        await backendApi.from("topics").update({ quiz: fresh }).eq("id", topic.id);
         setTopic({ ...topic, quiz: fresh });
         toast.success(`Replaced old MCQs with ${fresh.length} fresh question${fresh.length === 1 ? "" : "s"}`);
       }
@@ -98,7 +98,7 @@ export default function TopicPage() {
     if (!isAdmin) return;
     setGenMindmap(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-mindmap", { body: { topicId: topic.id, courseId: course?.id } });
+      const { data, error } = await backendApi.functions.invoke("generate-mindmap", { body: { topicId: topic.id, courseId: course?.id } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setTopic({ ...topic, mindmap: data.mindmap } as TopicWithMindmap);
@@ -113,7 +113,7 @@ export default function TopicPage() {
     setBookmarking(true);
     try {
       const label = window.prompt("Bookmark label (optional):", `${topic.title} — page ${pageIdx + 1}`) || null;
-      const { error } = await supabase.from("bookmarks").insert({
+      const { error } = await backendApi.from("bookmarks").insert({
         user_id: user.id,
         topic_id: topic.id,
         course_id: course.id,

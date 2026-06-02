@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
 import {
   Type, Lightbulb, List as ListIcon, GitBranch, Plus, Trash2, ChevronUp, ChevronDown, X,
@@ -126,9 +126,9 @@ function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: 
     try {
       const ext = file.name.split(".").pop() || "png";
       const path = `${topicId || "misc"}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("lesson-images").upload(path, file, { upsert: true, contentType: file.type });
+      const { error } = await backendApi.storage.from("lesson-images").upload(path, file, { upsert: true, contentType: file.type });
       if (error) throw error;
-      const { data: pub } = supabase.storage.from("lesson-images").getPublicUrl(path);
+      const { data: pub } = backendApi.storage.from("lesson-images").getPublicUrl(path);
       update({ ...block, url: pub.publicUrl });
       toast.success("Image uploaded");
     } catch (e: any) { toast.error(e.message || "Upload failed"); }
@@ -139,7 +139,7 @@ function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: 
     if (!prompt.trim()) { toast.error("Describe the image"); return; }
     setBusy("ai");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-image", { body: { prompt, topicId } });
+      const { data, error } = await backendApi.functions.invoke("generate-image", { body: { prompt, topicId } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       update({ ...block, url: data.url, caption: block.caption || prompt });

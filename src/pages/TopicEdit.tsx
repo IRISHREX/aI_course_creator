@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import type { Topic } from "@/hooks/useTopics";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ export default function TopicEdit() {
   const [vLoading, setVLoading] = useState(false);
 
   const reload = async () => {
-    const { data } = await supabase.from("topics").select("*").eq("slug", slug!).maybeSingle();
+    const { data } = await backendApi.from("topics").select("*").eq("slug", slug!).maybeSingle();
     const t = data as any as Topic;
     setTopic(t);
     setContentJson(JSON.stringify(t?.content ?? [], null, 2));
@@ -61,7 +61,7 @@ export default function TopicEdit() {
       const parsedQuiz = JSON.parse(quizJson);
       const quiz = (Array.isArray(parsedQuiz) ? parsedQuiz : []).slice(0, 10);
       // Snapshot previous state to history before update
-      await supabase.from("topic_versions").insert({
+      await backendApi.from("topic_versions").insert({
         topic_id: topic.id,
         title: topic.title,
         summary: topic.summary,
@@ -71,7 +71,7 @@ export default function TopicEdit() {
         mindmap: (topic as any).mindmap ?? null,
         note: "auto-save",
       });
-      const { error } = await supabase.from("topics").update({
+      const { error } = await backendApi.from("topics").update({
         title: topic.title, summary: topic.summary, content, quiz, difficulty_level: level,
       }).eq("id", topic.id);
       if (error) throw error;
@@ -84,20 +84,20 @@ export default function TopicEdit() {
 
   const loadVersions = async () => {
     setVLoading(true);
-    const { data } = await supabase.from("topic_versions").select("*").eq("topic_id", topic.id).order("created_at", { ascending: false }).limit(50);
+    const { data } = await backendApi.from("topic_versions").select("*").eq("topic_id", topic.id).order("created_at", { ascending: false }).limit(50);
     setVersions(data || []);
     setVLoading(false);
   };
 
   const restoreVersion = async (v: any) => {
     if (!confirm(`Restore version from ${new Date(v.created_at).toLocaleString()}? Current state will also be snapshotted.`)) return;
-    await supabase.from("topic_versions").insert({
+    await backendApi.from("topic_versions").insert({
       topic_id: topic.id, title: topic.title, summary: topic.summary,
       content: topic.content as any, quiz: topic.quiz as any,
       visualization: topic.visualization, mindmap: (topic as any).mindmap ?? null,
       note: "before-restore",
     });
-    const { error } = await supabase.from("topics").update({
+    const { error } = await backendApi.from("topics").update({
       title: v.title, summary: v.summary, content: v.content, quiz: v.quiz,
       visualization: v.visualization, mindmap: v.mindmap,
     }).eq("id", topic.id);
@@ -111,7 +111,7 @@ export default function TopicEdit() {
     if (!docsUrl.trim()) { toast.error("Paste a Google Docs share URL"); return; }
     setImporting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("import-doc", { body: { url: docsUrl } });
+      const { data, error } = await backendApi.functions.invoke("import-doc", { body: { url: docsUrl } });
       if (error) throw error;
       if (data?.content) {
         setContentJson(JSON.stringify(data.content, null, 2));
@@ -126,7 +126,7 @@ export default function TopicEdit() {
   const generateFresh = async () => {
     setAiBusy("generate");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level } });
+      const { data, error } = await backendApi.functions.invoke("generate-lesson", { body: { topicId: topic.id, level } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Fresh lesson generated");
@@ -142,7 +142,7 @@ export default function TopicEdit() {
       const body: any = { topicId: topic.id, action };
       if (action === "level") body.level = customLevel ?? level;
       if (customInstruction.trim()) body.customInstruction = customInstruction.trim();
-      const { data, error } = await supabase.functions.invoke("transform-content", { body });
+      const { data, error } = await backendApi.functions.invoke("transform-content", { body });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.content) setContentJson(JSON.stringify(data.content, null, 2));

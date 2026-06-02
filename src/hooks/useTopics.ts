@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "./useAuth";
 
 export interface QuizQ { q: string; options: string[]; answer: number }
@@ -29,7 +29,7 @@ export const useTopics = (courseId?: string) => {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    let q = supabase.from("topics").select("*").order("unit").order("order_index");
+    let q = backendApi.from("topics").select("*").order("unit").order("order_index");
     if (courseId) q = q.eq("course_id", courseId);
     q.then(({ data }) => {
       if (active) { setTopics(((data as unknown) as Topic[]) ?? []); setLoading(false); }
@@ -46,7 +46,7 @@ export const useProgress = () => {
 
   const refresh = async () => {
     if (!user) { setProgress({}); setLoading(false); return; }
-    const { data } = await supabase.from("topic_progress").select("*").eq("user_id", user.id);
+    const { data } = await backendApi.from("topic_progress").select("*").eq("user_id", user.id);
     const map: Record<string, Progress> = {};
     (data ?? []).forEach((p: any) => { map[p.topic_id] = p; });
     setProgress(map);
@@ -61,7 +61,7 @@ export const useProgress = () => {
     const next = { user_id: user.id, topic_id: topicId, viewed: true,
       best_quiz_score: existing?.best_quiz_score ?? 0, passed: existing?.passed ?? false,
       attempts: existing?.attempts ?? 0 };
-    await supabase.from("topic_progress").upsert(next, { onConflict: "user_id,topic_id" });
+    await backendApi.from("topic_progress").upsert(next, { onConflict: "user_id,topic_id" });
     refresh();
   };
 
@@ -71,7 +71,7 @@ export const useProgress = () => {
     const existing = progress[topicId];
     const best = Math.max(existing?.best_quiz_score ?? 0, pct);
     const passed = best >= 70;
-    await supabase.from("topic_progress").upsert({
+    await backendApi.from("topic_progress").upsert({
       user_id: user.id, topic_id: topicId, viewed: true,
       best_quiz_score: best, passed,
       attempts: (existing?.attempts ?? 0) + 1,

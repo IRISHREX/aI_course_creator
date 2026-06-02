@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FileQuestion, Loader2, Sparkles } from "lucide-react";
@@ -20,7 +20,7 @@ export const LessonPYQButton = ({ topicId, courseId }: { topicId: string; course
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await backendApi
       .from("pyq_topics")
       .select("course_pyq!inner(id, course_id, question, answer, marks, year)")
       .eq("topic_id", topicId)
@@ -33,7 +33,7 @@ export const LessonPYQButton = ({ topicId, courseId }: { topicId: string; course
   const generateAnswer = async (pyq: PYQ) => {
     setGenIdx(pyq.id);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyq-answer", {
+      const { data, error } = await backendApi.functions.invoke("generate-pyq-answer", {
         body: { pyqId: pyq.id },
       });
       if (error) throw error;

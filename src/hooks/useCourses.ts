@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 
 export interface Course {
   id: string;
@@ -17,7 +17,7 @@ export const useCourses = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const refresh = async () => {
-    const { data } = await supabase.from("courses").select("*").order("order_index");
+    const { data } = await backendApi.from("courses").select("*").order("order_index");
     setCourses((data as any as Course[]) ?? []);
     setLoading(false);
   };
@@ -30,7 +30,7 @@ export const useCourseBySlug = (slug: string | undefined) => {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!slug) return;
-    supabase.from("courses").select("*").eq("slug", slug).maybeSingle()
+    backendApi.from("courses").select("*").eq("slug", slug).maybeSingle()
       .then(({ data }) => { setCourse(data as any as Course); setLoading(false); });
   }, [slug]);
   return { course, loading };
