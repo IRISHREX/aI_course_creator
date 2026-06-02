@@ -5,6 +5,16 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+function cleanPyqText(value: unknown) {
+  return String(value ?? "")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\s*(?:q(?:uestion)?\.?\s*)?\d+[\).:-]\s*/i, "")
+    .replace(/\s*(?:answer|solution)\s*[:.-]\s*$/i, "")
+    .trim();
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -32,7 +42,7 @@ Deno.serve(async (req) => {
     const dataUrl = `data:${mimeType};base64,${fileBase64}`;
 
     const userContent: any[] = [
-      { type: "text", text: `Extract ALL exam questions from this ${isImage ? "image" : "document"}. Ignore answer keys / model answers. For each question, capture: question text (verbatim), marks if shown, year if shown.${year ? ` Default year: ${year}.` : ""}` },
+      { type: "text", text: `Extract ALL exam questions from this ${isImage ? "image" : "document"}. Ignore answer keys, model answers, page headers, footers, instructions, watermarks, and repeated question numbers. For each question, capture clean question text only, marks if shown, year if shown.${year ? ` Default year: ${year}.` : ""}` },
     ];
     if (isImage) {
       userContent.push({ type: "image_url", image_url: { url: dataUrl } });
@@ -47,7 +57,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You extract exam questions exactly as written. Always call the tool." },
+          { role: "system", content: "You extract exam questions cleanly. Keep sub-parts with the question, but do not include answer text, answer keys, headers, footers, or duplicate numbering. Always call the tool." },
           { role: "user", content: userContent },
         ],
         tools: [{
@@ -83,14 +93,18 @@ Deno.serve(async (req) => {
     const j1 = await r1.json();
     const args1 = j1.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     if (!args1) throw new Error("No questions extracted");
-    const extracted = JSON.parse(args1).items || [];
+    const extracted = (JSON.parse(args1).items || []).map((it: any) => ({
+      ...it,
+      question: cleanPyqText(it.question),
+      answer: cleanPyqText(it.answer),
+    })).filter((it: any) => it.question);
     if (extracted.length === 0) throw new Error("No questions found in file");
 
     // Insert PYQs
     const toInsert = extracted.map((it: any, i: number) => ({
       course_id: courseId,
       question: it.question,
-      answer: "",
+      answer: it.answer || "",
       marks: it.marks ?? null,
       year: it.year ?? year ?? null,
       source: "ai",

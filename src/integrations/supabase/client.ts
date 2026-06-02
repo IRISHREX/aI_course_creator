@@ -137,9 +137,10 @@ async function makeSession() {
 }
 
 function applyClientFilters(rows: any[], filters: Filter[]) {
+  const read = (row: any, key: string) => key.split(".").reduce((value, part) => value?.[part], row);
   return filters.reduce((acc, filter) => {
-    if (filter.op === "in") return acc.filter((row) => filter.value.includes(row[filter.key]));
-    return acc.filter((row) => row[filter.key] === filter.value);
+    if (filter.op === "in") return acc.filter((row) => filter.value.includes(read(row, filter.key)));
+    return acc.filter((row) => read(row, filter.key) === filter.value);
   }, rows);
 }
 
@@ -302,7 +303,8 @@ class BackendQuery {
       const courseId = this.filterValue("course_id");
       data = courseId ? (await api(`/pyq?courseId=${encodeURIComponent(courseId)}`)).pyqs : [];
     } else if (this.table === "pyq_topics") {
-      data = (await api("/pyq/topics")).links;
+      const courseId = this.filterValue("course_pyq.course_id");
+      data = (await api(`/pyq/topics${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ""}`)).links;
     } else if (this.table === "topic_versions") {
       const topicId = this.filterValue("topic_id");
       data = topicId ? (await api(`/topics/${encodeURIComponent(topicId)}/versions`)).versions : [];
@@ -985,10 +987,10 @@ Make the root label the course title and organize branches by course concepts.`;
             method: "POST",
             body: JSON.stringify({
               model: "google/gemini-2.5-flash",
-              messages: [{ role: "user", content: `Write a concise exam-ready model answer.\nQuestion: ${pyq?.question || body.pyqId}\nMarks: ${pyq?.marks || "unknown"}` }],
+              messages: [{ role: "user", content: `Write a clean, structured, exam-ready model answer. Use short paragraphs or numbered bullets and avoid repeating the question.\nQuestion: ${pyq?.question || body.pyqId}\nMarks: ${pyq?.marks || "unknown"}` }],
             }),
           });
-          const answer = data.choices?.[0]?.message?.content || "";
+          const answer = cleanString(data.choices?.[0]?.message?.content || "").replace(/^\s*(?:answer|solution)\s*[:.-]\s*/i, "");
           if (pyq) await api(`/pyq/${body.pyqId}`, { method: "PATCH", body: JSON.stringify({ answer }) });
           return { data: { ok: true, answer }, error: null };
         }

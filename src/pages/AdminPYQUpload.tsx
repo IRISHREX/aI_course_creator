@@ -26,6 +26,13 @@ type ManualPyq = {
 
 const NONE = "__none__";
 
+const cleanPyqText = (value: unknown) => String(value ?? "")
+  .replace(/\r/g, "\n")
+  .replace(/[ \t]+/g, " ")
+  .replace(/\n{3,}/g, "\n\n")
+  .replace(/^\s*(?:q(?:uestion)?\.?\s*)?\d+[\).:-]\s*/i, "")
+  .trim();
+
 export default function AdminPYQUpload() {
   const { isAdmin, loading } = useIsAdmin();
   const nav = useNavigate();
@@ -73,8 +80,8 @@ export default function AdminPYQUpload() {
     const cleaned = items
       .map((item) => ({
         ...item,
-        question: String(item.question || "").trim(),
-        answer: String(item.answer || "").trim(),
+        question: cleanPyqText(item.question),
+        answer: cleanPyqText(item.answer),
       }))
       .filter((item) => item.question);
 

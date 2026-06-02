@@ -5,6 +5,15 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+function cleanAnswer(value: unknown) {
+  return String(value ?? "")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\s*(?:answer|solution)\s*[:.-]\s*/i, "")
+    .trim();
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -42,8 +51,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You write concise, exam-ready model answers. Use the provided lesson context. Match the depth to the marks." },
-          { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION (${pyq.marks || "?"} marks): ${pyq.question}\n\nWrite a model answer.` },
+          { role: "system", content: "You write clean, exam-ready model answers. Use the provided lesson context. Match depth to marks. Avoid rambling, markdown tables, copied question text, and generic filler." },
+          { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION (${pyq.marks || "?"} marks): ${pyq.question}\n\nWrite a structured model answer. Use short paragraphs or numbered bullets. Include definitions, key points, and examples only when useful.` },
         ],
       }),
     });
@@ -51,7 +60,7 @@ Deno.serve(async (req) => {
     if (r.status === 402) return new Response(JSON.stringify({ error: "Credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (!r.ok) throw new Error(`AI error ${r.status}`);
     const j = await r.json();
-    const answer = j.choices?.[0]?.message?.content || "";
+    const answer = cleanAnswer(j.choices?.[0]?.message?.content || "");
     if (!answer) throw new Error("Empty answer");
 
     const { error } = await admin.from("course_pyq").update({ answer }).eq("id", pyqId);

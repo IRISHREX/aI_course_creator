@@ -35,7 +35,7 @@ export default function CoursePYQ() {
     setLoading(true);
     const [{ data: pyqs }, { data: links }, { data: ts }] = await Promise.all([
       supabase.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index"),
-      supabase.from("pyq_topics").select("pyq_id, topic_id"),
+      supabase.from("pyq_topics").select("pyq_id, topic_id, course_pyq!inner(course_id)").eq("course_pyq.course_id", course.id),
       supabase.from("topics").select("id, title").eq("course_id", course.id).order("unit").order("order_index"),
     ]);
     const linkMap = new Map<string, string[]>();
@@ -82,7 +82,7 @@ export default function CoursePYQ() {
       const { data, error } = await supabase.functions.invoke("generate-pyq", { body: { courseId: course.id, count: 10 } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Added ${data.inserted} AI-generated questions`);
+      toast.success(`Added ${data.inserted} AI-generated questions${data.tagged ? ` with ${data.tagged} lesson tag(s)` : ""}`);
       reload();
     } catch (e: any) { toast.error(e.message || "Failed"); }
     finally { setGenerating(false); }

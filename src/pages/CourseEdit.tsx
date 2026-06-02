@@ -83,6 +83,7 @@ export default function CourseEdit() {
   const [bulkText, setBulkText] = useState("");
   const [bulkJson, setBulkJson] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [duplicateSelectedUnits, setDuplicateSelectedUnits] = useState<number[]>([]);
   const [duplicateScanning, setDuplicateScanning] = useState(false);
@@ -502,13 +503,33 @@ export default function CourseEdit() {
       toast.error(e.message || "Re-upload failed");
     } finally { setReUploading(false); }
   };
-  const exportDocx = async () => {
+  const downloadBase64 = (base64: string, mime: string, filename: string) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCourse = async () => {
+    setExporting(true);
     try {
       const { data, error } = await supabase.functions.invoke("export-course", { body: { courseId: course.id } });
       if (error) throw error;
-      if (data?.url) window.open(data.url, "_blank");
-      else toast.success("Export ready");
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      } else {
+        const baseName = data?.filename || course.slug || "course";
+        if (data?.docx) downloadBase64(data.docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", `${baseName}.docx`);
+        if (data?.pdf) downloadBase64(data.pdf, "application/pdf", `${baseName}.pdf`);
+        toast.success("Downloaded Google Docs file and PDF");
+      }
     } catch (e: any) { toast.error(e.message || "Export failed"); }
+    finally { setExporting(false); }
   };
 
   return (
@@ -739,7 +760,10 @@ export default function CourseEdit() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button onClick={saveCourse} variant="hero"><Save className="h-4 w-4 mr-1" /> Save course</Button>
-          <Button onClick={exportDocx} variant="neon">Export as .docx</Button>
+          <Button onClick={exportCourse} variant="neon" disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
+            Download Google Docs + PDF
+          </Button>
         </div>
       </div>
 

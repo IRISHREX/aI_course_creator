@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProgress, type Topic } from "@/hooks/useTopics";
 import { Button } from "@/components/ui/button";
+import { ReadMode } from "@/components/ReadMode";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, BookOpen, Check, RotateCw, Trophy, X } from "lucide-react";
 
@@ -94,6 +95,11 @@ export default function QuizPage() {
   const total = quizItems.length;
   const correctCount = picks.filter((p, idx) => p === quizItems[idx]?.answer).length;
   const quizTitle = isCourseQuiz ? `${courseTitle} - full course MCQ` : topic?.title || "Quiz";
+  const questionReadText = [
+    `Question ${i + 1} of ${total}.`,
+    q.q,
+    ...q.options.map((opt, idx) => `Option ${String.fromCharCode(65 + idx)}. ${opt}`),
+  ].join(" ");
 
   const choose = (n: number) => {
     if (picked !== null) return;
@@ -162,7 +168,10 @@ export default function QuizPage() {
           <div className="text-xs font-mono text-muted-foreground">{quizTitle}</div>
           {isCourseQuiz && <div className="text-[11px] text-primary mt-1">{q.topicTitle}</div>}
         </div>
-        <div className="text-xs font-mono text-primary">Q {i + 1} / {total}</div>
+        <div className="flex items-center gap-2">
+          <ReadMode text={questionReadText} />
+          <div className="text-xs font-mono text-primary">Q {i + 1} / {total}</div>
+        </div>
       </div>
       <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-8">
         <motion.div className="h-full bg-gradient-primary" initial={{ width: 0 }} animate={{ width: `${(i / total) * 100}%` }} />

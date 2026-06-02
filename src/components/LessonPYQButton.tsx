@@ -22,8 +22,9 @@ export const LessonPYQButton = ({ topicId, courseId }: { topicId: string; course
     setLoading(true);
     const { data } = await supabase
       .from("pyq_topics")
-      .select("course_pyq(id, question, answer, marks, year)")
-      .eq("topic_id", topicId);
+      .select("course_pyq!inner(id, course_id, question, answer, marks, year)")
+      .eq("topic_id", topicId)
+      .eq("course_pyq.course_id", courseId);
     setItems(((data as any[]) || []).map(r => r.course_pyq).filter(Boolean));
     setLoading(false);
   };
