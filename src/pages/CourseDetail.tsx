@@ -36,7 +36,7 @@ function errorMessage(error: unknown, fallback: string) {
 export default function CourseDetail() {
   const { courseSlug } = useParams();
   const { course, loading: cLoad } = useCourseBySlug(courseSlug);
-  const { topics, loading } = useTopics(course?.id);
+  const { topics, loading, setTopics } = useTopics(course?.id);
   const { progress } = useProgress();
   const { isAdmin } = useIsAdmin();
   const [exporting, setExporting] = useState<DownloadFormat | null>(null);
@@ -47,6 +47,10 @@ export default function CourseDetail() {
   });
   const [genMM, setGenMM] = useState(false);
   const [mindmap, setMindmap] = useState<MindmapData>(null);
+  const [selectedLessonMindmaps, setSelectedLessonMindmaps] = useState<string[]>([]);
+  const [lessonMindmapSelectionReady, setLessonMindmapSelectionReady] = useState(false);
+  const [bulkGeneratingMindmaps, setBulkGeneratingMindmaps] = useState(false);
+  const [bulkMindmapProgress, setBulkMindmapProgress] = useState("");
   const [pyqCount, setPyqCount] = useState(0);
   const [tocOpen, setTocOpen] = useState(false);
 
@@ -56,6 +60,17 @@ export default function CourseDetail() {
     backendApi.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", course.id)
       .then(({ count }) => setPyqCount(count || 0));
   }, [course]);
+
+  useEffect(() => {
+    setLessonMindmapSelectionReady(false);
+    setSelectedLessonMindmaps([]);
+  }, [course?.id]);
+
+  useEffect(() => {
+    if (!topics.length || lessonMindmapSelectionReady) return;
+    setSelectedLessonMindmaps(topics.filter((topic) => !topic.mindmap).map((topic) => topic.id));
+    setLessonMindmapSelectionReady(true);
+  }, [lessonMindmapSelectionReady, topics]);
 
   if (cLoad || loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
@@ -74,9 +89,47 @@ export default function CourseDetail() {
 
   const byUnit: Record<number, typeof topics> = {};
   topics.forEach(t => { (byUnit[t.unit] ||= []).push(t); });
+  const lessonMindmapsGenerated = topics.filter((topic) => topic.mindmap).length;
+  const selectedLessonMindmapCount = selectedLessonMindmaps.length;
 
   const setExportOption = (key: keyof ExportOptions, value: boolean) => {
     setExportOptions((current) => ({ ...current, [key]: value }));
+  };
+
+  const setLessonMindmapSelected = (topicId: string, selected: boolean) => {
+    setSelectedLessonMindmaps((current) => selected
+      ? Array.from(new Set([...current, topicId]))
+      : current.filter((id) => id !== topicId));
+  };
+
+  const generateSelectedLessonMindmaps = async () => {
+    if (!isAdmin) return;
+    const selectedTopics = topics.filter((topic) => selectedLessonMindmaps.includes(topic.id));
+    if (!selectedTopics.length) {
+      toast.info("Select at least one lesson");
+      return;
+    }
+    setBulkGeneratingMindmaps(true);
+    let generated = 0;
+    try {
+      for (const [index, topic] of selectedTopics.entries()) {
+        setBulkMindmapProgress(`${index + 1}/${selectedTopics.length}`);
+        const { data, error } = await backendApi.functions.invoke("generate-mindmap", {
+          body: { topicId: topic.id, courseId: course.id },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, mindmap: data.mindmap } : item));
+        generated += 1;
+      }
+      setSelectedLessonMindmaps([]);
+      toast.success(`Generated ${generated} lesson mind map${generated === 1 ? "" : "s"}`);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, generated ? `Stopped after ${generated} generated` : "Lesson mind map generation failed"));
+    } finally {
+      setBulkGeneratingMindmaps(false);
+      setBulkMindmapProgress("");
+    }
   };
 
   const downloadBase64 = (base64: string, mime: string, filename: string) => {
@@ -289,10 +342,72 @@ export default function CourseDetail() {
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="font-display font-bold text-xl flex items-center gap-2"><Brain className="h-5 w-5 text-primary" /> Course Mind Map</div>
             {isAdmin && (
-              <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMM}>
-                {genMM ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                {mindmap ? "Regenerate" : "Generate"} mind map
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="neon" size="sm" disabled={bulkGeneratingMindmaps} className="gap-1">
+                      <Brain className="h-4 w-4" />
+                      Lesson mind maps
+                      <span className="font-mono text-xs">({selectedLessonMindmapCount})</span>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-96 w-80 overflow-auto">
+                    <DropdownMenuLabel>{lessonMindmapsGenerated}/{topics.length} generated</DropdownMenuLabel>
+                    <div className="grid grid-cols-3 gap-1 px-2 pb-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps(topics.filter((topic) => !topic.mindmap).map((topic) => topic.id))}
+                      >
+                        Missing
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps(topics.map((topic) => topic.id))}
+                      >
+                        All
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps([])}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                    {topics.map((topic) => (
+                      <DropdownMenuCheckboxItem
+                        key={topic.id}
+                        checked={selectedLessonMindmaps.includes(topic.id)}
+                        onCheckedChange={(checked) => setLessonMindmapSelected(topic.id, Boolean(checked))}
+                        onSelect={(event) => event.preventDefault()}
+                        className="items-start gap-2"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate">{topic.unit}.{topic.order_index} {topic.title}</span>
+                          <span className="block text-[10px] text-muted-foreground">{topic.mindmap ? "Generated" : "Not generated"}</span>
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="neon" size="sm" onClick={generateSelectedLessonMindmaps} disabled={bulkGeneratingMindmaps || !selectedLessonMindmapCount}>
+                  {bulkGeneratingMindmaps ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                  {bulkGeneratingMindmaps ? `Generating ${bulkMindmapProgress}` : "Generate selected"}
+                </Button>
+                <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMM}>
+                  {genMM ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                  {mindmap ? "Regenerate" : "Generate"} mind map
+                </Button>
+              </div>
             )}
           </div>
           {mindmap ? <Mindmap data={mindmap} /> : (
