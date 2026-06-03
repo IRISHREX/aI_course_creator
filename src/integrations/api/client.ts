@@ -788,6 +788,154 @@ function wrapExportText(text: string, maxChars: number) {
   return lines.length ? lines : [""];
 }
 
+function hasMindmap(value: any) {
+  return Boolean(value && typeof value === "object" && exportCleanText(value.label || value.id));
+}
+
+function sanitizeExportFilename(value: unknown) {
+  return slugify(exportCleanText(value || "course")).slice(0, 80) || "course";
+}
+
+function collectMindmapNodes(root: any) {
+  const nodes: Array<{ node: any; depth: number; parentIndex: number | null }> = [];
+  const walk = (node: any, depth: number, parentIndex: number | null) => {
+    if (!node || typeof node !== "object") return;
+    const index = nodes.length;
+    nodes.push({ node, depth, parentIndex });
+    (Array.isArray(node.children) ? node.children : []).forEach((child: any) => walk(child, depth + 1, index));
+  };
+  walk(root, 0, null);
+  return nodes;
+}
+
+async function buildLocalMindmapPdf(course: any, topics: any[]) {
+  const pdfLib = await import("pdf-lib");
+  const pdf = await pdfLib.PDFDocument.create();
+  const font = await pdf.embedFont(pdfLib.StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(pdfLib.StandardFonts.HelveticaBold);
+  const pageSize: [number, number] = [842, 595];
+  const colors = {
+    ink: pdfLib.rgb(0.08, 0.09, 0.13),
+    muted: pdfLib.rgb(0.38, 0.42, 0.5),
+    line: pdfLib.rgb(0.62, 0.68, 0.78),
+    rootFill: pdfLib.rgb(0.17, 0.24, 0.42),
+    rootText: pdfLib.rgb(1, 1, 1),
+    fill: pdfLib.rgb(0.94, 0.97, 1),
+    stroke: pdfLib.rgb(0.42, 0.55, 0.78),
+  };
+
+  const drawLabel = (page: any, text: string, x: number, y: number, width: number, size: number, pageFont = font, color = colors.ink) => {
+    const lines = wrapExportText(text, Math.max(8, Math.floor(width / (size * 0.52)))).slice(0, 3);
+    lines.forEach((line, index) => {
+      page.drawText(line.slice(0, 100), { x, y: y - index * (size + 3), size, font: pageFont, color });
+    });
+    return lines.length * (size + 3);
+  };
+
+  const drawMindmapPage = (title: string, subtitle: string, mindmap: any, pageNumber: number) => {
+    const page = pdf.addPage(pageSize);
+    const width = page.getWidth();
+    const height = page.getHeight();
+    page.drawText(title.slice(0, 95), { x: 36, y: height - 42, size: 18, font: bold, color: colors.ink });
+    if (subtitle) page.drawText(subtitle.slice(0, 130), { x: 36, y: height - 62, size: 9, font, color: colors.muted });
+    page.drawText(`Page ${pageNumber}`, { x: width - 72, y: 24, size: 8, font, color: colors.muted });
+
+    const nodes = collectMindmapNodes(mindmap);
+    if (!nodes.length) {
+      page.drawText("No mind map data available.", { x: 36, y: height - 110, size: 11, font, color: colors.muted });
+      return;
+    }
+
+    const maxDepth = Math.max(1, ...nodes.map((item) => item.depth));
+    const rowsByDepth = new Map<number, number>();
+    nodes.forEach((item) => rowsByDepth.set(item.depth, (rowsByDepth.get(item.depth) || 0) + 1));
+    const seenByDepth = new Map<number, number>();
+    const positions = nodes.map((item) => {
+      const row = seenByDepth.get(item.depth) || 0;
+      seenByDepth.set(item.depth, row + 1);
+      const columnWidth = (width - 96) / (maxDepth + 1);
+      const count = rowsByDepth.get(item.depth) || 1;
+      const usableHeight = height - 130;
+      return {
+        x: 48 + item.depth * columnWidth,
+        y: height - 100 - ((row + 0.5) * usableHeight) / count,
+        width: Math.min(150, columnWidth - 22),
+        height: item.depth === 0 ? 42 : 34,
+      };
+    });
+
+    nodes.forEach((item, index) => {
+      if (item.parentIndex === null) return;
+      const parent = positions[item.parentIndex];
+      const child = positions[index];
+      page.drawLine({
+        start: { x: parent.x + parent.width, y: parent.y },
+        end: { x: child.x, y: child.y },
+        thickness: 1,
+        color: colors.line,
+      });
+    });
+
+    nodes.forEach((item, index) => {
+      const position = positions[index];
+      const isRoot = item.depth === 0;
+      page.drawRectangle({
+        x: position.x,
+        y: position.y - position.height / 2,
+        width: position.width,
+        height: position.height,
+        borderWidth: 1.2,
+        borderColor: isRoot ? colors.rootFill : colors.stroke,
+        color: isRoot ? colors.rootFill : colors.fill,
+      });
+      drawLabel(
+        page,
+        exportCleanText(item.node.label || item.node.id || "Untitled"),
+        position.x + 8,
+        position.y + (isRoot ? 10 : 8),
+        position.width - 16,
+        isRoot ? 10 : 8,
+        isRoot ? bold : font,
+        isRoot ? colors.rootText : colors.ink,
+      );
+    });
+  };
+
+  let pageNumber = 1;
+  if (hasMindmap(course?.mindmap)) {
+    drawMindmapPage(
+      `${course?.title || "Course"} - Overall Mind Map`,
+      "Overall course mind map",
+      course.mindmap,
+      pageNumber++,
+    );
+  }
+
+  topics
+    .filter((topic: any) => hasMindmap(topic.mindmap))
+    .sort((a: any, b: any) => Number(a.unit) - Number(b.unit) || Number(a.order_index) - Number(b.order_index))
+    .forEach((topic: any) => {
+      drawMindmapPage(
+        `${topic.unit}.${topic.order_index} ${topic.title}`,
+        `${course?.title || "Course"} lesson mind map`,
+        topic.mindmap,
+        pageNumber++,
+      );
+    });
+
+  if (pageNumber === 1) {
+    const page = pdf.addPage(pageSize);
+    page.drawText(course?.title || "Course Mind Maps", { x: 36, y: page.getHeight() - 42, size: 18, font: bold, color: colors.ink });
+    page.drawText("No generated mind maps were found for this course.", { x: 36, y: page.getHeight() - 82, size: 11, font, color: colors.muted });
+  }
+
+  return {
+    pdf: await pdf.saveAsBase64(),
+    filename: `${sanitizeExportFilename(course?.slug || course?.title)}-mindmaps`,
+    count: pageNumber - 1,
+  };
+}
+
 async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], links: any[], rawOptions: ExportOptions = {}) {
   const options = {
     includeImages: rawOptions.includeImages !== false,
@@ -1479,6 +1627,11 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
           const pyqs = fromApi((await api(`/pyq?courseId=${encodeURIComponent(body.courseId)}`)).pyqs || []);
           const links = fromApi((await api(`/pyq/topics?courseId=${encodeURIComponent(body.courseId)}`)).links || []);
           return { data: { ok: true, ...await buildLocalCourseExport(course, topics, pyqs, links, body.options) }, error: null };
+        }
+        if (name === "export-course-mindmaps") {
+          const course = (await getAllCourses()).find((item: any) => item.id === body.courseId);
+          const topics = await getCourseTopics(body.courseId);
+          return { data: { ok: true, ...await buildLocalMindmapPdf(course, topics) }, error: null };
         }
         if (name === "ingest-pyq") {
           return { data: { ok: true, inserted: 0, tagged: 0 }, error: null };

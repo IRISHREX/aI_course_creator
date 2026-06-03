@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown } from "lucide-react";
+import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown, Download } from "lucide-react";
 import { backendApi } from "@/integrations/api/client";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ type CourseWithMindmap = NonNullable<ReturnType<typeof useCourseBySlug>["course"
   mindmap?: MindmapData;
 };
 type ExportFormat = "docs" | "pdf";
+type DownloadFormat = ExportFormat | "mindmaps";
 type ExportOptions = {
   includeImages: boolean;
   includeGraphs: boolean;
@@ -38,7 +39,7 @@ export default function CourseDetail() {
   const { topics, loading } = useTopics(course?.id);
   const { progress } = useProgress();
   const { isAdmin } = useIsAdmin();
-  const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const [exporting, setExporting] = useState<DownloadFormat | null>(null);
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     includeImages: true,
     includeGraphs: true,
@@ -114,6 +115,22 @@ export default function CourseDetail() {
     } finally { setExporting(null); }
   };
 
+  const exportCourseMindmaps = async () => {
+    setExporting("mindmaps");
+    try {
+      const { data, error } = await backendApi.functions.invoke("export-course-mindmaps", {
+        body: { courseId: course.id },
+      });
+      if (error) throw error;
+      if (!data?.pdf) throw new Error("Mind map PDF export was not returned");
+      downloadBase64(data.pdf, "application/pdf", `${data.filename || `${course.slug}-mindmaps`}.pdf`);
+      const count = Number(data.count || 0);
+      toast.success(count > 0 ? `Downloaded ${count} mind map page${count === 1 ? "" : "s"}` : "Downloaded mind map PDF");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Mind map download failed"));
+    } finally { setExporting(null); }
+  };
+
   return (
     <div className="container overflow-hidden px-3 py-8 sm:px-4 sm:py-12">
       <Button asChild variant="ghost" size="sm" className="mb-4">
@@ -140,6 +157,10 @@ export default function CourseDetail() {
           <Button onClick={() => exportCourse("pdf")} variant="neon" disabled={Boolean(exporting)}>
             {exporting === "pdf" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileJson className="h-4 w-4 mr-1" />}
             PDF
+          </Button>
+          <Button onClick={exportCourseMindmaps} variant="neon" disabled={Boolean(exporting)}>
+            {exporting === "mindmaps" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+            Mind maps PDF
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
