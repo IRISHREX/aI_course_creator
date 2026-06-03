@@ -530,6 +530,32 @@ function normalizeQuiz(quiz: unknown) {
     .slice(0, 10);
 }
 
+type MindmapNode = { id: string; label: string; children?: MindmapNode[] };
+
+function normalizeMindmapNode(value: unknown, fallbackLabel = "Mind Map", depth = 0): MindmapNode | null {
+  if (!value || typeof value !== "object" || depth > 6) return null;
+  const raw = value as { id?: unknown; label?: unknown; title?: unknown; name?: unknown; children?: unknown };
+  const label = cleanString(raw.label ?? raw.title ?? raw.name).replace(/\s+/g, " ").slice(0, 90);
+  if (!label) return null;
+  const children = Array.isArray(raw.children)
+    ? raw.children
+        .map((child, index) => normalizeMindmapNode(child, `${label}-${index}`, depth + 1))
+        .filter((child): child is MindmapNode => Boolean(child))
+        .slice(0, depth === 0 ? 10 : 8)
+    : [];
+  return {
+    id: cleanString(raw.id).replace(/\s+/g, "-").slice(0, 80) || slugify(`${fallbackLabel}-${label}`),
+    label,
+    ...(children.length ? { children } : {}),
+  };
+}
+
+function normalizeMindmapPayload(value: unknown, fallbackLabel: string) {
+  const root = normalizeMindmapNode(value, fallbackLabel);
+  if (!root?.label || !root.children?.length) return null;
+  return root;
+}
+
 function lessonBlockToText(block: any) {
   if (!block || typeof block !== "object") return "";
   const pieces: string[] = [];
@@ -788,6 +814,26 @@ function wrapExportText(text: string, maxChars: number) {
   return lines.length ? lines : [""];
 }
 
+function toPdfSafeText(value: unknown) {
+  return exportCleanText(value)
+    .replace(/\u221a/g, "sqrt")
+    .replace(/\u221b/g, "cbrt")
+    .replace(/\u221c/g, "4th root")
+    .replace(/\u00d7/g, "x")
+    .replace(/\u00f7/g, "/")
+    .replace(/\u2264/g, "<=")
+    .replace(/\u2265/g, ">=")
+    .replace(/\u2260/g, "!=")
+    .replace(/\u2248/g, "~=")
+    .replace(/\u2192/g, "->")
+    .replace(/\u2190/g, "<-")
+    .replace(/\u2194/g, "<->")
+    .replace(/\u2013|\u2014/g, "-")
+    .replace(/\u2018|\u2019/g, "'")
+    .replace(/\u201c|\u201d/g, '"')
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
+}
+
 function hasMindmap(value: any) {
   return Boolean(value && typeof value === "object" && exportCleanText(value.label || value.id));
 }
@@ -797,18 +843,20 @@ function sanitizeExportFilename(value: unknown) {
 }
 
 function collectMindmapNodes(root: any) {
-  const nodes: Array<{ node: any; depth: number; parentIndex: number | null }> = [];
-  const walk = (node: any, depth: number, parentIndex: number | null) => {
+  const nodes: Array<{ node: any; depth: number; parentIndex: number | null; branchIndex: number }> = [];
+  const walk = (node: any, depth: number, parentIndex: number | null, branchIndex: number) => {
     if (!node || typeof node !== "object") return;
     const index = nodes.length;
-    nodes.push({ node, depth, parentIndex });
-    (Array.isArray(node.children) ? node.children : []).forEach((child: any) => walk(child, depth + 1, index));
+    nodes.push({ node, depth, parentIndex, branchIndex });
+    (Array.isArray(node.children) ? node.children : []).forEach((child: any, childIndex: number) => {
+      walk(child, depth + 1, index, depth === 0 ? childIndex : branchIndex);
+    });
   };
-  walk(root, 0, null);
+  walk(root, 0, null, 0);
   return nodes;
 }
 
-async function buildLocalMindmapPdf(course: any, topics: any[]) {
+async function buildLocalMindmapPdf(course: any, topics: any[], options: { includeCourse?: boolean; filenameSuffix?: string } = {}) {
   const pdfLib = await import("pdf-lib");
   const pdf = await pdfLib.PDFDocument.create();
   const font = await pdf.embedFont(pdfLib.StandardFonts.Helvetica);
@@ -817,17 +865,23 @@ async function buildLocalMindmapPdf(course: any, topics: any[]) {
   const colors = {
     ink: pdfLib.rgb(0.08, 0.09, 0.13),
     muted: pdfLib.rgb(0.38, 0.42, 0.5),
-    line: pdfLib.rgb(0.62, 0.68, 0.78),
-    rootFill: pdfLib.rgb(0.17, 0.24, 0.42),
+    pageFill: pdfLib.rgb(0.97, 0.98, 1),
+    rootFill: pdfLib.rgb(0.11, 0.15, 0.28),
     rootText: pdfLib.rgb(1, 1, 1),
-    fill: pdfLib.rgb(0.94, 0.97, 1),
-    stroke: pdfLib.rgb(0.42, 0.55, 0.78),
   };
+  const palette = [
+    { fill: pdfLib.rgb(0.82, 0.96, 0.98), stroke: pdfLib.rgb(0.04, 0.62, 0.72), dark: pdfLib.rgb(0.03, 0.35, 0.43), text: pdfLib.rgb(0.02, 0.16, 0.2) },
+    { fill: pdfLib.rgb(0.91, 0.84, 0.99), stroke: pdfLib.rgb(0.48, 0.22, 0.78), dark: pdfLib.rgb(0.26, 0.12, 0.45), text: pdfLib.rgb(0.18, 0.07, 0.32) },
+    { fill: pdfLib.rgb(0.83, 0.96, 0.88), stroke: pdfLib.rgb(0.12, 0.58, 0.3), dark: pdfLib.rgb(0.06, 0.34, 0.18), text: pdfLib.rgb(0.04, 0.2, 0.11) },
+    { fill: pdfLib.rgb(1, 0.93, 0.74), stroke: pdfLib.rgb(0.82, 0.48, 0.02), dark: pdfLib.rgb(0.48, 0.27, 0.02), text: pdfLib.rgb(0.31, 0.18, 0.02) },
+    { fill: pdfLib.rgb(1, 0.85, 0.9), stroke: pdfLib.rgb(0.78, 0.18, 0.42), dark: pdfLib.rgb(0.46, 0.08, 0.23), text: pdfLib.rgb(0.3, 0.04, 0.14) },
+    { fill: pdfLib.rgb(0.84, 0.91, 1), stroke: pdfLib.rgb(0.16, 0.4, 0.82), dark: pdfLib.rgb(0.08, 0.22, 0.48), text: pdfLib.rgb(0.05, 0.14, 0.31) },
+  ];
 
   const drawLabel = (page: any, text: string, x: number, y: number, width: number, size: number, pageFont = font, color = colors.ink) => {
-    const lines = wrapExportText(text, Math.max(8, Math.floor(width / (size * 0.52)))).slice(0, 3);
+    const lines = wrapExportText(toPdfSafeText(text), Math.max(8, Math.floor(width / (size * 0.52)))).slice(0, 3);
     lines.forEach((line, index) => {
-      page.drawText(line.slice(0, 100), { x, y: y - index * (size + 3), size, font: pageFont, color });
+      page.drawText(toPdfSafeText(line).slice(0, 100), { x, y: y - index * (size + 3), size, font: pageFont, color });
     });
     return lines.length * (size + 3);
   };
@@ -836,13 +890,15 @@ async function buildLocalMindmapPdf(course: any, topics: any[]) {
     const page = pdf.addPage(pageSize);
     const width = page.getWidth();
     const height = page.getHeight();
-    page.drawText(title.slice(0, 95), { x: 36, y: height - 42, size: 18, font: bold, color: colors.ink });
-    if (subtitle) page.drawText(subtitle.slice(0, 130), { x: 36, y: height - 62, size: 9, font, color: colors.muted });
+    page.drawRectangle({ x: 0, y: 0, width, height, color: colors.pageFill });
+    page.drawRectangle({ x: 0, y: height - 78, width, height: 78, color: pdfLib.rgb(0.93, 0.96, 1) });
+    page.drawText(toPdfSafeText(title).slice(0, 95), { x: 36, y: height - 42, size: 18, font: bold, color: colors.ink });
+    if (subtitle) page.drawText(toPdfSafeText(subtitle).slice(0, 130), { x: 36, y: height - 62, size: 9, font, color: colors.muted });
     page.drawText(`Page ${pageNumber}`, { x: width - 72, y: 24, size: 8, font, color: colors.muted });
 
     const nodes = collectMindmapNodes(mindmap);
     if (!nodes.length) {
-      page.drawText("No mind map data available.", { x: 36, y: height - 110, size: 11, font, color: colors.muted });
+      page.drawText(toPdfSafeText("No mind map data available."), { x: 36, y: height - 110, size: 11, font, color: colors.muted });
       return;
     }
 
@@ -868,41 +924,44 @@ async function buildLocalMindmapPdf(course: any, topics: any[]) {
       if (item.parentIndex === null) return;
       const parent = positions[item.parentIndex];
       const child = positions[index];
+      const branchColor = palette[item.branchIndex % palette.length];
       page.drawLine({
         start: { x: parent.x + parent.width, y: parent.y },
         end: { x: child.x, y: child.y },
-        thickness: 1,
-        color: colors.line,
+        thickness: item.depth === 1 ? 2.2 : 1.25,
+        color: branchColor.stroke,
       });
     });
 
     nodes.forEach((item, index) => {
       const position = positions[index];
       const isRoot = item.depth === 0;
+      const branchColor = palette[item.branchIndex % palette.length];
+      const isPrimaryBranch = item.depth === 1;
       page.drawRectangle({
         x: position.x,
         y: position.y - position.height / 2,
         width: position.width,
         height: position.height,
-        borderWidth: 1.2,
-        borderColor: isRoot ? colors.rootFill : colors.stroke,
-        color: isRoot ? colors.rootFill : colors.fill,
+        borderWidth: isRoot || isPrimaryBranch ? 1.8 : 1.1,
+        borderColor: isRoot ? colors.rootFill : branchColor.stroke,
+        color: isRoot ? colors.rootFill : isPrimaryBranch ? branchColor.dark : branchColor.fill,
       });
       drawLabel(
         page,
-        exportCleanText(item.node.label || item.node.id || "Untitled"),
+        toPdfSafeText(item.node.label || item.node.id || "Untitled"),
         position.x + 8,
         position.y + (isRoot ? 10 : 8),
         position.width - 16,
-        isRoot ? 10 : 8,
-        isRoot ? bold : font,
-        isRoot ? colors.rootText : colors.ink,
+        isRoot ? 10 : isPrimaryBranch ? 8.5 : 8,
+        isRoot || isPrimaryBranch ? bold : font,
+        isRoot || isPrimaryBranch ? colors.rootText : branchColor.text,
       );
     });
   };
 
   let pageNumber = 1;
-  if (hasMindmap(course?.mindmap)) {
+  if (options.includeCourse !== false && hasMindmap(course?.mindmap)) {
     drawMindmapPage(
       `${course?.title || "Course"} - Overall Mind Map`,
       "Overall course mind map",
@@ -925,13 +984,13 @@ async function buildLocalMindmapPdf(course: any, topics: any[]) {
 
   if (pageNumber === 1) {
     const page = pdf.addPage(pageSize);
-    page.drawText(course?.title || "Course Mind Maps", { x: 36, y: page.getHeight() - 42, size: 18, font: bold, color: colors.ink });
-    page.drawText("No generated mind maps were found for this course.", { x: 36, y: page.getHeight() - 82, size: 11, font, color: colors.muted });
+    page.drawText(toPdfSafeText(course?.title || "Course Mind Maps"), { x: 36, y: page.getHeight() - 42, size: 18, font: bold, color: colors.ink });
+    page.drawText(toPdfSafeText("No generated mind maps were found for this course."), { x: 36, y: page.getHeight() - 82, size: 11, font, color: colors.muted });
   }
 
   return {
     pdf: await pdf.saveAsBase64(),
-    filename: `${sanitizeExportFilename(course?.slug || course?.title)}-mindmaps`,
+    filename: `${sanitizeExportFilename(course?.slug || course?.title)}-${options.filenameSuffix || "mindmaps"}`,
     count: pageNumber - 1,
   };
 }
@@ -1000,7 +1059,7 @@ async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], l
         page = pdf.addPage();
         y = page.getHeight() - 48;
       }
-      page.drawText(line.slice(0, 120), { x: 48, y, size: heading ? 16 : 10, font: heading ? bold : font, color: pdfLib.rgb(0.08, 0.08, 0.08) });
+      page.drawText(toPdfSafeText(line).slice(0, 120), { x: 48, y, size: heading ? 16 : 10, font: heading ? bold : font, color: pdfLib.rgb(0.08, 0.08, 0.08) });
       y -= heading ? 20 : 14;
     }
   }
@@ -1355,14 +1414,30 @@ Lessons:
 ${topics.map((item: any) => `- ${item.title}: ${item.summary || ""}`).join("\n")}
 
 Make the root label the course title and organize branches by course concepts.`;
-          const data = await aiJson(
-            "Return only valid JSON in this shape: {\"mindmap\":{\"id\":\"root\",\"label\":\"\",\"children\":[]}}. Build an educational concept mind map, not a study schedule. Labels must be short.",
-            mindmapPrompt,
-            { mindmap: null },
-          );
-          if (data.mindmap && body.topicId) await patchTopic(body.topicId, { mindmap: data.mindmap });
-          if (data.mindmap && !body.topicId && courseId) await patchCourse(courseId, { mindmap: data.mindmap });
-          return { data: { ok: true, mindmap: data.mindmap }, error: null };
+          const fallbackLabel = topic?.title || course?.title || "Course";
+          let lastError = "AI returned an invalid mind map";
+          for (let attempt = 1; attempt <= 2; attempt += 1) {
+            try {
+              const data = await aiJson(
+                "Return only valid JSON in this exact shape: {\"mindmap\":{\"id\":\"root\",\"label\":\"\",\"children\":[{\"id\":\"\",\"label\":\"\",\"children\":[]}]}}. Build an educational concept mind map, not a study schedule. The root and at least 3 first-level branches are required. Labels must be short.",
+                `${mindmapPrompt}\n\nAttempt ${attempt}: Return a valid non-empty tree. Do not include markdown, comments, Mermaid syntax, or explanatory text.`,
+                { mindmap: null },
+              );
+              const mindmap = normalizeMindmapPayload(data?.mindmap, fallbackLabel);
+              if (!mindmap) {
+                lastError = "AI returned a mind map without valid branches";
+                continue;
+              }
+              if (body.topicId) await patchTopic(body.topicId, { mindmap });
+              if (!body.topicId && courseId) await patchCourse(courseId, { mindmap });
+              return { data: { ok: true, mindmap, retried: attempt > 1 }, error: null };
+            } catch (error) {
+              lastError = errorMessage(error, lastError);
+            }
+          }
+          if (body.topicId) await patchTopic(body.topicId, { mindmap: null });
+          if (!body.topicId && courseId) await patchCourse(courseId, { mindmap: null });
+          return { data: { ok: false, mindmap: null, removed: true, error: `${lastError}. Bad mind map was discarded.` }, error: null };
         }
         if (name === "generate-pyq-answer") {
           const pyq = await findPyq(body.pyqId);
@@ -1630,8 +1705,19 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
         }
         if (name === "export-course-mindmaps") {
           const course = (await getAllCourses()).find((item: any) => item.id === body.courseId);
-          const topics = await getCourseTopics(body.courseId);
-          return { data: { ok: true, ...await buildLocalMindmapPdf(course, topics) }, error: null };
+          const allTopics = await getCourseTopics(body.courseId);
+          const topicIds = Array.isArray(body.topicIds) ? new Set(body.topicIds.map((id: any) => String(id))) : null;
+          const topics = topicIds ? allTopics.filter((topic: any) => topicIds.has(String(topic.id))) : allTopics;
+          return {
+            data: {
+              ok: true,
+              ...await buildLocalMindmapPdf(course, topics, {
+                includeCourse: body.includeCourse !== false,
+                filenameSuffix: topicIds ? "selected-mindmaps" : "mindmaps",
+              }),
+            },
+            error: null,
+          };
         }
         if (name === "ingest-pyq") {
           return { data: { ok: true, inserted: 0, tagged: 0 }, error: null };

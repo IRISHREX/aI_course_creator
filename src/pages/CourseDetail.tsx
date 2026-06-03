@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown, Download } from "lucide-react";
+import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown, Download, Trash2 } from "lucide-react";
 import { backendApi } from "@/integrations/api/client";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ type CourseWithMindmap = NonNullable<ReturnType<typeof useCourseBySlug>["course"
   mindmap?: MindmapData;
 };
 type ExportFormat = "docs" | "pdf";
-type DownloadFormat = ExportFormat | "mindmaps";
+type DownloadFormat = ExportFormat | "mindmaps" | "selectedMindmaps";
 type ExportOptions = {
   includeImages: boolean;
   includeGraphs: boolean;
@@ -80,6 +80,10 @@ export default function CourseDetail() {
     try {
       const { data, error } = await backendApi.functions.invoke("generate-mindmap", { body: { courseId: course.id } });
       if (error) throw error;
+      if (data?.removed) {
+        setMindmap(null);
+        throw new Error(data.error || "Invalid mind map was discarded");
+      }
       if (data?.error) throw new Error(data.error);
       setMindmap(data.mindmap);
       toast.success("Course mind map generated");
@@ -91,6 +95,8 @@ export default function CourseDetail() {
   topics.forEach(t => { (byUnit[t.unit] ||= []).push(t); });
   const lessonMindmapsGenerated = topics.filter((topic) => topic.mindmap).length;
   const selectedLessonMindmapCount = selectedLessonMindmaps.length;
+  const selectedGeneratedLessonMindmaps = topics.filter((topic) => selectedLessonMindmaps.includes(topic.id) && topic.mindmap);
+  const selectedGeneratedLessonMindmapCount = selectedGeneratedLessonMindmaps.length;
 
   const setExportOption = (key: keyof ExportOptions, value: boolean) => {
     setExportOptions((current) => ({ ...current, [key]: value }));
@@ -111,6 +117,7 @@ export default function CourseDetail() {
     }
     setBulkGeneratingMindmaps(true);
     let generated = 0;
+    let removed = 0;
     try {
       for (const [index, topic] of selectedTopics.entries()) {
         setBulkMindmapProgress(`${index + 1}/${selectedTopics.length}`);
@@ -118,12 +125,18 @@ export default function CourseDetail() {
           body: { topicId: topic.id, courseId: course.id },
         });
         if (error) throw error;
+        if (data?.removed) {
+          setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, mindmap: null } : item));
+          removed += 1;
+          continue;
+        }
         if (data?.error) throw new Error(data.error);
         setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, mindmap: data.mindmap } : item));
         generated += 1;
       }
       setSelectedLessonMindmaps([]);
-      toast.success(`Generated ${generated} lesson mind map${generated === 1 ? "" : "s"}`);
+      if (generated) toast.success(`Generated ${generated} lesson mind map${generated === 1 ? "" : "s"}`);
+      if (removed) toast.error(`Removed ${removed} invalid mind map${removed === 1 ? "" : "s"}`);
     } catch (e: unknown) {
       toast.error(errorMessage(e, generated ? `Stopped after ${generated} generated` : "Lesson mind map generation failed"));
     } finally {
@@ -168,11 +181,12 @@ export default function CourseDetail() {
     } finally { setExporting(null); }
   };
 
-  const exportCourseMindmaps = async () => {
-    setExporting("mindmaps");
+  const exportCourseMindmaps = async (options?: { topicIds?: string[]; includeCourse?: boolean }) => {
+    const selectedOnly = Boolean(options?.topicIds?.length);
+    setExporting(selectedOnly ? "selectedMindmaps" : "mindmaps");
     try {
       const { data, error } = await backendApi.functions.invoke("export-course-mindmaps", {
-        body: { courseId: course.id },
+        body: { courseId: course.id, ...options },
       });
       if (error) throw error;
       if (!data?.pdf) throw new Error("Mind map PDF export was not returned");
@@ -182,6 +196,49 @@ export default function CourseDetail() {
     } catch (e: unknown) {
       toast.error(errorMessage(e, "Mind map download failed"));
     } finally { setExporting(null); }
+  };
+
+  const exportSelectedLessonMindmaps = async () => {
+    const topicIds = selectedGeneratedLessonMindmaps.map((topic) => topic.id);
+    if (!topicIds.length) {
+      toast.info("Select at least one generated lesson mind map");
+      return;
+    }
+    await exportCourseMindmaps({ topicIds, includeCourse: false });
+  };
+
+  const deleteCourseMindmap = async () => {
+    if (!isAdmin || !mindmap) return;
+    if (!window.confirm("Delete the overall course mind map?")) return;
+    try {
+      const { error } = await backendApi.from("courses").update({ mindmap: null }).eq("id", course.id);
+      if (error) throw error;
+      setMindmap(null);
+      toast.success("Course mind map deleted");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to delete course mind map"));
+    }
+  };
+
+  const deleteSelectedLessonMindmaps = async () => {
+    if (!isAdmin) return;
+    const topicIds = selectedGeneratedLessonMindmaps.map((topic) => topic.id);
+    if (!topicIds.length) {
+      toast.info("Select at least one generated lesson mind map");
+      return;
+    }
+    if (!window.confirm(`Delete ${topicIds.length} selected lesson mind map${topicIds.length === 1 ? "" : "s"}?`)) return;
+    try {
+      for (const topicId of topicIds) {
+        const { error } = await backendApi.from("topics").update({ mindmap: null }).eq("id", topicId);
+        if (error) throw error;
+      }
+      setTopics((current) => current.map((topic) => topicIds.includes(topic.id) ? { ...topic, mindmap: null } : topic));
+      setSelectedLessonMindmaps((current) => current.filter((topicId) => !topicIds.includes(topicId)));
+      toast.success(`Deleted ${topicIds.length} lesson mind map${topicIds.length === 1 ? "" : "s"}`);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to delete selected mind maps"));
+    }
   };
 
   return (
@@ -211,7 +268,7 @@ export default function CourseDetail() {
             {exporting === "pdf" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileJson className="h-4 w-4 mr-1" />}
             PDF
           </Button>
-          <Button onClick={exportCourseMindmaps} variant="neon" disabled={Boolean(exporting)}>
+          <Button onClick={() => exportCourseMindmaps()} variant="neon" disabled={Boolean(exporting)}>
             {exporting === "mindmaps" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
             Mind maps PDF
           </Button>
@@ -354,7 +411,7 @@ export default function CourseDetail() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="max-h-96 w-80 overflow-auto">
                     <DropdownMenuLabel>{lessonMindmapsGenerated}/{topics.length} generated</DropdownMenuLabel>
-                    <div className="grid grid-cols-3 gap-1 px-2 pb-2">
+                    <div className="grid grid-cols-4 gap-1 px-2 pb-2">
                       <Button
                         type="button"
                         variant="ghost"
@@ -363,6 +420,15 @@ export default function CourseDetail() {
                         onClick={() => setSelectedLessonMindmaps(topics.filter((topic) => !topic.mindmap).map((topic) => topic.id))}
                       >
                         Missing
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps(topics.filter((topic) => topic.mindmap).map((topic) => topic.id))}
+                      >
+                        Generated
                       </Button>
                       <Button
                         type="button"
@@ -403,9 +469,21 @@ export default function CourseDetail() {
                   {bulkGeneratingMindmaps ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
                   {bulkGeneratingMindmaps ? `Generating ${bulkMindmapProgress}` : "Generate selected"}
                 </Button>
+                <Button variant="neon" size="sm" onClick={exportSelectedLessonMindmaps} disabled={Boolean(exporting) || bulkGeneratingMindmaps || !selectedGeneratedLessonMindmapCount}>
+                  {exporting === "selectedMindmaps" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  Download selected
+                </Button>
+                <Button variant="destructive" size="sm" onClick={deleteSelectedLessonMindmaps} disabled={bulkGeneratingMindmaps || !selectedGeneratedLessonMindmapCount}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete selected
+                </Button>
                 <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMM}>
                   {genMM ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
                   {mindmap ? "Regenerate" : "Generate"} mind map
+                </Button>
+                <Button variant="destructive" size="sm" onClick={deleteCourseMindmap} disabled={genMM || !mindmap}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete course map
                 </Button>
               </div>
             )}
