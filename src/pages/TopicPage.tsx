@@ -1,4 +1,4 @@
-import { type ComponentProps, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,7 +7,8 @@ import { useProgress, type Topic } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
-import { KaraokeReadMode, karaokeSeek } from "@/components/KaraokeReadMode";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { KaraokeReadMode, karaokeSeek, type KaraokeReadModeHandle } from "@/components/KaraokeReadMode";
 import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageBalanceStats, pageReadable } from "@/lib/lessonPaging";
@@ -16,6 +17,7 @@ import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
 
 type MindmapData = ComponentProps<typeof Mindmap>["data"];
 type TopicWithMindmap = Topic & { mindmap?: MindmapData };
@@ -38,9 +40,14 @@ export default function TopicPage() {
   const [pageTurnDirection, setPageTurnDirection] = useState<"next" | "prev">("next");
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [genMindmap, setGenMindmap] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [generatingLanguage, setGeneratingLanguage] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
   const [readerZoom, setReaderZoom] = useState(100);
   const [autoAdvanceRead, setAutoAdvanceRead] = useState(false);
+  const [autoScrollRead, setAutoScrollRead] = useState(true);
+  const readerRef = useRef<KaraokeReadModeHandle | null>(null);
+  const mouseStrokeRef = useRef({ x: 0, y: 0, count: 0, lastAt: 0, dragging: false });
 
   // Resume from URL hash: #p=2&w=14
   useEffect(() => {
@@ -67,12 +74,82 @@ export default function TopicPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (topic && user) markViewed(topic.id); }, [topic?.id, user?.id]);
 
-  const pages = useMemo(() => paginate(topic?.content || []), [topic?.content]);
+  const translations = useMemo(() => normalizeTranslations(topic?.translations), [topic?.translations]);
+  const activeTranslation = useMemo(
+    () => translations.find((translation) => translation.languageCode === selectedLanguage) || null,
+    [selectedLanguage, translations],
+  );
+  const displayTopic = activeTranslation ? {
+    title: activeTranslation.title,
+    summary: activeTranslation.summary,
+    content: activeTranslation.content,
+    quiz: activeTranslation.quiz?.length ? activeTranslation.quiz : topic?.quiz || [],
+    dir: activeTranslation.dir || languageByCode(selectedLanguage).dir || "ltr",
+  } : {
+    title: topic?.title || "",
+    summary: topic?.summary || "",
+    content: topic?.content || [],
+    quiz: topic?.quiz || [],
+    dir: "ltr" as const,
+  };
+  const pages = useMemo(() => paginate(displayTopic.content || []), [displayTopic.content]);
   const currentPage = pages[pageIdx];
   const pageText = useMemo(() => currentPage ? pageReadable(currentPage.blocks) : "", [currentPage]);
 
   // Reset active word on page change
   useEffect(() => { setActiveWord(null); }, [pageIdx]);
+  useEffect(() => { setPageIdx(0); }, [selectedLanguage]);
+  useEffect(() => {
+    if (pages.length && pageIdx > pages.length - 1) setPageIdx(pages.length - 1);
+  }, [pageIdx, pages.length]);
+
+  const linkPrefix = `/course/${courseSlug}`;
+  const goPreviousPage = () => {
+    if (pageIdx > 0) {
+      setPageTurnDirection("prev");
+      setPageIdx((p) => p - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (neighbors.prev) nav(`${linkPrefix}/topic/${neighbors.prev.slug}`);
+  };
+  const goNextPage = () => {
+    if (pageIdx < pages.length - 1) {
+      setPageTurnDirection("next");
+      setPageIdx((p) => p + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (neighbors.next) nav(`${linkPrefix}/topic/${neighbors.next.slug}`);
+  };
+
+  useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      return Boolean(element?.closest("input, textarea, select, [contenteditable='true']"));
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        setAutoScrollRead((value) => {
+          const next = !value;
+          toast.info(`Auto scroll ${next ? "on" : "off"}`);
+          return next;
+        });
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        goNextPage();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        goPreviousPage();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [goNextPage, goPreviousPage]);
 
   if (!topic) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   const p = progress[topic.id];
@@ -112,6 +189,33 @@ export default function TopicPage() {
     finally { setGenMindmap(false); }
   };
 
+  const generateLanguageVersion = async () => {
+    if (!isAdmin || !topic || selectedLanguage === "en") return;
+    const language = languageByCode(selectedLanguage);
+    setGeneratingLanguage(true);
+    try {
+      const { data, error } = await backendApi.functions.invoke("translate-lesson", {
+        body: {
+          topicId: topic.id,
+          languageCode: language.code,
+          languageName: language.label,
+          dir: language.dir || "ltr",
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setTopic({
+        ...topic,
+        translations: data.translations || [...translations.filter((item) => item.languageCode !== language.code), data.translation],
+      });
+      toast.success(`${language.label} lesson version generated`);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Translation failed"));
+    } finally {
+      setGeneratingLanguage(false);
+    }
+  };
+
   const addBookmark = async () => {
     if (!user) { toast.info("Sign in to bookmark"); return; }
     if (!topic || !course) return;
@@ -132,25 +236,6 @@ export default function TopicPage() {
     finally { setBookmarking(false); }
   };
 
-  const linkPrefix = `/course/${courseSlug}`;
-  const goPreviousPage = () => {
-    if (pageIdx > 0) {
-      setPageTurnDirection("prev");
-      setPageIdx((p) => p - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    if (neighbors.prev) nav(`${linkPrefix}/topic/${neighbors.prev.slug}`);
-  };
-  const goNextPage = () => {
-    if (pageIdx < pages.length - 1) {
-      setPageTurnDirection("next");
-      setPageIdx((p) => p + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    if (neighbors.next) nav(`${linkPrefix}/topic/${neighbors.next.slug}`);
-  };
   const canGoPrevious = pageIdx > 0 || Boolean(neighbors.prev);
   const canGoNext = pageIdx < pages.length - 1 || Boolean(neighbors.next);
   const detectPageBalance = () => {
@@ -165,8 +250,53 @@ export default function TopicPage() {
     else toast.info(message);
   };
 
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    const element = target as HTMLElement | null;
+    return Boolean(element?.closest("button, a, input, textarea, select, [role='button'], [contenteditable='true']"));
+  };
+
+  const toggleReaderPause = () => readerRef.current?.togglePause();
+
+  const handleReaderDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (isInteractiveTarget(event.target)) return;
+    toggleReaderPause();
+  };
+
+  const handleReaderMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (isInteractiveTarget(event.target)) return;
+    mouseStrokeRef.current = { x: event.clientX, y: event.clientY, count: mouseStrokeRef.current.count, lastAt: mouseStrokeRef.current.lastAt, dragging: true };
+  };
+
+  const handleReaderMouseMove = (event: MouseEvent<HTMLDivElement>) => {
+    const stroke = mouseStrokeRef.current;
+    if (!stroke.dragging || isInteractiveTarget(event.target)) return;
+    const dx = event.clientX - stroke.x;
+    const dy = event.clientY - stroke.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 90) return;
+    const now = Date.now();
+    stroke.count = now - stroke.lastAt < 900 ? stroke.count + 1 : 1;
+    stroke.lastAt = now;
+    stroke.x = event.clientX;
+    stroke.y = event.clientY;
+    if (stroke.count >= 2) {
+      stroke.count = 0;
+      toggleReaderPause();
+    }
+  };
+
+  const handleReaderMouseUp = () => {
+    mouseStrokeRef.current.dragging = false;
+  };
+
   return (
-    <div className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10">
+    <div
+      className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10"
+      onDoubleClick={handleReaderDoubleClick}
+      onMouseDown={handleReaderMouseDown}
+      onMouseMove={handleReaderMouseMove}
+      onMouseUp={handleReaderMouseUp}
+      onMouseLeave={handleReaderMouseUp}
+    >
       <LessonTerrainBackground className="opacity-35" />
       <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 md:flex-row md:items-center md:justify-between">
         <Button asChild variant="ghost" size="sm" className="max-w-full justify-start px-2">
@@ -176,7 +306,7 @@ export default function TopicPage() {
           </Link>
         </Button>
         <div className="grid grid-cols-6 gap-1.5 sm:flex sm:items-center sm:gap-2">
-          <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} onDone={autoAdvanceRead ? goNextPage : undefined} />
+          <KaraokeReadMode ref={readerRef} text={pageText} lang={selectedLanguage} onWordIndex={setActiveWord} autoScroll={autoScrollRead} onDone={autoAdvanceRead ? goNextPage : undefined} />
           <Button
             variant={autoAdvanceRead ? "neon" : "ghost"}
             size="icon"
@@ -185,6 +315,16 @@ export default function TopicPage() {
             aria-label="Auto next after read mode"
           >
             <ChevronsRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={autoScrollRead ? "neon" : "ghost"}
+            size="sm"
+            onClick={() => setAutoScrollRead((value) => !value)}
+            title="Auto scroll on/off (Ctrl+O)"
+            aria-label="Auto scroll on/off"
+            className="col-span-2 px-2 sm:col-span-1"
+          >
+            Auto scroll
           </Button>
           {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
           <Button variant="ghost" size="icon" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
@@ -201,14 +341,13 @@ export default function TopicPage() {
       <div className="mb-5 grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl sm:grid-cols-2">
         {neighbors.prev ? (
           <Button
-            asChild
+            type="button"
             variant="ghost"
+            onClick={() => nav(`${linkPrefix}/topic/${neighbors.prev!.slug}`)}
             className="min-w-0 justify-start bg-white/10 text-white/90 hover:bg-white/15"
           >
-            <Link to={`${linkPrefix}/topic/${neighbors.prev.slug}`} className="min-w-0">
               <ArrowLeft className="mr-2 h-4 w-4 shrink-0" />
               <span className="truncate">Previous lesson: {neighbors.prev.title}</span>
-            </Link>
           </Button>
         ) : (
           <div className="flex h-10 items-center rounded-xl px-3 text-sm text-muted-foreground">Start of course</div>
@@ -216,24 +355,52 @@ export default function TopicPage() {
 
         {neighbors.next ? (
           <Button
-            asChild
+            type="button"
             variant="ghost"
+            onClick={() => nav(`${linkPrefix}/topic/${neighbors.next!.slug}`)}
             className="min-w-0 justify-start bg-white/10 text-white/90 hover:bg-white/15 sm:justify-end"
           >
-            <Link to={`${linkPrefix}/topic/${neighbors.next.slug}`} className="min-w-0">
               <span className="truncate">Next lesson: {neighbors.next.title}</span>
               <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
-            </Link>
           </Button>
         ) : (
           <div className="flex h-10 items-center rounded-xl px-3 text-sm text-muted-foreground sm:justify-end">End of course</div>
         )}
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl">
+        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+          <SelectTrigger className="w-full sm:w-56" aria-label="Lesson language">
+            <SelectValue placeholder="Lesson language" />
+          </SelectTrigger>
+          <SelectContent>
+            {LESSON_LANGUAGES.map((language) => {
+              const ready = language.code === "en" || translations.some((translation) => translation.languageCode === language.code);
+              return (
+                <SelectItem key={language.code} value={language.code}>
+                  {language.label} · {language.nativeLabel}{ready ? "" : " · AI"}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        {selectedLanguage !== "en" && !activeTranslation && (
+          <div className="flex flex-1 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{languageByCode(selectedLanguage).label} version is not generated yet.</span>
+            {isAdmin && (
+              <Button variant="neon" size="sm" onClick={generateLanguageVersion} disabled={generatingLanguage}>
+                {generatingLanguage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                Generate version
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} dir={displayTopic.dir}>
         <div className="text-xs font-mono text-primary tracking-widest mb-2">UNIT {topic.unit} · LESSON {topic.order_index}</div>
-        <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl md:text-5xl">{topic.title}</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base md:text-lg">{topic.summary}</p>
+        <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl md:text-5xl">{displayTopic.title}</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base md:text-lg">{displayTopic.summary}</p>
       </motion.div>
 
       <div className="my-5 sm:my-8"><Visualization kind={topic.visualization} /></div>
@@ -291,7 +458,7 @@ export default function TopicPage() {
       )}
 
       {/* Render current page with karaoke offsets */}
-      <div style={{ fontSize: `${readerZoom}%` }}>
+      <div style={{ fontSize: `${readerZoom}%` }} dir={displayTopic.dir}>
         <motion.div
           key={pageIdx}
           initial={{ opacity: 0, x: pageTurnDirection === "next" ? 30 : -30, rotateY: pageTurnDirection === "next" ? -10 : 10 }}
@@ -336,11 +503,11 @@ export default function TopicPage() {
         </div>
       )}
 
-      {topic.quiz.length > 0 && pageIdx === pages.length - 1 && (
+      {displayTopic.quiz.length > 0 && pageIdx === pages.length - 1 && (
         <div className="mt-6 glass rounded-2xl p-6 flex items-center justify-between flex-wrap gap-4">
           <div>
             <div className="font-display font-bold text-xl flex items-center gap-2"><Brain className="h-5 w-5 text-primary" /> Test yourself</div>
-            <div className="text-sm text-muted-foreground">{topic.quiz.length} questions · pass with 70%+ {p?.passed && <span className="text-success">· Passed at {p.best_quiz_score}%</span>}</div>
+            <div className="text-sm text-muted-foreground">{displayTopic.quiz.length} questions · pass with 70%+ {p?.passed && <span className="text-success">· Passed at {p.best_quiz_score}%</span>}</div>
           </div>
           <div className="flex gap-2">
             {isAdmin && (

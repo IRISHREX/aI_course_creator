@@ -12,6 +12,7 @@ export interface Topic {
   title: string;
   summary: string;
   content: any[];
+  translations?: any[];
   mindmap?: any;
   visualization: string | null;
   quiz: QuizQ[];

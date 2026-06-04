@@ -13,10 +13,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, CheckSquare, Download, Edit3, FileJson, FileText, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CheckSquare, Download, Edit3, FileJson, FileText, Languages, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
+import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
 
 type BulkLessonInput = { unit: number; title: string; summary: string };
 type ExportOptions = {
@@ -91,6 +93,9 @@ export default function CourseEdit() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportDrawerOpen, setExportDrawerOpen] = useState(false);
+  const [translationLanguage, setTranslationLanguage] = useState("bn");
+  const [translatingCourse, setTranslatingCourse] = useState(false);
+  const [translationPrompt, setTranslationPrompt] = useState("");
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     includeImages: true,
     includeGraphs: true,
@@ -128,6 +133,9 @@ export default function CourseEdit() {
   const pct = topics.length ? Math.round((ready / topics.length) * 100) : 100;
   const selectedTopics = topics.filter((topic) => selectedIds.includes(topic.id));
   const allSelected = topics.length > 0 && selectedIds.length === topics.length;
+  const selectedLanguage = languageByCode(translationLanguage);
+  const translatedCount = topics.filter((topic) => normalizeTranslations((topic as any).translations).some((item) => item.languageCode === translationLanguage)).length;
+  const missingTranslationCount = Math.max(0, topics.length - translatedCount);
 
   const refreshTopics = async () => {
     const { data } = await backendApi.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
@@ -248,12 +256,13 @@ export default function CourseEdit() {
 
   const generateTopicBatch = async (items: typeof topics, successMessage: string) => {
     setBatchRunning(true);
+    let completed = 0;
     for (const t of items) {
       try {
         const { data, error } = await backendApi.functions.invoke("generate-lesson", { body: { topicId: t.id } });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
-        await refreshTopics();
+        completed += 1;
       } catch (e: any) {
         const message = e.message || "";
         if (message.includes("AI generation paused") || message.includes("API key") || message.includes("limit exceeded")) {
@@ -264,7 +273,12 @@ export default function CourseEdit() {
       }
     }
     setBatchRunning(false);
-    toast.success(successMessage);
+    if (completed) {
+      await refreshTopics();
+      toast.success(successMessage);
+    } else {
+      toast.info("No lessons were generated");
+    }
   };
 
   const generateAllRemaining = async (sourceTopics = topics) => {
@@ -274,6 +288,64 @@ export default function CourseEdit() {
   const generateSelected = async () => {
     if (!selectedTopics.length) return;
     await generateTopicBatch(selectedTopics, `Generated ${selectedTopics.length} selected lesson${selectedTopics.length === 1 ? "" : "s"}`);
+  };
+
+  const hasTranslation = (topic: typeof topics[number], languageCode = translationLanguage) =>
+    normalizeTranslations((topic as any).translations).some((item) => item.languageCode === languageCode);
+
+  const translateTopicBatch = async (items: typeof topics, successMessage: string) => {
+    if (translationLanguage === "en") {
+      toast.error("Choose a non-English language");
+      return;
+    }
+    if (!items.length) {
+      toast.info("No lessons selected for this language");
+      return;
+    }
+
+    setTranslatingCourse(true);
+    let completed = 0;
+    try {
+      for (const topic of items) {
+        try {
+          const { data, error } = await backendApi.functions.invoke("translate-lesson", {
+            body: {
+              topicId: topic.id,
+              languageCode: selectedLanguage.code,
+              languageName: selectedLanguage.label,
+              dir: selectedLanguage.dir || "ltr",
+              customInstruction: translationPrompt.trim() || undefined,
+            },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          completed += 1;
+        } catch (e: any) {
+          const message = e.message || "";
+          if (message.includes("AI generation paused") || message.includes("API key") || message.includes("limit exceeded")) {
+            toast.error(message);
+            break;
+          }
+          toast.error(`Language failed: ${topic.title}`);
+        }
+      }
+      if (completed) {
+        await refreshTopics();
+        toast.success(successMessage);
+      }
+      else toast.info("No language versions were generated");
+    } finally {
+      setTranslatingCourse(false);
+    }
+  };
+
+  const translateSelectedLessons = async () => {
+    await translateTopicBatch(selectedTopics, `Generated ${selectedLanguage.label} for ${selectedTopics.length} selected lesson${selectedTopics.length === 1 ? "" : "s"}`);
+  };
+
+  const translateMissingLessons = async () => {
+    const missing = topics.filter((topic) => !hasTranslation(topic));
+    await translateTopicBatch(missing, `Generated missing ${selectedLanguage.label} lesson versions`);
   };
 
   const editTopicMeta = async (topic: typeof topics[number]) => {
@@ -893,6 +965,63 @@ export default function CourseEdit() {
         </Button>
       </div>
 
+      {topics.length > 0 && (
+        <div className="glass rounded-2xl p-5 mb-6 border border-primary/20">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="font-display font-bold flex items-center gap-2">
+                <Languages className="h-4 w-4 text-primary" /> Course language generation
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {translatedCount} of {topics.length} lessons have {selectedLanguage.label} language · {missingTranslationCount} missing
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={translationLanguage} onValueChange={setTranslationLanguage}>
+                <SelectTrigger className="w-[190px]">
+                  <SelectValue placeholder="Language" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LESSON_LANGUAGES.filter((language) => language.code !== "en").map((language) => (
+                    <SelectItem key={language.code} value={language.code}>
+                      {language.label} - {language.nativeLabel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={translateMissingLessons}
+                disabled={!missingTranslationCount || translatingCourse || batchRunning || bulkBusy}
+              >
+                {translatingCourse ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Languages className="h-4 w-4 mr-1" />}
+                Generate missing
+              </Button>
+              <Button
+                variant="hero"
+                size="sm"
+                onClick={translateSelectedLessons}
+                disabled={!selectedTopics.length || translatingCourse || batchRunning || bulkBusy}
+              >
+                {translatingCourse ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                Generate selected
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3">
+            <Label className="text-xs">Optional language instruction</Label>
+            <Textarea
+              rows={2}
+              value={translationPrompt}
+              onChange={(e) => setTranslationPrompt(e.target.value)}
+              placeholder="Example: keep key technical terms in English with translated explanations"
+              className="mt-1 text-xs"
+            />
+          </div>
+        </div>
+      )}
+
       <div id="lesson-generation" className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
@@ -973,6 +1102,7 @@ export default function CourseEdit() {
               <th className="text-left p-3">Unit</th>
               <th className="text-left p-3">Title</th>
               <th className="text-left p-3">Status</th>
+              <th className="text-left p-3">Language</th>
               <th className="p-3"></th>
             </tr>
           </thead>
@@ -982,6 +1112,7 @@ export default function CourseEdit() {
               const isReady = status === "ready";
               const isGen = generating === t.id;
               const blockCount = Array.isArray((t as any).content) ? (t as any).content.length : 0;
+              const translated = hasTranslation(t);
               return (
                 <tr key={t.id} className="border-t border-border/50">
                   <td className="p-3">
@@ -997,6 +1128,13 @@ export default function CourseEdit() {
                       <span className="inline-flex items-center gap-1 text-xs text-primary"><CheckCircle2 className="h-3 w-3" /> Ready</span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">⏳ Pending</span>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    {translated ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-primary"><CheckCircle2 className="h-3 w-3" /> {selectedLanguage.label}</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Missing</span>
                     )}
                   </td>
                   <td className="p-3 text-right">

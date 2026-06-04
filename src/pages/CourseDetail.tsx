@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useTopics, useProgress } from "@/hooks/useTopics";
+import { useTopics, useProgress, type Topic } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown, Download, Trash2 } from "lucide-react";
 import { backendApi } from "@/integrations/api/client";
+import { BlockRenderer } from "@/components/BlockRenderer";
 import { Mindmap } from "@/components/Mindmap";
 import { toast } from "sonner";
 import { type ComponentProps, useEffect, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
 
 type MindmapData = ComponentProps<typeof Mindmap>["data"];
 type CourseWithMindmap = NonNullable<ReturnType<typeof useCourseBySlug>["course"]> & {
@@ -28,6 +30,10 @@ type ExportOptions = {
   includeGraphs: boolean;
   includeCode: boolean;
 };
+
+type CourseExportPage =
+  | { type: "overview" }
+  | { type: "topic"; topic: Topic; blocks: any[]; part: number; totalParts: number };
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -157,41 +163,271 @@ export default function CourseDetail() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const shouldIncludeExportBlock = (block: any) => {
+    if (!block?.type) return false;
+    if (!exportOptions.includeImages && block.type === "image") return false;
+    if (!exportOptions.includeGraphs && (block.type === "chart" || block.type === "flowchart")) return false;
+    if (!exportOptions.includeCode && block.type === "code") return false;
+    return true;
+  };
+
+  const buildCourseExportPages = (): CourseExportPage[] => {
+    const pages: CourseExportPage[] = [{ type: "overview" }];
+    topics
+      .slice()
+      .sort((a, b) => Number(a.unit) - Number(b.unit) || Number(a.order_index) - Number(b.order_index))
+      .forEach((topic) => {
+        const blocks = (topic.content || []).filter(shouldIncludeExportBlock);
+        const chunks: any[][] = [];
+        for (let i = 0; i < Math.max(blocks.length, 1); i += 4) {
+          chunks.push(blocks.slice(i, i + 4));
+        }
+        chunks.forEach((chunk, index) => {
+          pages.push({ type: "topic", topic, blocks: chunk, part: index + 1, totalParts: chunks.length });
+        });
+      });
+    return pages;
+  };
+
+  const renderCourseExportPage = (pageInfo: CourseExportPage, pageNumber: number, totalPages: number) => (
+    <div
+      className="bg-white p-8 text-slate-950"
+      style={{ width: 1040, minHeight: 1360, fontFamily: "Inter, Arial, sans-serif" }}
+      data-course-export-page="true"
+    >
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-7 py-6 shadow-sm">
+        <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-blue-600">{course.title}</div>
+        {pageInfo.type === "overview" ? (
+          <>
+            <div className="mt-3 text-[36px] font-bold leading-tight text-slate-950">Course Material</div>
+            <div className="mt-3 max-w-4xl text-[16px] leading-7 text-slate-600">{course.description}</div>
+          </>
+        ) : (
+          <>
+            <div className="mt-3 text-[30px] font-bold leading-tight text-slate-950">
+              {pageInfo.topic.unit}.{pageInfo.topic.order_index} {pageInfo.topic.title}
+            </div>
+            <div className="mt-3 max-w-4xl text-[15px] leading-7 text-slate-600">
+              {pageInfo.topic.summary}
+              {pageInfo.totalParts > 1 ? ` Part ${pageInfo.part} of ${pageInfo.totalParts}.` : ""}
+            </div>
+          </>
+        )}
+      </div>
+
+      {pageInfo.type === "overview" ? (
+        <div className="grid gap-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 text-[18px] font-bold text-slate-900">Table of content</div>
+            <div className="grid gap-2">
+              {topics.map((topic) => (
+                <div key={topic.id} className="grid grid-cols-[70px_minmax(0,1fr)] gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-[14px]">
+                  <span className="font-mono text-blue-600">{topic.unit}.{topic.order_index}</span>
+                  <span className="font-semibold text-slate-800">{topic.title}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-5 text-[15px] leading-7">
+          {pageInfo.blocks.length ? pageInfo.blocks.map((block, index) => (
+            <div key={`${pageInfo.topic.id}-${pageInfo.part}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <BlockRenderer block={block} />
+            </div>
+          )) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
+              No lesson blocks match the selected export options.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-4 text-[12px] text-slate-400">
+        <span>{course.title}</span>
+        <span>Page {pageNumber} of {totalPages}</span>
+      </div>
+    </div>
+  );
+
   const exportCourse = async (format: ExportFormat) => {
     setExporting(format);
+    let root: Root | null = null;
+    let host: HTMLDivElement | null = null;
     try {
-      const { data, error } = await backendApi.functions.invoke("export-course", {
-        body: { courseId: course.id, options: exportOptions },
-      });
-      if (error) throw error;
-      const baseName = data?.filename || course.slug || "course";
-      const docExtension = data?.docExtension || "doc";
-      const docMime = data?.docMime || "application/msword";
-      if (format === "docs") {
-        if (!data?.docx) throw new Error("Google Docs export was not returned");
-        downloadBase64(data.docx, docMime, `${baseName}.${docExtension}`);
-        toast.success("Downloaded Google Docs file");
+      const [{ default: html2canvas }, pdfLib] = await Promise.all([import("html2canvas"), import("pdf-lib")]);
+      const pages = buildCourseExportPages();
+      const imageSources: string[] = [];
+      const pdf = format === "pdf" ? await pdfLib.PDFDocument.create() : null;
+      const baseName = course.slug || course.title || "course";
+
+      host = document.createElement("div");
+      host.dataset.theme = "light";
+      host.style.position = "fixed";
+      host.style.left = "-10000px";
+      host.style.top = "0";
+      host.style.width = "1040px";
+      host.style.background = "#ffffff";
+      host.style.zIndex = "-1";
+      document.body.appendChild(host);
+
+      for (const [index, pageInfo] of pages.entries()) {
+        root?.unmount();
+        root = createRoot(host);
+        root.render(renderCourseExportPage(pageInfo, index + 1, pages.length));
+        await new Promise((resolve) => window.setTimeout(resolve, 900));
+        const target = host.querySelector("[data-course-export-page='true']") as HTMLElement | null;
+        if (!target) throw new Error("Course export render target was not found");
+        target.querySelectorAll<HTMLElement>("[style]").forEach((element) => {
+          if (element.style.opacity === "0") element.style.opacity = "1";
+          if (element.style.transform) element.style.transform = "none";
+        });
+        const canvas = await html2canvas(target, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          windowWidth: 1040,
+          windowHeight: Math.max(1360, target.scrollHeight),
+        });
+        const imageSource = canvas.toDataURL("image/png");
+        imageSources.push(imageSource);
+
+        if (pdf) {
+          const png = await pdf.embedPng(imageSource);
+          const pdfPage = pdf.addPage([595, 842]);
+          const margin = 18;
+          const scale = Math.min((pdfPage.getWidth() - margin * 2) / png.width, (pdfPage.getHeight() - margin * 2) / png.height);
+          const imageWidth = png.width * scale;
+          const imageHeight = png.height * scale;
+          pdfPage.drawImage(png, {
+            x: (pdfPage.getWidth() - imageWidth) / 2,
+            y: (pdfPage.getHeight() - imageHeight) / 2,
+            width: imageWidth,
+            height: imageHeight,
+          });
+        }
+      }
+
+      if (pdf) {
+        const pdfBase64 = await pdf.saveAsBase64();
+        downloadBase64(pdfBase64, "application/pdf", `${baseName}.pdf`);
+        toast.success(`Downloaded ${pages.length} visual PDF page${pages.length === 1 ? "" : "s"}`);
       } else {
-        if (!data?.pdf) throw new Error("PDF export was not returned");
-        downloadBase64(data.pdf, "application/pdf", `${baseName}.pdf`);
-        toast.success("Downloaded PDF");
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>${course.title}</title><style>@page{size:A4;margin:.35in}body{margin:0;font-family:Arial,sans-serif;background:#fff}.page{page-break-after:always;margin:0 0 18px}.page:last-child{page-break-after:auto}img{display:block;width:100%;height:auto}</style></head><body>${imageSources.map((src) => `<div class="page"><img src="${src}" alt="Course material page"></div>`).join("")}</body></html>`;
+        downloadBlob(new Blob([html], { type: "application/msword;charset=utf-8" }), `${baseName}.doc`);
+        toast.success(`Downloaded ${pages.length} visual Google Docs page${pages.length === 1 ? "" : "s"}`);
       }
     } catch (e: unknown) {
       toast.error(errorMessage(e, "Download failed"));
-    } finally { setExporting(null); }
+    } finally {
+      root?.unmount();
+      host?.remove();
+      setExporting(null);
+    }
   };
 
   const exportCourseMindmaps = async (options?: { topicIds?: string[]; includeCourse?: boolean }) => {
     const selectedOnly = Boolean(options?.topicIds?.length);
     setExporting(selectedOnly ? "selectedMindmaps" : "mindmaps");
     try {
-      const { data, error } = await backendApi.functions.invoke("export-course-mindmaps", {
-        body: { courseId: course.id, ...options },
-      });
-      if (error) throw error;
-      if (!data?.pdf) throw new Error("Mind map PDF export was not returned");
-      downloadBase64(data.pdf, "application/pdf", `${data.filename || `${course.slug}-mindmaps`}.pdf`);
-      const count = Number(data.count || 0);
+      const topicIdSet = options?.topicIds?.length ? new Set(options.topicIds) : null;
+      const pages = [
+        ...(options?.includeCourse === false || !mindmap ? [] : [{
+          title: `${course.title} - Overall Mind Map`,
+          subtitle: "Overall course mind map",
+          data: mindmap,
+        }]),
+        ...topics
+          .filter((topic) => topic.mindmap && (!topicIdSet || topicIdSet.has(topic.id)))
+          .sort((a, b) => Number(a.unit) - Number(b.unit) || Number(a.order_index) - Number(b.order_index))
+          .map((topic) => ({
+            title: `${topic.unit}.${topic.order_index} ${topic.title}`,
+            subtitle: `${course.title} lesson mind map`,
+            data: topic.mindmap as MindmapData,
+          })),
+      ];
+      if (!pages.length) throw new Error("No generated mind maps were found");
+
+      const [{ default: html2canvas }, pdfLib] = await Promise.all([import("html2canvas"), import("pdf-lib")]);
+      const pdf = await pdfLib.PDFDocument.create();
+      const pageSize: [number, number] = [842, 595];
+      const host = document.createElement("div");
+      host.style.position = "fixed";
+      host.style.left = "-10000px";
+      host.style.top = "0";
+      host.style.width = "1120px";
+      host.style.background = "#f8fafc";
+      host.style.zIndex = "-1";
+      document.body.appendChild(host);
+      let root: Root | null = null;
+
+      try {
+        for (const [index, pageInfo] of pages.entries()) {
+          root?.unmount();
+          root = createRoot(host);
+          root.render(
+            <div
+              className="bg-slate-50 p-6 text-slate-950"
+              style={{ width: 1120, minHeight: 820, fontFamily: "Inter, Arial, sans-serif" }}
+              data-mindmap-export-page="true"
+            >
+              <div className="mb-4 rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                <div className="text-[28px] font-bold leading-tight text-slate-950">{pageInfo.title}</div>
+                <div className="mt-2 text-[13px] text-slate-500">{pageInfo.subtitle}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <Mindmap data={pageInfo.data} exportMode />
+              </div>
+              <div className="mt-3 text-right text-[11px] text-slate-400">Page {index + 1}</div>
+            </div>,
+          );
+          await new Promise((resolve) => window.setTimeout(resolve, 450));
+          const target = host.querySelector("[data-mindmap-export-page='true']") as HTMLElement | null;
+          if (!target) throw new Error("Mind map render target was not found");
+          const canvas = await html2canvas(target, {
+            backgroundColor: "#f8fafc",
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            windowWidth: 1120,
+            windowHeight: Math.max(820, target.scrollHeight),
+          });
+          const png = await pdf.embedPng(canvas.toDataURL("image/png"));
+          const pdfPage = pdf.addPage(pageSize);
+          const pageWidth = pdfPage.getWidth();
+          const pageHeight = pdfPage.getHeight();
+          const margin = 18;
+          const scale = Math.min((pageWidth - margin * 2) / png.width, (pageHeight - margin * 2) / png.height);
+          const imageWidth = png.width * scale;
+          const imageHeight = png.height * scale;
+          pdfPage.drawImage(png, {
+            x: (pageWidth - imageWidth) / 2,
+            y: (pageHeight - imageHeight) / 2,
+            width: imageWidth,
+            height: imageHeight,
+          });
+        }
+      } finally {
+        root?.unmount();
+        host.remove();
+      }
+
+      const pdfBase64 = await pdf.saveAsBase64();
+      const filename = `${course.slug || course.title || "course"}-${selectedOnly ? "selected-mindmaps" : "mindmaps"}.pdf`;
+      downloadBase64(pdfBase64, "application/pdf", filename);
+      const count = pages.length;
       toast.success(count > 0 ? `Downloaded ${count} mind map page${count === 1 ? "" : "s"}` : "Downloaded mind map PDF");
     } catch (e: unknown) {
       toast.error(errorMessage(e, "Mind map download failed"));

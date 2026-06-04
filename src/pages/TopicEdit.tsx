@@ -8,11 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlockEditor, type Block } from "@/components/BlockEditor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
+import { ArrowLeft, FileText, History, Languages, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Trash2, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
+import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
 
 type TransformAction = "simplify" | "expand" | "bullets" | "analogy" | "bigger" | "smaller" | "level";
 
@@ -29,6 +31,8 @@ export default function TopicEdit() {
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(5);
   const [customInstruction, setCustomInstruction] = useState("");
+  const [translationLanguage, setTranslationLanguage] = useState("bn");
+  const [translationInstruction, setTranslationInstruction] = useState("");
   const [versions, setVersions] = useState<any[]>([]);
   const [vLoading, setVLoading] = useState(false);
 
@@ -153,6 +157,46 @@ export default function TopicEdit() {
     } finally { setAiBusy(null); }
   };
 
+  const generateTranslation = async () => {
+    if (!topic || translationLanguage === "en") return;
+    const language = languageByCode(translationLanguage);
+    setAiBusy(`translate-${language.code}`);
+    try {
+      const { data, error } = await backendApi.functions.invoke("translate-lesson", {
+        body: {
+          topicId: topic.id,
+          languageCode: language.code,
+          languageName: language.label,
+          dir: language.dir || "ltr",
+          customInstruction: translationInstruction.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setTopic({ ...topic, translations: data.translations || [] } as any);
+      setTranslationInstruction("");
+      toast.success(`${language.label} version generated`);
+    } catch (e: any) {
+      toast.error(e.message || "Translation failed");
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const deleteTranslation = async (languageCode: string) => {
+    if (!topic) return;
+    const language = languageByCode(languageCode);
+    if (!confirm(`Delete ${language.label} version?`)) return;
+    const translations = normalizeTranslations((topic as any).translations).filter((item) => item.languageCode !== languageCode);
+    const { error } = await backendApi.from("topics").update({ translations } as any).eq("id", topic.id);
+    if (error) {
+      toast.error(error.message || "Delete failed");
+      return;
+    }
+    setTopic({ ...topic, translations } as any);
+    toast.success(`${language.label} version deleted`);
+  };
+
   const ToolBtn = ({ id, icon: Icon, label }: { id: TransformAction; icon: any; label: string }) => (
     <Button variant="neon" size="sm" disabled={!!aiBusy} onClick={() => transform(id)}>
       {aiBusy === id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
@@ -249,6 +293,52 @@ export default function TopicEdit() {
             <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh}>
               {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
             </Button>
+          </div>
+        </div>
+
+        <div className="glass rounded-2xl p-5 border border-primary/20">
+          <div className="flex items-center gap-2 mb-3">
+            <Languages className="h-5 w-5 text-primary" />
+            <div className="font-display font-bold text-lg">Multi-language versions</div>
+            <span className="text-xs text-muted-foreground ml-auto">Stored separately from the original lesson</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[220px_1fr_auto] sm:items-end">
+            <div>
+              <Label className="text-xs">Target language</Label>
+              <Select value={translationLanguage} onValueChange={setTranslationLanguage}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Language" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LESSON_LANGUAGES.filter((language) => language.code !== "en").map((language) => (
+                    <SelectItem key={language.code} value={language.code}>{language.label} · {language.nativeLabel}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Translation prompt override (optional)</Label>
+              <Input
+                className="mt-1"
+                value={translationInstruction}
+                onChange={e => setTranslationInstruction(e.target.value)}
+                placeholder="e.g. Keep technical terms in English with translated explanation"
+              />
+            </div>
+            <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateTranslation}>
+              {aiBusy?.startsWith("translate-") ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+              Generate version
+            </Button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {normalizeTranslations((topic as any).translations).length ? normalizeTranslations((topic as any).translations).map((translation) => (
+              <div key={translation.languageCode} className="flex items-center gap-2 rounded-full border border-border/70 bg-background/40 px-3 py-1 text-xs">
+                <span>{translation.languageName}</span>
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteTranslation(translation.languageCode)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )) : <div className="text-xs text-muted-foreground">No translated versions yet.</div>}
           </div>
         </div>
 

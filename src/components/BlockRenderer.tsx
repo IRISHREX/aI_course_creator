@@ -289,9 +289,11 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
 
   if (b.type === "flowchart") {
     return (
-      <div className="glass rounded-2xl p-4">
+      <div className="glass mx-auto max-w-3xl rounded-xl p-3 sm:p-4">
         {b.title && <div className="font-display font-bold mb-2">{b.title}</div>}
-        <MermaidDiagram code={b.code || "graph TD\nA-->B"} />
+        <div className="max-h-[360px] overflow-auto">
+          <MermaidDiagram code={b.code || "graph TD\nA-->B"} />
+        </div>
       </div>
     );
   }
@@ -300,9 +302,9 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
     const data = b.data || [];
     const variant = b.variant || "bar";
     return (
-      <div className="glass rounded-2xl p-4">
+      <div className="glass mx-auto max-w-3xl rounded-xl p-3 sm:p-4">
         {b.title && <div className="font-display font-bold mb-3">{b.title}</div>}
-        <div className="h-72">
+        <div className="h-48 sm:h-56">
           <ResponsiveContainer width="100%" height="100%">
             {variant === "line" ? (
               <LineChart data={data}>
@@ -345,7 +347,7 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
 
   if (b.type === "math") {
     return (
-      <figure className="glass rounded-2xl p-5 overflow-x-auto">
+      <figure className="glass mx-auto max-w-2xl rounded-xl p-4 overflow-x-auto text-sm sm:text-base">
         {b.display === false
           ? <InlineMath math={b.value || ""} />
           : <BlockMath math={b.value || ""} />}

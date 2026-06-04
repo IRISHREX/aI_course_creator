@@ -516,6 +516,25 @@ function normalizeLessonContent(content: unknown) {
   return blocks.slice(0, 15);
 }
 
+const EXPLAINED_BLOCK_TYPES = new Set(["flowchart", "chart", "math", "code"]);
+
+function ensureExplanatoryHighlights(blocks: any[]) {
+  const result: any[] = [];
+  blocks.forEach((block, index) => {
+    result.push(block);
+    if (!block || !EXPLAINED_BLOCK_TYPES.has(block.type)) return;
+    const next = blocks[index + 1];
+    if (next?.type === "highlight") return;
+    const label = block.type === "flowchart" ? "diagram" : block.type === "chart" ? "graph" : block.type;
+    const title = cleanString(block.title || block.caption);
+    result.push({
+      type: "highlight",
+      value: `This ${label}${title ? ` (${title})` : ""} shows the key relationship to remember; connect it back to the lesson concept before moving on.`,
+    });
+  });
+  return result.slice(0, 18);
+}
+
 function normalizeQuiz(quiz: unknown) {
   if (!Array.isArray(quiz)) return [];
   return quiz
@@ -530,13 +549,14 @@ function normalizeQuiz(quiz: unknown) {
     .slice(0, 10);
 }
 
-type MindmapNode = { id: string; label: string; children?: MindmapNode[] };
+type MindmapNode = { id: string; label: string; info?: string; children?: MindmapNode[] };
 
 function normalizeMindmapNode(value: unknown, fallbackLabel = "Mind Map", depth = 0): MindmapNode | null {
   if (!value || typeof value !== "object" || depth > 6) return null;
-  const raw = value as { id?: unknown; label?: unknown; title?: unknown; name?: unknown; children?: unknown };
+  const raw = value as { id?: unknown; label?: unknown; title?: unknown; name?: unknown; info?: unknown; detail?: unknown; description?: unknown; summary?: unknown; children?: unknown };
   const label = cleanString(raw.label ?? raw.title ?? raw.name).replace(/\s+/g, " ").slice(0, 90);
   if (!label) return null;
+  const info = cleanString(raw.info ?? raw.detail ?? raw.description ?? raw.summary).replace(/\s+/g, " ").slice(0, 140);
   const children = Array.isArray(raw.children)
     ? raw.children
         .map((child, index) => normalizeMindmapNode(child, `${label}-${index}`, depth + 1))
@@ -546,6 +566,7 @@ function normalizeMindmapNode(value: unknown, fallbackLabel = "Mind Map", depth 
   return {
     id: cleanString(raw.id).replace(/\s+/g, "-").slice(0, 80) || slugify(`${fallbackLabel}-${label}`),
     label,
+    ...(info ? { info } : {}),
     ...(children.length ? { children } : {}),
   };
 }
@@ -866,6 +887,8 @@ async function buildLocalMindmapPdf(course: any, topics: any[], options: { inclu
     ink: pdfLib.rgb(0.08, 0.09, 0.13),
     muted: pdfLib.rgb(0.38, 0.42, 0.5),
     pageFill: pdfLib.rgb(0.97, 0.98, 1),
+    panelFill: pdfLib.rgb(0.985, 0.99, 1),
+    lineSoft: pdfLib.rgb(0.74, 0.8, 0.9),
     rootFill: pdfLib.rgb(0.11, 0.15, 0.28),
     rootText: pdfLib.rgb(1, 1, 1),
   };
@@ -891,8 +914,9 @@ async function buildLocalMindmapPdf(course: any, topics: any[], options: { inclu
     const width = page.getWidth();
     const height = page.getHeight();
     page.drawRectangle({ x: 0, y: 0, width, height, color: colors.pageFill });
-    page.drawRectangle({ x: 0, y: height - 78, width, height: 78, color: pdfLib.rgb(0.93, 0.96, 1) });
-    page.drawText(toPdfSafeText(title).slice(0, 95), { x: 36, y: height - 42, size: 18, font: bold, color: colors.ink });
+    page.drawRectangle({ x: 0, y: height - 82, width, height: 82, color: pdfLib.rgb(0.91, 0.95, 1) });
+    page.drawRectangle({ x: 0, y: height - 84, width, height: 2, color: pdfLib.rgb(0.62, 0.72, 0.9) });
+    page.drawText(toPdfSafeText(title).slice(0, 95), { x: 36, y: height - 42, size: 17, font: bold, color: colors.ink });
     if (subtitle) page.drawText(toPdfSafeText(subtitle).slice(0, 130), { x: 36, y: height - 62, size: 9, font, color: colors.muted });
     page.drawText(`Page ${pageNumber}`, { x: width - 72, y: 24, size: 8, font, color: colors.muted });
 
@@ -902,62 +926,202 @@ async function buildLocalMindmapPdf(course: any, topics: any[], options: { inclu
       return;
     }
 
-    const maxDepth = Math.max(1, ...nodes.map((item) => item.depth));
-    const rowsByDepth = new Map<number, number>();
-    nodes.forEach((item) => rowsByDepth.set(item.depth, (rowsByDepth.get(item.depth) || 0) + 1));
-    const seenByDepth = new Map<number, number>();
-    const positions = nodes.map((item) => {
-      const row = seenByDepth.get(item.depth) || 0;
-      seenByDepth.set(item.depth, row + 1);
-      const columnWidth = (width - 96) / (maxDepth + 1);
-      const count = rowsByDepth.get(item.depth) || 1;
-      const usableHeight = height - 130;
-      return {
-        x: 48 + item.depth * columnWidth,
-        y: height - 100 - ((row + 0.5) * usableHeight) / count,
-        width: Math.min(150, columnWidth - 22),
-        height: item.depth === 0 ? 42 : 34,
-      };
+    const center = { x: width / 2, y: (height - 78) / 2 + 28 };
+    const contentBounds = { left: 28, right: width - 28, bottom: 46, top: height - 102 };
+    page.drawRectangle({
+      x: contentBounds.left,
+      y: contentBounds.bottom + 10,
+      width: contentBounds.right - contentBounds.left,
+      height: contentBounds.top - contentBounds.bottom - 10,
+      color: colors.panelFill,
+      borderColor: pdfLib.rgb(0.86, 0.9, 0.96),
+      borderWidth: 0.8,
+    });
+    for (let dot = 0; dot < 34; dot += 1) {
+      const x = contentBounds.left + 22 + ((dot * 73) % Math.floor(contentBounds.right - contentBounds.left - 44));
+      const y = contentBounds.bottom + 34 + ((dot * 47) % Math.floor(contentBounds.top - contentBounds.bottom - 76));
+      page.drawCircle({ x, y, size: 1.15, color: pdfLib.rgb(0.82, 0.87, 0.95), opacity: 0.6 });
+    }
+    const childrenByParent = new Map<number, number[]>();
+    nodes.forEach((item, index) => {
+      if (item.parentIndex === null) return;
+      childrenByParent.set(item.parentIndex, [...(childrenByParent.get(item.parentIndex) || []), index]);
+    });
+    const positions: Array<{ x: number; y: number; width: number; height: number; angle: number } | null> = nodes.map(() => null);
+    const clampPosition = (position: { x: number; y: number; width: number; height: number; angle: number }) => ({
+      ...position,
+      x: Math.min(Math.max(position.x, contentBounds.left + position.width / 2), contentBounds.right - position.width / 2),
+      y: Math.min(Math.max(position.y, contentBounds.bottom + position.height / 2), contentBounds.top - position.height / 2),
+    });
+    const polar = (angle: number, rx: number, ry: number, wave = 0) => clampPosition({
+      x: center.x + Math.cos(angle) * rx + Math.sin(angle * 3) * wave,
+      y: center.y + Math.sin(angle) * ry + Math.cos(angle * 2) * wave,
+      width: 112,
+      height: 54,
+      angle,
+    });
+    positions[0] = { x: center.x, y: center.y, width: 158, height: 54, angle: -Math.PI / 2 };
+
+    const visibleIndexes = new Set<number>([0]);
+    const rootChildren = (childrenByParent.get(0) || []).slice(0, 8);
+    rootChildren.forEach((childIndex, index) => {
+      const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(rootChildren.length, 1);
+      positions[childIndex] = { ...polar(angle, 286, 174, 10), width: 120, height: 48 };
+      visibleIndexes.add(childIndex);
+
+      const childIndexes = (childrenByParent.get(childIndex) || []).slice(0, rootChildren.length > 6 ? 1 : 2);
+      const tangent = angle + Math.PI / 2;
+      childIndexes.forEach((grandChildIndex, siblingIndex) => {
+        const offset = childIndexes.length === 1 ? 0 : siblingIndex === 0 ? -36 : 36;
+        const radial = polar(angle, 360, 224, 5);
+        const position = clampPosition({
+          x: radial.x + Math.cos(tangent) * offset,
+          y: radial.y + Math.sin(tangent) * offset,
+          width: 104,
+          height: 50,
+          angle,
+        });
+        positions[grandChildIndex] = position;
+        visibleIndexes.add(grandChildIndex);
+      });
+    });
+
+    for (let pass = 0; pass < 28; pass += 1) {
+      const visible = Array.from(visibleIndexes).filter((index) => index !== 0);
+      let moved = false;
+      for (let a = 0; a < visible.length; a += 1) {
+        for (let b = a + 1; b < visible.length; b += 1) {
+          const leftIndex = visible[a];
+          const rightIndex = visible[b];
+          const left = positions[leftIndex];
+          const right = positions[rightIndex];
+          if (!left || !right) continue;
+          const overlapX = (left.width + right.width) / 2 + 8 - Math.abs(left.x - right.x);
+          const overlapY = (left.height + right.height) / 2 + 8 - Math.abs(left.y - right.y);
+          if (overlapX <= 0 || overlapY <= 0) continue;
+          const pushX = overlapX < overlapY;
+          const direction = pushX ? (left.x <= right.x ? -1 : 1) : (left.y <= right.y ? -1 : 1);
+          const delta = (pushX ? overlapX : overlapY) / 2 + 1;
+          if (pushX) {
+            positions[leftIndex] = clampPosition({ ...left, x: left.x + direction * delta });
+            positions[rightIndex] = clampPosition({ ...right, x: right.x - direction * delta });
+          } else {
+            positions[leftIndex] = clampPosition({ ...left, y: left.y + direction * delta });
+            positions[rightIndex] = clampPosition({ ...right, y: right.y - direction * delta });
+          }
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+
+    [62, 122, 194].forEach((radius) => {
+      page.drawEllipse({
+        x: center.x,
+        y: center.y,
+        xScale: radius * 1.45,
+        yScale: radius,
+        borderColor: colors.lineSoft,
+        borderOpacity: 0.45,
+        borderWidth: 0.7,
+      });
     });
 
     nodes.forEach((item, index) => {
       if (item.parentIndex === null) return;
+      if (!visibleIndexes.has(index) || !visibleIndexes.has(item.parentIndex)) return;
       const parent = positions[item.parentIndex];
       const child = positions[index];
+      if (!parent || !child) return;
       const branchColor = palette[item.branchIndex % palette.length];
       page.drawLine({
-        start: { x: parent.x + parent.width, y: parent.y },
+        start: { x: parent.x, y: parent.y },
         end: { x: child.x, y: child.y },
-        thickness: item.depth === 1 ? 2.2 : 1.25,
+        thickness: item.depth === 1 ? 2.35 : 1.25,
         color: branchColor.stroke,
+        opacity: item.depth === 1 ? 0.78 : 0.52,
       });
+      page.drawCircle({ x: child.x, y: child.y, size: item.depth === 1 ? 4.2 : 2.8, color: branchColor.stroke, opacity: 0.85 });
     });
 
     nodes.forEach((item, index) => {
+      if (!visibleIndexes.has(index)) return;
       const position = positions[index];
+      if (!position) return;
       const isRoot = item.depth === 0;
       const branchColor = palette[item.branchIndex % palette.length];
       const isPrimaryBranch = item.depth === 1;
-      page.drawRectangle({
-        x: position.x,
-        y: position.y - position.height / 2,
-        width: position.width,
-        height: position.height,
-        borderWidth: isRoot || isPrimaryBranch ? 1.8 : 1.1,
-        borderColor: isRoot ? colors.rootFill : branchColor.stroke,
-        color: isRoot ? colors.rootFill : isPrimaryBranch ? branchColor.dark : branchColor.fill,
-      });
+      const nodeX = position.x - position.width / 2;
+      const nodeY = position.y - position.height / 2;
+      if (isRoot) {
+        page.drawEllipse({ x: position.x + 2, y: position.y - 3, xScale: position.width / 2 + 4, yScale: position.height / 2 + 3, color: pdfLib.rgb(0.62, 0.68, 0.82), opacity: 0.2 });
+        page.drawEllipse({ x: position.x, y: position.y, xScale: position.width / 2, yScale: position.height / 2, color: colors.rootFill, borderColor: pdfLib.rgb(0.35, 0.52, 0.9), borderWidth: 1.4 });
+      } else {
+        page.drawRectangle({
+          x: nodeX + 2.5,
+          y: nodeY - 2.5,
+          width: position.width,
+          height: position.height,
+          color: pdfLib.rgb(0.58, 0.63, 0.75),
+          opacity: 0.16,
+        });
+        page.drawRectangle({
+          x: nodeX,
+          y: nodeY,
+          width: position.width,
+          height: position.height,
+          borderWidth: isPrimaryBranch ? 1.55 : 1,
+          borderColor: branchColor.stroke,
+          color: isPrimaryBranch ? branchColor.dark : pdfLib.rgb(1, 1, 1),
+        });
+        page.drawRectangle({
+          x: nodeX,
+          y: nodeY + position.height - 7,
+          width: position.width,
+          height: 7,
+          color: branchColor.stroke,
+          opacity: isPrimaryBranch ? 0.95 : 0.74,
+        });
+        if (isPrimaryBranch) {
+          page.drawCircle({ x: nodeX + 12, y: nodeY + position.height - 18, size: 8, color: branchColor.stroke });
+          page.drawText(String(item.branchIndex + 1), { x: nodeX + 9.5, y: nodeY + position.height - 21, size: 7.2, font: bold, color: colors.rootText });
+        }
+      }
       drawLabel(
         page,
         toPdfSafeText(item.node.label || item.node.id || "Untitled"),
-        position.x + 8,
-        position.y + (isRoot ? 10 : 8),
-        position.width - 16,
-        isRoot ? 10 : isPrimaryBranch ? 8.5 : 8,
+        nodeX + (isPrimaryBranch ? 24 : 8),
+        position.y + (isRoot ? 10 : 17),
+        position.width - (isPrimaryBranch ? 32 : 16),
+        isRoot ? 10 : isPrimaryBranch ? 8 : 7.6,
         isRoot || isPrimaryBranch ? bold : font,
         isRoot || isPrimaryBranch ? colors.rootText : branchColor.text,
       );
+      const info = toPdfSafeText(item.node.info || item.node.detail || item.node.description || item.node.summary || "");
+      if (info) {
+        drawLabel(
+          page,
+          info,
+          nodeX + 8,
+          position.y + (isRoot ? -8 : -1),
+          position.width - 16,
+          isRoot ? 6.4 : 6.2,
+          font,
+          isRoot ? colors.rootText : isPrimaryBranch ? pdfLib.rgb(0.94, 0.96, 1) : branchColor.text,
+        );
+      }
     });
+
+    const hiddenCount = nodes.length - visibleIndexes.size;
+    if (hiddenCount > 0) {
+      page.drawText(toPdfSafeText(`+ ${hiddenCount} more detailed point${hiddenCount === 1 ? "" : "s"} kept in the mind map data`), {
+        x: 36,
+        y: 28,
+        size: 8,
+        font,
+        color: colors.muted,
+      });
+    }
   };
 
   let pageNumber = 1;
@@ -1147,6 +1311,64 @@ function fallbackOutlineFromSource(title: string, sourceText: string, summaries:
   };
 }
 
+function sourceKeywords(...values: string[]) {
+  const stop = new Set(["about", "after", "before", "course", "lesson", "summary", "their", "there", "these", "those", "through", "using", "what", "when", "where", "which", "with"]);
+  return Array.from(new Set(values
+    .join(" ")
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9-]{2,}/g) || []))
+    .filter((word) => !stop.has(word))
+    .slice(0, 32);
+}
+
+function splitSourcePassages(sourceText: string) {
+  return sourceText
+    .split(/\n{2,}|(?=\[Page\s+\d+\])/i)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter((part) => part.length >= 80)
+    .slice(0, 900);
+}
+
+function buildLessonSourceContext(sourceText: string, title: string, summary: string, maxChars = 6500) {
+  const keywords = sourceKeywords(title, summary);
+  if (!sourceText.trim() || !keywords.length) return "";
+  const passages = splitSourcePassages(sourceText);
+  const scored = passages
+    .map((passage, index) => {
+      const lower = passage.toLowerCase();
+      const score = keywords.reduce((sum, word) => sum + (lower.includes(word) ? 1 : 0), 0);
+      return { passage, index, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  const selected = (scored.length ? scored : passages.map((passage, index) => ({ passage, index, score: 0 }))).slice(0, 8);
+  let context = "";
+  for (const item of selected) {
+    const next = `Source excerpt ${item.index + 1}: ${item.passage.slice(0, 1100)}`;
+    if (context.length + next.length > maxChars) break;
+    context += `${next}\n\n`;
+  }
+  return context.trim();
+}
+
+function buildLessonFlow(topic: any, topics: any[]) {
+  const sorted = [...topics].sort((a: any, b: any) => Number(a.unit) - Number(b.unit) || Number(a.order_index) - Number(b.order_index));
+  const index = sorted.findIndex((item: any) => item.id === topic.id);
+  const previous = index > 0 ? sorted[index - 1] : null;
+  const next = index >= 0 && index < sorted.length - 1 ? sorted[index + 1] : null;
+  const unitPeers = sorted
+    .filter((item: any) => Number(item.unit) === Number(topic.unit))
+    .map((item: any) => `${item.order_index}. ${item.title}${item.summary ? ` - ${item.summary}` : ""}`)
+    .join("\n");
+  return [
+    previous ? `Previous lesson: ${previous.title} - ${previous.summary || "No summary"}` : "Previous lesson: none",
+    `Current lesson: ${topic.title} - ${topic.summary || "No summary"}`,
+    next ? `Next lesson: ${next.title} - ${next.summary || "No summary"}` : "Next lesson: none",
+    unitPeers ? `Unit lesson sequence:\n${unitPeers}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 async function buildCourseOutlineFromSource(title: string, sourceText: string) {
   const chunks = chunkText(sourceText);
   const summaries: string[] = [];
@@ -1154,12 +1376,16 @@ async function buildCourseOutlineFromSource(title: string, sourceText: string) {
   for (let index = 0; index < chunks.length; index++) {
     try {
       const result = await aiJson(
-        "Return only valid JSON: {\"summary\":\"\",\"topics\":[\"\"]}. Scan this source chunk and list every important topic, subtopic, term, process, formula, and example. Do not create lessons yet.",
+        "Return only valid JSON: {\"summary\":\"\",\"topics\":[\"\"],\"keyTerms\":[\"\"],\"processes\":[\"\"],\"examples\":[\"\"],\"prerequisites\":[\"\"]}. Scan this source chunk deeply. Preserve technical terms, formulas, processes, examples, and prerequisite relationships. Do not create lessons yet.",
         `Course: ${title}\nChunk ${index + 1} of ${chunks.length}\n\n${chunks[index]}`,
-        { summary: "", topics: [] },
+        { summary: "", topics: [], keyTerms: [], processes: [], examples: [], prerequisites: [] },
       );
       const topicList = Array.isArray(result.topics) ? result.topics.join("; ") : "";
-      summaries.push(`Chunk ${index + 1}: ${result.summary || ""}\nTopics: ${topicList}`);
+      const keyTerms = Array.isArray(result.keyTerms) ? result.keyTerms.join("; ") : "";
+      const processes = Array.isArray(result.processes) ? result.processes.join("; ") : "";
+      const examples = Array.isArray(result.examples) ? result.examples.join("; ") : "";
+      const prerequisites = Array.isArray(result.prerequisites) ? result.prerequisites.join("; ") : "";
+      summaries.push(`Chunk ${index + 1}: ${result.summary || ""}\nTopics: ${topicList}\nKey terms: ${keyTerms}\nProcesses: ${processes}\nExamples: ${examples}\nPrerequisites: ${prerequisites}`);
     } catch {
       summaries.push(`Chunk ${index + 1}: ${chunks[index].replace(/\s+/g, " ").trim().slice(0, 900)}`);
     }
@@ -1170,7 +1396,7 @@ async function buildCourseOutlineFromSource(title: string, sourceText: string) {
       `Return only valid JSON in this shape:
 {"description":"","units":[{"unit":1,"title":"","summary":"","lessons":[{"title":"","summary":""}]}]}
 
-Build a complete course map from the scan summaries. Cover all major topics from the source. Use unit overview lessons as x.0 and sub-lessons as x.1, x.2, etc. Create 2-6 units when possible, and 1-6 sub-lessons per unit. Keep lesson titles specific and non-overlapping.`,
+Build a complete course map from the scan summaries. Cover all major topics from the source. Keep prerequisite concepts before dependent concepts, group related processes/examples together, and avoid duplicate lessons. Use unit overview lessons as x.0 and sub-lessons as x.1, x.2, etc. Create 2-6 units when possible, and 1-6 sub-lessons per unit. Keep lesson titles specific, non-overlapping, and teachable.`,
       `Course title: ${title}
 ${getAppSettings().ai.optimizationPrompt ? `Optimization rule: ${getAppSettings().ai.optimizationPrompt}\n` : ""}
 ${getAppSettings().ai.coursePrompt ? `Admin course prompt addition: ${getAppSettings().ai.coursePrompt}\n` : ""}
@@ -1181,9 +1407,10 @@ ${summaries.join("\n\n")}`,
     );
 
     const outline = normalizeOutline(result);
-    return outline.units.length ? outline : fallbackOutlineFromSource(title, sourceText, summaries);
+    const finalOutline = outline.units.length ? outline : fallbackOutlineFromSource(title, sourceText, summaries);
+    return { ...finalOutline, scannedChunks: chunks.length };
   } catch {
-    return fallbackOutlineFromSource(title, sourceText, summaries);
+    return { ...fallbackOutlineFromSource(title, sourceText, summaries), scannedChunks: chunks.length };
   }
 }
 
@@ -1244,8 +1471,9 @@ RULES:
 3. Do NOT add explanations outside JSON.
 4. Use only supported block types:
 ["text", "list", "highlight", "table", "code", "flowchart", "chart", "image", "math", "timeline"]
-5. Keep content conceptual, example-driven, and problem-solving oriented.
-6. Maintain logical flow: Intro -> Concept -> Example -> Insight -> Advanced.
+5. Keep content grounded in the supplied source context when it is available.
+6. Keep content conceptual, example-driven, and problem-solving oriented.
+7. Maintain logical flow: Intro -> Prerequisite Link -> Core Concept -> Example -> Optional Visual/Process -> Insight -> Advanced -> Summary.
 
 BLOCK RULES:
 - text -> must have "value"
@@ -1255,12 +1483,17 @@ BLOCK RULES:
 - code -> must have "value" and "language"
 - flowchart -> must have Mermaid syntax in "code", starting with graph TD, graph LR, flowchart TD, etc. Quote labels with punctuation, for example B{"Connectivity (e.g., Wi-Fi)"}.
 - timeline -> use "timeline_items" with {label, desc}
+- flowchart, chart, math, and code are optional. Use them only when they clearly improve understanding.
+- If you use flowchart, chart, math, or code, the very next block MUST be a highlight explaining what the learner should understand from it.
 
 STYLE RULES:
 - Keep explanations clear and concise.
 - Use real-world examples.
 - Avoid redundancy.
 - Avoid empty fields.
+- Do not invent facts that conflict with the source context.
+- Keep graph/chart/diagram content medium to small: 3-6 nodes or data points when possible.
+- Keep each lesson page comfortable for about 500 words by using substantial but not bloated blocks.
 - Keep 8-15 blocks total.`;
 
 const WRITE_LESSON_PARAMETERS = {
@@ -1419,8 +1652,8 @@ Make the root label the course title and organize branches by course concepts.`;
           for (let attempt = 1; attempt <= 2; attempt += 1) {
             try {
               const data = await aiJson(
-                "Return only valid JSON in this exact shape: {\"mindmap\":{\"id\":\"root\",\"label\":\"\",\"children\":[{\"id\":\"\",\"label\":\"\",\"children\":[]}]}}. Build an educational concept mind map, not a study schedule. The root and at least 3 first-level branches are required. Labels must be short.",
-                `${mindmapPrompt}\n\nAttempt ${attempt}: Return a valid non-empty tree. Do not include markdown, comments, Mermaid syntax, or explanatory text.`,
+                "Return only valid JSON in this exact shape: {\"mindmap\":{\"id\":\"root\",\"label\":\"\",\"info\":\"\",\"children\":[{\"id\":\"\",\"label\":\"\",\"info\":\"\",\"children\":[]}]}}. Build an educational concept mind map, not a study schedule. Make it a spider-web/radial concept structure: one central root, 4-8 distinct first-level branches, and 1-4 child points per branch when useful. Every node should include info: a short 8-16 word explanation. Labels must be 2-6 words and visually distinct.",
+                `${mindmapPrompt}\n\nAttempt ${attempt}: Return a valid non-empty tree with short info on each point. Do not include markdown, comments, Mermaid syntax, or explanatory text.`,
                 { mindmap: null },
               );
               const mindmap = normalizeMindmapPayload(data?.mindmap, fallbackLabel);
@@ -1454,6 +1687,10 @@ Make the root label the course title and organize branches by course concepts.`;
         }
         if (name === "generate-lesson") {
           const topic = await getTopic(body.topicId);
+          const course = (await getAllCourses()).find((item: any) => item.id === topic.course_id);
+          const courseTopics = await getCourseTopics(topic.course_id);
+          const sourceContext = buildLessonSourceContext(course?.source_text || "", topic.title || "", topic.summary || "");
+          const lessonFlow = buildLessonFlow(topic, courseTopics);
           const customInstruction = cleanString(body.customInstruction || body.instruction);
           const appSettings = getAppSettings();
           const courseSettings = getCourseSettings(topic.course_id);
@@ -1463,33 +1700,42 @@ Current summary: ${topic.summary || ""}
 Mode: ${body.mode || "replace"}
 Level: ${body.level || 5}
 
+Lesson flow and neighboring context:
+${lessonFlow}
+
+Relevant source context from uploaded document:
+${sourceContext || "No matching source excerpt was available. Use the lesson title, summary, and course sequence only."}
+
 ${customInstruction ? `Extra instruction from admin: ${customInstruction}\n` : ""}
 ${appSettings.ai.optimizationPrompt ? `Global optimization rule: ${appSettings.ai.optimizationPrompt}\n` : ""}
 ${appSettings.ai.lessonPrompt ? `Global lesson prompt addition: ${appSettings.ai.lessonPrompt}\n` : ""}
 ${courseSettings.lessonPrompt ? `Course lesson prompt addition: ${courseSettings.lessonPrompt}\n` : ""}
 Follow this structure:
 1. Intro (text)
-2. Core Concept (text)
-3. Key Points (list)
-4. Example (text)
-5. Insight (highlight)
-6. Advanced Concept (text)
-7. Example (text)
-8. Summary (text)
+2. Prerequisite Link (text or highlight)
+3. Core Concept (text)
+4. Key Points (list)
+5. Worked Example (usually text or table; use math or code only when necessary)
+6. Optional Process / Relationship (use flowchart, chart, timeline, or table only when it genuinely clarifies the lesson)
+7. Insight (highlight)
+8. Advanced Concept (text)
+9. Summary (text)
 
-You may add up to 7 extra supported blocks when they improve the lesson, such as:
+You may add up to 7 extra supported blocks when they improve the lesson. Do not add graph/chart, math, or code for decoration. Use them only when the topic needs that representation, such as:
 - table for comparisons
-- code for programming or algorithms
-- flowchart for processes; put valid Mermaid flowchart syntax in code, for example:
+- code for programming, algorithms, or exact implementation examples
+- flowchart for real processes or decision paths; keep it medium to small, ideally 3-6 nodes, and put valid Mermaid flowchart syntax in code, for example:
   graph TD
     A[Start] --> B[Process]
     B --> C[End]
   Quote labels that contain punctuation or parentheses, e.g. B{"Connectivity (e.g., Wi-Fi)"}.
-- chart for simple numeric comparisons
-- math for formulas
+- chart for simple numeric comparisons, ideally 3-6 data points
+- math for formulas only when notation is necessary
 - timeline for historical or sequential topics
 - image only when a visual would genuinely help; include caption and prompt, not an empty url
 
+If you generate a flowchart, chart, math, or code block, put a highlight block immediately after it explaining the lesson takeaway from that block.
+Use the source excerpts to choose terminology, examples, processes, and boundaries. If the excerpt is partial, avoid overstating details and connect this lesson cleanly to previous and next lessons.
 Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one correct).`;
           const result = await aiToolJson(
             LESSON_GENERATION_SYSTEM_PROMPT,
@@ -1498,7 +1744,7 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
             WRITE_LESSON_PARAMETERS,
             { content: [], quiz: [] },
           );
-          const blocks = normalizeLessonContent(result.content || []);
+          const blocks = ensureExplanatoryHighlights(normalizeLessonContent(result.content || []));
           if (blocks.length < 8) throw new Error("AI did not return enough valid lesson blocks");
           const quiz = normalizeQuiz(result.quiz || []);
           if (quiz.length !== 4 && body.mode !== "continue") throw new Error("AI did not return exactly 4 valid quiz questions");
@@ -1518,6 +1764,74 @@ Also write exactly 4 multiple-choice quiz questions (4 options each, exactly one
             { content: topic.content || [] },
           );
           return { data: { ok: true, content: result.content || topic.content || [] }, error: null };
+        }
+        if (name === "translate-lesson") {
+          const topic = await getTopic(body.topicId);
+          const languageName = cleanString(body.languageName || body.language || "English");
+          const languageCode = cleanString(body.languageCode || "en");
+          const direction = cleanString(body.dir || "ltr") === "rtl" ? "rtl" : "ltr";
+          const extraInstruction = cleanString(body.customInstruction);
+          if (!languageCode || languageCode === "en") throw new Error("Choose a non-English target language");
+          const result = await aiJson(
+            `Return only valid JSON: {"title":"","summary":"","content":[],"quiz":[]}. Translate the lesson into ${languageName}. Preserve the existing JSON block schema exactly.`,
+            `Target language: ${languageName} (${languageCode})
+Writing direction: ${direction}
+${extraInstruction ? `Admin instruction: ${extraInstruction}\n` : ""}
+Translate all learner-facing text naturally for a student.
+Keep technical terms accurate. Preserve formulas, code syntax, programming identifiers, Mermaid graph structure, chart numbers, JSON keys, block "type", code "language", and math notation.
+For code blocks, translate only captions/comments when appropriate; do not translate executable syntax.
+For flowcharts, keep valid Mermaid syntax and translate only human-readable node labels.
+For charts/tables/lists/timelines, translate labels and descriptions but keep numeric values.
+
+Lesson JSON:
+${JSON.stringify({
+  title: topic.title,
+  summary: topic.summary,
+  content: topic.content || [],
+  quiz: topic.quiz || [],
+}).slice(0, 18000)}`,
+            { title: topic.title, summary: topic.summary, content: topic.content || [], quiz: topic.quiz || [] },
+          );
+          const translated = {
+            languageCode,
+            languageName,
+            dir: direction,
+            title: cleanString(result.title) || topic.title,
+            summary: cleanString(result.summary) || topic.summary || "",
+            content: ensureExplanatoryHighlights(normalizeLessonContent(result.content || topic.content || [])),
+            quiz: normalizeQuiz(result.quiz || topic.quiz || []),
+            generatedAt: new Date().toISOString(),
+          };
+          if (!translated.content.length) throw new Error("AI returned an empty translated lesson");
+          const translations = Array.isArray(topic.translations) ? topic.translations : [];
+          const nextTranslations = [
+            ...translations.filter((item: any) => item?.languageCode !== languageCode),
+            translated,
+          ];
+          await patchTopic(topic.id, { translations: nextTranslations });
+          return { data: { ok: true, translation: translated, translations: nextTranslations }, error: null };
+        }
+        if (name === "explain-lesson-block") {
+          const topic = body.topicId ? await getTopic(body.topicId) : null;
+          const block = body.block && typeof body.block === "object" ? body.block : {};
+          const blockType = cleanString(body.blockType || block.type || "block");
+          const customPrompt = cleanString(body.prompt) || "Explain this in simple, human language for a learner. Focus on what each part means, why it matters, and the key takeaway.";
+          const result = await aiJson(
+            "Return only valid JSON: {\"explanation\":\"\"}. Write a natural learner-friendly explanation for the provided lesson block. Do not return markdown headings, code fences, or extra keys.",
+            `Lesson: ${topic?.title || "Unknown lesson"}
+Lesson summary: ${topic?.summary || ""}
+Block type: ${blockType}
+Admin explanation prompt: ${customPrompt}
+
+Block JSON:
+${JSON.stringify(block).slice(0, 5000)}
+
+Write 2-5 clear sentences. Explain the human meaning, not just the notation. If this is code, explain what the code does and why the important lines matter. If this is math, explain each main symbol or transformation in plain language. If this is a graph/chart/flowchart, explain what relationship or trend the learner should notice.`,
+            { explanation: "" },
+          );
+          const explanation = cleanString(result.explanation).replace(/\s+/g, " ").slice(0, 900);
+          if (!explanation) throw new Error("AI returned an empty explanation");
+          return { data: { ok: true, explanation }, error: null };
         }
         if (name === "scan-lesson-duplicates") {
           const allTopics = await getCourseTopics(body.courseId);
@@ -1631,7 +1945,7 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
           } else {
             await patchCourse(body.courseId, { source_text: source });
           }
-          return { data: { ok: true, sourceLength: source.length, attempts: 1, rebuilt: Boolean(body.resetLessons), topicCount }, error: null };
+          return { data: { ok: true, sourceLength: source.length, attempts: 1, rebuilt: Boolean(body.resetLessons), topicCount, scannedChunks: body.resetLessons ? Math.ceil(source.length / 12000) : 0 }, error: null };
         }
         if (name === "import-doc") {
           const text = body.url || "";
@@ -1694,7 +2008,7 @@ ${JSON.stringify(blocks).slice(0, 12000)}`,
               topicCount++;
             }
           }
-          return { data: { ok: true, slug, topicCount }, error: null };
+          return { data: { ok: true, slug, topicCount, scannedChunks: result.scannedChunks || Math.ceil(sourceText.length / 12000) }, error: null };
         }
         if (name === "export-course") {
           const course = (await getAllCourses()).find((item: any) => item.id === body.courseId);

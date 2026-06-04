@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -9,10 +9,17 @@ import { Volume2, Pause, Play, Square, Settings2, Headphones } from "lucide-reac
 interface Props {
   /** Plain text to read aloud. */
   text: string;
+  lang?: string;
   /** Optional: word currently spoken — emit index. */
   onWordIndex?: (index: number | null) => void;
   autoScroll?: boolean;
   onDone?: () => void;
+}
+
+export interface KaraokeReadModeHandle {
+  togglePause: () => void;
+  pause: () => void;
+  resume: () => void;
 }
 
 const PREFS_KEY = "signal-tts-prefs";
@@ -20,6 +27,25 @@ interface Prefs { voiceURI?: string; rate: number; pitch: number }
 const loadPrefs = (): Prefs => {
   try { return { rate: 1, pitch: 1, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") }; }
   catch { return { rate: 1, pitch: 1 }; }
+};
+
+const speechLangMap: Record<string, string> = {
+  en: "en-US",
+  bn: "bn-BD",
+  hi: "hi-IN",
+  ur: "ur-PK",
+  ar: "ar-SA",
+  zh: "zh-CN",
+  ja: "ja-JP",
+  ko: "ko-KR",
+  fr: "fr-FR",
+  es: "es-ES",
+  de: "de-DE",
+  pt: "pt-PT",
+  ru: "ru-RU",
+  ta: "ta-IN",
+  te: "te-IN",
+  mr: "mr-IN",
 };
 
 /** Tokenise text into [{word, start}] using char offsets in the original string. */
@@ -31,15 +57,17 @@ export function tokenizeWords(text: string): { word: string; start: number; end:
   return out;
 }
 
-export function KaraokeReadMode({ text, onWordIndex, autoScroll = true, onDone }: Props) {
+export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function KaraokeReadMode({ text, lang = "en", onWordIndex, autoScroll = true, onDone }, ref) {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [state, setState] = useState<"idle" | "playing" | "paused">("idle");
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const utterIdRef = useRef(0);
   const startCharRef = useRef(0);
   const stopRequestedRef = useRef(false);
 
   const tokens = useMemo(() => tokenizeWords(text), [text]);
+  const speechLang = speechLangMap[lang] || lang || "en-US";
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -53,18 +81,42 @@ export function KaraokeReadMode({ text, onWordIndex, autoScroll = true, onDone }
 
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
+  useEffect(() => {
+    if (!supported) return;
+    stopRequestedRef.current = true;
+    utterIdRef.current += 1;
+    window.speechSynthesis.cancel();
+    utterRef.current = null;
+    setState("idle");
+    onWordIndex?.(null);
+  }, [supported, text, onWordIndex]);
+
+  const pickVoice = () => {
+    const selected = voices.find(x => x.voiceURI === prefs.voiceURI);
+    if (selected) return selected;
+    const lower = speechLang.toLowerCase();
+    return voices.find((voice) => voice.lang.toLowerCase() === lower)
+      || voices.find((voice) => voice.lang.toLowerCase().startsWith(lower.split("-")[0]))
+      || null;
+  };
+
   const startFrom = (charOffset: number) => {
     if (!supported || !text.trim()) return;
+    const utterId = utterIdRef.current + 1;
+    utterIdRef.current = utterId;
+    stopRequestedRef.current = true;
     window.speechSynthesis.cancel();
     stopRequestedRef.current = false;
     startCharRef.current = charOffset;
     const slice = text.slice(charOffset);
     const u = new SpeechSynthesisUtterance(slice);
-    const v = voices.find(x => x.voiceURI === prefs.voiceURI);
+    const v = pickVoice();
     if (v) u.voice = v;
+    u.lang = v?.lang || speechLang;
     u.rate = prefs.rate;
     u.pitch = prefs.pitch;
     u.onboundary = (ev: SpeechSynthesisEvent) => {
+      if (utterIdRef.current !== utterId) return;
       if (ev.name && ev.name !== "word") return;
       const absChar = startCharRef.current + (ev.charIndex || 0);
       // find token whose range contains absChar
@@ -89,15 +141,23 @@ export function KaraokeReadMode({ text, onWordIndex, autoScroll = true, onDone }
       }
     };
     u.onend = () => {
+      if (utterIdRef.current !== utterId) return;
       const wasStopped = stopRequestedRef.current;
       setState("idle");
       onWordIndex?.(null);
       if (!wasStopped) onDone?.();
     };
-    u.onerror = () => { setState("idle"); onWordIndex?.(null); };
+    u.onerror = () => {
+      if (utterIdRef.current !== utterId) return;
+      setState("idle");
+      onWordIndex?.(null);
+    };
     utterRef.current = u;
-    window.speechSynthesis.speak(u);
-    setState("playing");
+    window.setTimeout(() => {
+      if (utterIdRef.current !== utterId) return;
+      window.speechSynthesis.speak(u);
+      setState("playing");
+    }, 40);
   };
 
   const start = () => startFrom(0);
@@ -125,10 +185,27 @@ export function KaraokeReadMode({ text, onWordIndex, autoScroll = true, onDone }
     if (state === "playing") { window.speechSynthesis.pause(); setState("paused"); }
     else if (state === "paused") { window.speechSynthesis.resume(); setState("playing"); }
   };
+
+  useImperativeHandle(ref, () => ({
+    togglePause,
+    pause: () => {
+      if (!supported || state !== "playing") return;
+      window.speechSynthesis.pause();
+      setState("paused");
+    },
+    resume: () => {
+      if (!supported || state !== "paused") return;
+      window.speechSynthesis.resume();
+      setState("playing");
+    },
+  }), [state, supported]);
+
   const stop = () => {
     if (!supported) return;
     stopRequestedRef.current = true;
+    utterIdRef.current += 1;
     window.speechSynthesis.cancel();
+    utterRef.current = null;
     setState("idle");
     onWordIndex?.(null);
   };
@@ -144,7 +221,7 @@ export function KaraokeReadMode({ text, onWordIndex, autoScroll = true, onDone }
   return (
     <div className="flex items-center gap-1">
       {state === "idle" ? (
-        <Button variant="neon" size="sm" onClick={start} title="Read aloud (click any word to jump)" className="px-2 sm:px-3">
+        <Button variant="neon" size="sm" onClick={start} disabled={!text.trim()} title="Read aloud (click any word to jump)" className="px-2 sm:px-3">
           <Volume2 className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Read</span>
         </Button>
       ) : (
@@ -188,7 +265,7 @@ export function KaraokeReadMode({ text, onWordIndex, autoScroll = true, onDone }
       </Popover>
     </div>
   );
-}
+});
 
 /** Helper: dispatch a seek to a global karaoke instance */
 export function karaokeSeek(wordIdx: number) {

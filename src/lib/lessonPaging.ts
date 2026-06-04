@@ -1,8 +1,8 @@
 import { blockToText, countWords } from "@/components/BlockRenderer";
 
-export const PAGE_SIZE = 5;
-const TARGET_WORDS = 320;
-const MIN_WORDS = 160;
+export const PAGE_SIZE = 8;
+const TARGET_WORDS = 500;
+const MIN_WORDS = 280;
 
 export interface Page<T> {
   blocks: T[];
@@ -15,8 +15,8 @@ export interface Page<T> {
 function blockWeight(block: any) {
   const words = countWords(blockToText(block));
   if (!block || typeof block !== "object") return Math.max(1, words);
-  if (block.type === "image" || block.type === "flowchart" || block.type === "chart") return Math.max(words, 90);
-  if (block.type === "code" || block.type === "table") return Math.max(words, 120);
+  if (block.type === "image" || block.type === "flowchart" || block.type === "chart") return Math.max(words, 70);
+  if (block.type === "code" || block.type === "table") return Math.max(words, 95);
   if (block.type === "timeline") return Math.max(words, 100);
   return Math.max(1, words);
 }
