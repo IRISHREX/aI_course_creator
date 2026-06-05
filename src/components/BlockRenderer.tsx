@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
 import { Sparkles, Copy, Check } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MermaidDiagram } from "./Mindmap";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
 import { BlockMath, InlineMath } from "react-katex";
 import "katex/dist/katex.min.css";
-import { codeToHtml } from "shiki";
 import { Button } from "./ui/button";
 
 const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--success))", "hsl(var(--warning))", "hsl(var(--destructive))"];
@@ -28,12 +27,59 @@ function stripMarkup(s: string): string {
 
 const stripBold = stripMarkup;
 
+type TextSegment = { type: "text"; value: string } | { type: "math"; value: string };
+
+function splitMathSegments(value: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const pattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\))/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(value))) {
+    if (match.index > lastIndex) segments.push({ type: "text", value: value.slice(lastIndex, match.index) });
+    const raw = match[0];
+    const math = raw.startsWith("$$")
+      ? raw.slice(2, -2)
+      : raw.startsWith("\\[") || raw.startsWith("\\(")
+        ? raw.slice(2, -2)
+        : raw;
+    segments.push({ type: "math", value: math.trim() });
+    lastIndex = match.index + raw.length;
+  }
+  if (lastIndex < value.length) segments.push({ type: "text", value: value.slice(lastIndex) });
+  return segments.length ? segments : [{ type: "text", value }];
+}
+
 /**
  * Render text with **bold** markers expanded, while assigning per-word data-w indices
  * starting at baseIndex. Each whitespace-separated token = one word index, regardless of bold.
  */
 function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className = "" }:
   { value: string; baseIndex: number; activeIndex: number | null | undefined; onWordClick?: (i: number) => void; className?: string }) {
+  const segments = splitMathSegments(value);
+  if (segments.some((segment) => segment.type === "math")) {
+    let offset = baseIndex;
+    return (
+      <span className={className}>
+        {segments.map((segment, segmentIndex) => {
+          if (segment.type === "math") {
+            return <span key={`m${segmentIndex}`} className="mx-1 inline-block align-middle"><InlineMath math={segment.value} /></span>;
+          }
+          const currentOffset = offset;
+          offset += countWords(segment.value);
+          return (
+            <HighlightedText
+              key={`t${segmentIndex}`}
+              value={segment.value}
+              baseIndex={currentOffset}
+              activeIndex={activeIndex}
+              onWordClick={onWordClick}
+            />
+          );
+        })}
+      </span>
+    );
+  }
+
   // Strip markers but remember style ranges over the stripped string.
   const ranges: Array<[number, number, "bold" | "blue" | "red"]> = [];
   let stripped = "";
@@ -111,7 +157,7 @@ function HighlightedText({ value, baseIndex, activeIndex, onWordClick, className
           key={`w${key++}`}
           data-w={idx}
           onClick={() => onWordClick?.(idx)}
-          className={`cursor-pointer rounded px-0.5 transition-colors ${active ? "bg-primary text-primary-foreground" : "hover:bg-primary/15"}`}
+          className={`${onWordClick ? "cursor-pointer" : ""} rounded px-0.5 transition-colors ${active ? "bg-primary text-primary-foreground" : onWordClick ? "hover:bg-primary/15" : ""}`}
         >
           {inner}
         </span>
@@ -151,25 +197,30 @@ export function blockToText(b: any): string {
   return "";
 }
 
-function CodeBlock({ language, value, caption }: { language: string; value: string; caption?: string }) {
-  const [html, setHtml] = useState<string>("");
-  const [copied, setCopied] = useState(false);
+function normalizeMathValue(value: unknown, caption: unknown = "") {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const rawCaption = typeof caption === "string" ? caption.trim() : "";
+  if (!raw) return { value: "", caption: rawCaption };
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const out = await codeToHtml(value, {
-          lang: language || "plaintext",
-          theme: "github-dark",
-        });
-        if (!cancelled) setHtml(out);
-      } catch {
-        if (!cancelled) setHtml(`<pre><code>${value.replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!))}</code></pre>`);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [language, value]);
+  const patterns = [
+    /\$\$([\s\S]+?)\$\$/,
+    /\\\[([\s\S]+?)\\\]/,
+    /\\\(([\s\S]+?)\\\)/,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+    const equation = match[1].trim();
+    const prose = raw.replace(match[0], " ").replace(/\s+/g, " ").trim();
+    return { value: equation, caption: [prose, rawCaption].filter(Boolean).join(" ") };
+  }
+
+  return { value: raw.replace(/^\$\$?|\$\$?$/g, "").trim(), caption: rawCaption };
+}
+
+function CodeBlock({ language, value, caption }: { language: string; value: string; caption?: string }) {
+  const [copied, setCopied] = useState(false);
+  const html = `<pre><code>${value.replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!))}</code></pre>`;
 
   const copy = async () => {
     await navigator.clipboard.writeText(value);
@@ -255,7 +306,9 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
             <div key={j} className="flex items-center gap-3 sm:gap-4">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-primary font-display text-sm font-bold text-primary-foreground shadow-glow sm:h-12 sm:w-12 sm:text-base">{it.label}</div>
               <div className="flex-1 h-px bg-border" />
-              <div className="flex-1 text-sm leading-6">{it.desc}</div>
+              <div className="flex-1 text-sm leading-6">
+                <HighlightedText value={it.desc || ""} baseIndex={0} activeIndex={null} />
+              </div>
             </div>
           ))}
         </div>
@@ -271,14 +324,20 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
           <thead>
             <tr className="border-b border-border">
               {(b.headers || []).map((h: string, i: number) => (
-                <th key={i} className="text-left p-2 font-mono text-xs uppercase text-primary">{h}</th>
+                <th key={i} className="text-left p-2 font-mono text-xs uppercase text-primary">
+                  <HighlightedText value={h} baseIndex={0} activeIndex={null} />
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {(b.rows || []).map((r: string[], i: number) => (
               <tr key={i} className="border-b border-border/40">
-                {r.map((c, j) => <td key={j} className="p-2">{c}</td>)}
+                {r.map((c, j) => (
+                  <td key={j} className="p-2">
+                    <HighlightedText value={c} baseIndex={0} activeIndex={null} />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -346,12 +405,13 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
   }
 
   if (b.type === "math") {
+    const math = normalizeMathValue(b.value, b.caption);
     return (
       <figure className="glass mx-auto max-w-2xl rounded-xl p-4 overflow-x-auto text-sm sm:text-base">
         {b.display === false
-          ? <InlineMath math={b.value || ""} />
-          : <BlockMath math={b.value || ""} />}
-        {b.caption && <figcaption className="text-xs text-muted-foreground text-center mt-2">{b.caption}</figcaption>}
+          ? <InlineMath math={math.value || ""} />
+          : <BlockMath math={math.value || ""} />}
+        {math.caption && <figcaption className="text-xs text-muted-foreground text-center mt-2">{math.caption}</figcaption>}
       </figure>
     );
   }

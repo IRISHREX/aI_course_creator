@@ -1,30 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import mermaid from "mermaid";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "base",
-  securityLevel: "loose",
-  fontFamily: "inherit",
-  themeVariables: {
-    background: "transparent",
-    primaryColor: "#67e8f9",
-    primaryTextColor: "#06121a",
-    primaryBorderColor: "#22d3ee",
-    secondaryColor: "#c084fc",
-    secondaryTextColor: "#14051f",
-    secondaryBorderColor: "#a855f7",
-    tertiaryColor: "#86efac",
-    tertiaryTextColor: "#04130a",
-    tertiaryBorderColor: "#22c55e",
-    lineColor: "#94a3b8",
-    textColor: "#f8fafc",
-  },
-});
-
 interface Node { id: string; label: string; info?: string; detail?: string; description?: string; children?: Node[] }
+
+type MermaidApi = typeof import("mermaid").default;
+let mermaidPromise: Promise<MermaidApi> | null = null;
+
+function loadMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = import("mermaid").then((module) => {
+      const mermaid = module.default;
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "base",
+        securityLevel: "loose",
+        fontFamily: "inherit",
+        themeVariables: {
+          background: "transparent",
+          primaryColor: "#67e8f9",
+          primaryTextColor: "#06121a",
+          primaryBorderColor: "#22d3ee",
+          secondaryColor: "#c084fc",
+          secondaryTextColor: "#14051f",
+          secondaryBorderColor: "#a855f7",
+          tertiaryColor: "#86efac",
+          tertiaryTextColor: "#04130a",
+          tertiaryBorderColor: "#22c55e",
+          lineColor: "#94a3b8",
+          textColor: "#f8fafc",
+        },
+      });
+      return mermaid;
+    });
+  }
+  return mermaidPromise;
+}
 
 const BRANCH_COLORS = [
   { bg: "hsl(186 100% 18% / 0.9)", border: "hsl(186 100% 58%)", text: "hsl(190 35% 96%)", soft: "hsl(186 100% 55% / 0.16)" },
@@ -327,13 +338,15 @@ export function MermaidDiagram({ code }: { code: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!code || !ref.current) return;
+    let active = true;
     const id = "md-" + Math.random().toString(36).slice(2, 9);
     const safeCode = sanitizeMermaidFlowchart(code);
-    mermaid.render(id, safeCode).then(({ svg }) => {
-      if (ref.current) ref.current.innerHTML = svg;
+    loadMermaid().then((mermaid) => mermaid.render(id, safeCode)).then(({ svg }) => {
+      if (active && ref.current) ref.current.innerHTML = svg;
     }).catch(err => {
-      if (ref.current) ref.current.innerHTML = `<pre class="text-xs text-destructive p-3">${err.message}</pre>`;
+      if (active && ref.current) ref.current.innerHTML = `<pre class="text-xs text-destructive p-3">${err.message}</pre>`;
     });
+    return () => { active = false; };
   }, [code]);
   return <div ref={ref} className="w-full overflow-auto" />;
 }

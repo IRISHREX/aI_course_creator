@@ -1,9 +1,5 @@
-import mammoth from "mammoth";
-import * as pdfjs from "pdfjs-dist";
 // @ts-ignore
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-
-(pdfjs as any).GlobalWorkerOptions.workerSrc = workerSrc;
 
 function cleanExtractedText(text: string) {
   return text
@@ -39,11 +35,14 @@ export async function extractTextFromFile(file: File): Promise<string> {
     return cleanExtractedText(await file.text());
   }
   if (name.endsWith(".docx")) {
+    const mammoth = (await import("mammoth")).default;
     const buf = await file.arrayBuffer();
     const res = await mammoth.extractRawText({ arrayBuffer: buf });
     return cleanExtractedText(res.value);
   }
   if (name.endsWith(".pdf") || file.type === "application/pdf") {
+    const pdfjs = await import("pdfjs-dist");
+    (pdfjs as any).GlobalWorkerOptions.workerSrc = workerSrc;
     const buf = await file.arrayBuffer();
     const pdf = await (pdfjs as any).getDocument({ data: buf }).promise;
     const pages: string[] = [];

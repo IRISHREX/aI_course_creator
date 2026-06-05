@@ -450,6 +450,42 @@ function normalizeMermaidFlowchart(value: unknown): string {
   });
 }
 
+function normalizeMathValue(value: unknown, caption: unknown = "") {
+  const raw = cleanString(value);
+  const rawCaption = cleanString(caption);
+  if (!raw) return { value: "", caption: rawCaption };
+
+  const patterns = [
+    /\$\$([\s\S]+?)\$\$/,
+    /\\\[([\s\S]+?)\\\]/,
+    /\\\(([\s\S]+?)\\\)/,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+    const equation = cleanString(match[1]);
+    const prose = cleanString(raw.replace(match[0], " ").replace(/\s+/g, " "));
+    return {
+      value: equation,
+      caption: [prose, rawCaption].filter(Boolean).join(" "),
+    };
+  }
+
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const score = (line: string) => (line.match(/[\\^_=+\-*/]|\\begin|\\frac|\\sum|\\int|\\sqrt/g) || []).length;
+    const equationIndex = lines.reduce((best, line, index) => score(line) > score(lines[best]) ? index : best, 0);
+    if (score(lines[equationIndex]) > 0) {
+      return {
+        value: lines[equationIndex].replace(/^\$\$?|\$\$?$/g, "").trim(),
+        caption: [...lines.slice(0, equationIndex), ...lines.slice(equationIndex + 1), rawCaption].filter(Boolean).join(" "),
+      };
+    }
+  }
+
+  return { value: raw.replace(/^\$\$?|\$\$?$/g, "").trim(), caption: rawCaption };
+}
+
 function normalizeLessonBlock(block: any) {
   if (!block || typeof block !== "object" || !SUPPORTED_BLOCK_TYPES.has(block.type)) return null;
   const title = cleanString(block.title);
@@ -497,8 +533,7 @@ function normalizeLessonBlock(block: any) {
     return caption || prompt || url ? compact({ type: "image", title, url, caption, prompt }) : null;
   }
   if (block.type === "math") {
-    const value = cleanString(block.value);
-    const caption = cleanString(block.caption);
+    const { value, caption } = normalizeMathValue(block.value, block.caption);
     return value ? compact({ type: "math", title, value, display: block.display !== false, caption }) : null;
   }
   if (block.type === "timeline") {
@@ -1730,7 +1765,7 @@ You may add up to 7 extra supported blocks when they improve the lesson. Do not 
     B --> C[End]
   Quote labels that contain punctuation or parentheses, e.g. B{"Connectivity (e.g., Wi-Fi)"}.
 - chart for simple numeric comparisons, ideally 3-6 data points
-- math for formulas only when notation is necessary
+- math for formulas only when notation is necessary. Put only the raw LaTeX equation in the math block value, without surrounding prose or $$ delimiters. Put any explanation in the next highlight block or in the math caption.
 - timeline for historical or sequential topics
 - image only when a visual would genuinely help; include caption and prompt, not an empty url
 

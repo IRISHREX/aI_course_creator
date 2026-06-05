@@ -60,6 +60,39 @@ const EXPLANATION_PROMPT_KEY = "lesson_block_explanation_prompt";
 const asString = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
 const asStringArray = (value: unknown) => Array.isArray(value) ? value.map((item) => asString(item)) : [""];
 
+function normalizeMathValue(value: unknown, caption: unknown = "") {
+  const raw = asString(value).trim();
+  const rawCaption = asString(caption).trim();
+  if (!raw) return { value: "", caption: rawCaption };
+
+  const patterns = [
+    /\$\$([\s\S]+?)\$\$/,
+    /\\\[([\s\S]+?)\\\]/,
+    /\\\(([\s\S]+?)\\\)/,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+    const equation = match[1].trim();
+    const prose = raw.replace(match[0], " ").replace(/\s+/g, " ").trim();
+    return { value: equation, caption: [prose, rawCaption].filter(Boolean).join(" ") };
+  }
+
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const score = (line: string) => (line.match(/[\\^_=+\-*/]|\\begin|\\frac|\\sum|\\int|\\sqrt/g) || []).length;
+    const equationIndex = lines.reduce((best, line, index) => score(line) > score(lines[best]) ? index : best, 0);
+    if (score(lines[equationIndex]) > 0) {
+      return {
+        value: lines[equationIndex].replace(/^\$\$?|\$\$?$/g, "").trim(),
+        caption: [...lines.slice(0, equationIndex), ...lines.slice(equationIndex + 1), rawCaption].filter(Boolean).join(" "),
+      };
+    }
+  }
+
+  return { value: raw.replace(/^\$\$?|\$\$?$/g, "").trim(), caption: rawCaption };
+}
+
 function blockToEditableBlock(block: unknown): Block {
   if (!block || typeof block !== "object") {
     return { type: "text", value: typeof block === "undefined" ? "" : String(block) };
@@ -108,8 +141,10 @@ function blockToEditableBlock(block: unknown): Block {
       };
     case "image":
       return { type: "image", url: asString(maybeBlock.url), caption: asString(maybeBlock.caption) };
-    case "math":
-      return { type: "math", value: asString(maybeBlock.value), display: maybeBlock.display !== false, caption: asString(maybeBlock.caption) };
+    case "math": {
+      const math = normalizeMathValue(maybeBlock.value, maybeBlock.caption);
+      return { type: "math", value: math.value, display: maybeBlock.display !== false, caption: math.caption };
+    }
     case "code":
       return { type: "code", language: asString(maybeBlock.language, "plaintext"), value: asString(maybeBlock.value), caption: asString(maybeBlock.caption) };
   }
@@ -392,7 +427,17 @@ export function BlockEditor({ blocks, onChange, topicId }: Props) {
 
               {b.type === "math" && (
                 <div className="space-y-2">
-                  <Textarea rows={3} className="font-mono text-xs" placeholder="LaTeX e.g. \\frac{a}{b} or E = mc^2" value={b.value} onChange={e => update(i, { ...b, value: e.target.value })} />
+                  <Textarea
+                    rows={3}
+                    className="font-mono text-xs"
+                    placeholder="LaTeX e.g. \\frac{a}{b} or E = mc^2"
+                    value={b.value}
+                    onChange={e => update(i, { ...b, value: e.target.value })}
+                    onBlur={() => {
+                      const math = normalizeMathValue(b.value, b.caption);
+                      update(i, { ...b, value: math.value, caption: math.caption });
+                    }}
+                  />
                   <div className="flex items-center gap-3 text-xs">
                     <label className="flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" checked={b.display !== false} onChange={e => update(i, { ...b, display: e.target.checked })} />
