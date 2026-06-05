@@ -55,10 +55,97 @@ function cleanInfo(node: Node) {
 }
 
 function sanitizeMermaidFlowchart(code: string): string {
-  return code.replace(/\b([A-Za-z][\w-]*)\s*([\[{])([^"{}\[\]\n]+)([\]}])/g, (_match, id, open, label, close) => {
-    const safeLabel = String(label).replace(/\s+/g, " ").trim().replace(/"/g, "'");
-    return `${id}${open}"${safeLabel}"${close}`;
-  });
+  const cleanLabel = (label: string) => String(label || "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/\[([^\]]+)]/g, "$1")
+    .replace(/[[\]]/g, "")
+    .replace(/\|([^|]+)\|/g, "abs($1)")
+    .replace(/\|/g, "/")
+    .replace(/>/g, " greater than ")
+    .replace(/</g, " less than ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/"/g, "'");
+
+  const source = String(code || "").trim();
+  let out = "";
+  let i = 0;
+
+  while (i < source.length) {
+    const idMatch = source.slice(i).match(/^([A-Za-z][\w-]*)(\s*)(\{|\[)/);
+    if (!idMatch || (i > 0 && /[\w-]/.test(source[i - 1]))) {
+      out += source[i++];
+      continue;
+    }
+
+    const [, id, , open] = idMatch;
+    const close = open === "[" ? "]" : "}";
+    let cursor = i + idMatch[0].length;
+    let depth = 1;
+    let quoted = false;
+    let label = "";
+
+    while (cursor < source.length) {
+      const char = source[cursor];
+      if (char === "\"" && source[cursor - 1] !== "\\") quoted = !quoted;
+      if (!quoted && char === open) depth++;
+      if (!quoted && char === close) {
+        depth--;
+        if (depth === 0) break;
+      }
+      label += char;
+      cursor++;
+    }
+
+    if (depth !== 0) {
+      out += source[i++];
+      continue;
+    }
+
+    out += open === "["
+      ? `${id}["${cleanLabel(label)}"]`
+      : `${id}{"${cleanLabel(label)}"}`;
+    i = cursor + 1;
+  }
+
+  return out
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const compound = line.match(/^(\s*)((?:[A-Za-z][\w-]*\s*&\s*)+[A-Za-z][\w-]*)(\s*(?:-->|---|==>|-.->)\s*.+)$/);
+      if (!compound) return [line];
+      const [, indent, sources, tail] = compound;
+      return sources.split("&").map((source) => `${indent}${source.trim()}${tail}`);
+    })
+    .map((line) => line.replace(/;\s*$/, ""))
+    .join("\n");
+}
+
+function simplifyMermaidFlowchart(code: string): string {
+  return code
+    .split(/\r?\n/)
+    .map((line) => line
+      .replace(/\s+--\s+([^-\n|]+?)\s+-->\s+/g, " --> ")
+      .replace(/\s+--\|([^|\n]+)\|-->\s+/g, " --> ")
+      .replace(/\s+-->\|([^|\n]+)\|\s+/g, " --> ")
+      .replace(/;\s*$/, ""))
+    .join("\n");
+}
+
+function mermaidCandidates(code: string): string[] {
+  const trimmed = String(code || "").trim();
+  if (!trimmed) return [];
+  const withHeader = /^(graph|flowchart)\s+(TD|TB|BT|LR|RL)\b/i.test(trimmed) ? trimmed : `graph TD\n${trimmed}`;
+  const quoted = sanitizeMermaidFlowchart(withHeader);
+  const simplified = simplifyMermaidFlowchart(quoted);
+  return Array.from(new Set([
+    quoted,
+    simplified,
+    withHeader,
+  ].map((item) => item.trim()).filter(Boolean)));
+}
+
+function isMermaidErrorSvg(svg: string) {
+  return /Syntax error in text|mermaid version|class="error-text"|<text[^>]*>Syntax error/i.test(svg);
 }
 
 type PositionedNode = {
@@ -355,16 +442,25 @@ export function MermaidDiagram({
     setError("");
     setSvg("");
     if (ref.current) ref.current.innerHTML = "";
-    const id = "md-" + Math.random().toString(36).slice(2, 9);
-    const safeCode = sanitizeMermaidFlowchart(code);
+    const candidates = mermaidCandidates(code);
     loadMermaid().then(async (mermaid) => {
-      const parsed = await mermaid.parse(safeCode, { suppressErrors: true } as any);
-      if (parsed === false) throw new Error("Mermaid graph could not parse");
-      return mermaid.render(id, safeCode);
-    }).then((result) => {
-      const nextSvg = result.svg || "";
-      const isMermaidError = /Syntax error in text|mermaid version|error-icon|class="error"/i.test(nextSvg);
-      if (isMermaidError) throw new Error("Mermaid graph could not render");
+      let lastError = "";
+      for (const candidate of candidates) {
+        try {
+          const id = "md-" + Math.random().toString(36).slice(2, 9);
+          const result = await mermaid.render(id, candidate);
+          const nextSvg = result.svg || "";
+          if (!nextSvg || isMermaidErrorSvg(nextSvg)) {
+            lastError = "Mermaid graph could not render";
+            continue;
+          }
+          return nextSvg;
+        } catch (err: unknown) {
+          lastError = err instanceof Error ? err.message : "Mermaid graph could not render";
+        }
+      }
+      throw new Error(lastError || "Mermaid graph could not render");
+    }).then((nextSvg) => {
       if (active) setSvg(nextSvg);
     }).catch(err => {
       if (active) setError(err?.message || "Mermaid graph could not render");

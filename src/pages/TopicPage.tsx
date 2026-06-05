@@ -80,6 +80,8 @@ export default function TopicPage() {
 
   useEffect(() => {
     if (!slug || !course?.id) return;
+    setTopic(null);
+    setNeighbors({});
     (async () => {
       const { data: all } = await backendApi.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
       const list = (all as unknown as Topic[]) ?? [];
