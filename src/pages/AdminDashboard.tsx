@@ -38,6 +38,8 @@ export default function AdminDashboard() {
   const [aiKey, setAiKey] = useState<AiKeyState>(null);
   const [aiKeys, setAiKeys] = useState<AiKeyState[]>([]);
   const [apiKey, setApiKey] = useState("");
+  const [keyAlias, setKeyAlias] = useState("");
+  const [showKeyForm, setShowKeyForm] = useState(false);
   const [keyBusy, setKeyBusy] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -89,10 +91,12 @@ export default function AdminDashboard() {
     }
     setKeyBusy(true);
     try {
-      const data = await backendApi.aiKeys.save(apiKey.trim());
+      const data = await backendApi.aiKeys.save(apiKey.trim(), keyAlias.trim());
       setAiKey(data.key);
       setApiKey("");
+      setKeyAlias("");
       await refreshAiKey();
+      setShowKeyForm(false);
       toast.success("Gemini API key added");
       await checkKey();
     } catch (e: any) {
@@ -108,6 +112,7 @@ export default function AdminDashboard() {
       await backendApi.aiKeys.remove(id);
       await refreshAiKey();
       setApiKey("");
+      setKeyAlias("");
       toast.success(id ? "Gemini API key deleted" : "All Gemini API keys deleted");
     } catch (e: any) {
       toast.error(e.message || "Could not delete API key");
@@ -191,23 +196,49 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
-              <div>
-                <Label htmlFor="gemini-key">Add key</Label>
-                <Input
-                  id="gemini-key"
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Paste Gemini API key"
-                  autoComplete="off"
-                  className="mt-2"
-                />
+            {showKeyForm ? (
+              <div className="mb-3 grid gap-3 md:grid-cols-[minmax(0,0.8fr)_1fr_auto_auto] md:items-end">
+                <div>
+                  <Label htmlFor="gemini-key-alias">Alias</Label>
+                  <Input
+                    id="gemini-key-alias"
+                    value={keyAlias}
+                    onChange={(e) => setKeyAlias(e.target.value)}
+                    placeholder={`token${aiKeys.length + 1} ${new Date().toISOString().slice(0, 10)}`}
+                    autoComplete="off"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="gemini-key">Token</Label>
+                  <Input
+                    id="gemini-key"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Paste Gemini API key"
+                    autoComplete="off"
+                    className="mt-2"
+                  />
+                </div>
+                <Button onClick={saveKey} disabled={keyBusy || checking}>
+                  {keyBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save
+                </Button>
+                <Button variant="ghost" onClick={() => { setShowKeyForm(false); setApiKey(""); setKeyAlias(""); }} disabled={keyBusy || checking}>
+                  Cancel
+                </Button>
               </div>
-              <Button onClick={saveKey} disabled={keyBusy || checking}>
-                {keyBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Add
-              </Button>
+            ) : (
+              <div className="mb-3">
+                <Button variant="outline" onClick={() => setShowKeyForm(true)} disabled={keyBusy || checking}>
+                  <KeyRound className="h-4 w-4" />
+                  Add token
+                </Button>
+              </div>
+            )}
+
+            <div className="grid gap-3 md:grid-cols-[auto_auto] md:justify-end">
               <Button onClick={checkKey} variant="outline" disabled={!aiKeys.length || keyBusy || checking}>
                 {checking ? <RotateCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
                 Check all

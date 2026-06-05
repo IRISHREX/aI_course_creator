@@ -662,10 +662,14 @@ function normalizeDuplicateScanResult(result: any, topics: any[]) {
     .filter(Boolean);
 }
 
-async function saveAiKey(apiKey: string) {
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+async function saveAiKey(apiKey: string, alias = "") {
   return api("/ai-keys", {
     method: "POST",
-    body: JSON.stringify({ apiKey, provider: "google" }),
+    body: JSON.stringify({ apiKey, provider: "google", alias }),
   });
 }
 
@@ -1638,8 +1642,8 @@ export const backendApi = {
     async get() {
       return api("/ai-keys");
     },
-    async save(apiKey: string) {
-      return saveAiKey(apiKey);
+    async save(apiKey: string, alias = "") {
+      return saveAiKey(apiKey, alias);
     },
     async check() {
       return api("/ai-keys/check", { method: "POST" });
