@@ -68,11 +68,13 @@ async function api(path: string, init: RequestInit = {}) {
   const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   const headers = {
     "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    Pragma: "no-cache",
     ...authHeaders(),
     ...(init.headers || {}),
   };
   try {
-    const res = await fetch(`${API_URL}${path}`, { ...init, headers, signal: init.signal ?? controller.signal });
+    const res = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store", signal: init.signal ?? controller.signal });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       const error = new ApiError(data?.error || `API request failed (${res.status})`);
@@ -1720,6 +1722,36 @@ Make the root label the course title and organize branches by course concepts.`;
           const answer = cleanString(data.choices?.[0]?.message?.content || "").replace(/^\s*(?:answer|solution)\s*[:.-]\s*/i, "");
           if (pyq) await api(`/pyq/${body.pyqId}`, { method: "PATCH", body: JSON.stringify({ answer }) });
           return { data: { ok: true, answer }, error: null };
+        }
+        if (name === "repair-mermaid") {
+          const brokenCode = cleanString(body.code);
+          const title = cleanString(body.title);
+          const lessonTitle = cleanString(body.lessonTitle);
+          if (!brokenCode) throw new Error("No Mermaid code supplied");
+          const result = await aiJson(
+            "Return only valid JSON: {\"code\":\"\"}. Repair the Mermaid diagram. Do not include markdown, comments, explanation, or code fences.",
+            `Lesson: ${lessonTitle || "Unknown lesson"}
+Diagram title: ${title || "Untitled"}
+Mermaid parser error:
+${cleanString(body.error).slice(0, 1200) || "Unknown parse error"}
+
+Broken Mermaid:
+${brokenCode.slice(0, 5000)}
+
+Rewrite this as valid Mermaid flowchart syntax only.
+Rules:
+- Start with "graph TD" or "flowchart TD".
+- Use 3-8 nodes.
+- Quote every node label, especially labels with punctuation, parentheses, commas, hyphens, or symbols.
+- Node ids must be simple letters or words, like A, B, cameraModel, imagePlane.
+- Avoid unsupported characters in ids.
+- Keep arrows simple: A --> B.
+- Preserve the intended educational meaning.`,
+            { code: "" },
+          );
+          const code = normalizeMermaidFlowchart(result.code);
+          if (!code) throw new Error("AI did not return valid Mermaid syntax");
+          return { data: { ok: true, code }, error: null };
         }
         if (name === "generate-lesson") {
           const topic = await getTopic(body.topicId);

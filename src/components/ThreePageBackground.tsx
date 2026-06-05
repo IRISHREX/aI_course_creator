@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { cn } from "@/lib/utils";
 
-const ThreePageBackground = () => {
+const ThreePageBackground = ({ className }: { className?: string }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -108,7 +109,7 @@ const ThreePageBackground = () => {
     };
   }, []);
 
-  return <div ref={containerRef} className="three-page-background" aria-hidden="true" />;
+  return <div ref={containerRef} className={cn("pointer-events-none absolute inset-0 z-0 overflow-hidden", className)} aria-hidden="true" />;
 };
 
 export default ThreePageBackground;

@@ -15,6 +15,9 @@ interface Props {
   activeWordIndex?: number | null;
   onWordClick?: (idx: number) => void;
   text?: string;
+  isAdmin?: boolean;
+  onRepairFlowchart?: (block: any, errorMessage: string) => void | Promise<void>;
+  onManualFixFlowchart?: (block: any) => void;
 }
 
 /** Strip lightweight inline markers (used when computing tokens for TTS). */
@@ -253,7 +256,7 @@ function CodeBlock({ language, value, caption }: { language: string; value: stri
   );
 }
 
-export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordClick }: Props) {
+export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordClick, isAdmin = false, onRepairFlowchart, onManualFixFlowchart }: Props) {
   const b = block;
   if (!b) return null;
 
@@ -358,7 +361,12 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
       <div className="glass mx-auto max-w-3xl rounded-xl p-3 sm:p-4">
         {b.title && <div className="font-display font-bold mb-2">{b.title}</div>}
         <div className="max-h-[360px] overflow-auto">
-          <MermaidDiagram code={b.code || "graph TD\nA-->B"} />
+          <MermaidDiagram
+            code={b.code || "graph TD\nA-->B"}
+            isAdmin={isAdmin}
+            onRepair={onRepairFlowchart ? (errorMessage) => onRepairFlowchart(b, errorMessage) : undefined}
+            onManualFix={onManualFixFlowchart ? () => onManualFixFlowchart(b) : undefined}
+          />
         </div>
       </div>
     );

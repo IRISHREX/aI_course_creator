@@ -8,16 +8,21 @@ import { useCourseBySlug } from "@/hooks/useCourses";
 import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KaraokeReadMode, karaokeSeek, type KaraokeReadModeHandle } from "@/components/KaraokeReadMode";
 import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageBalanceStats, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
 import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck } from "lucide-react";
+import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
+import ThreePageBackground from "@/components/ThreePageBackground";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck, Volume2, VolumeX, MonitorPlay, MonitorOff, Settings2, Languages, MousePointer2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
+import { useCourseSettings } from "@/lib/appSettings";
+import { playLessonSound } from "@/lib/lessonExperience";
 
 type MindmapData = ComponentProps<typeof Mindmap>["data"];
 type TopicWithMindmap = Topic & { mindmap?: MindmapData };
@@ -26,12 +31,28 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function ToolButton({
+  label,
+  children,
+  ...props
+}: ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button aria-label={label} title={label} {...props}>{children}</Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export default function TopicPage() {
   const { courseSlug, slug } = useParams();
   const nav = useNavigate();
   const { user } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { course } = useCourseBySlug(courseSlug);
+  const [courseSettings, setCourseSettingsValue] = useCourseSettings(course?.id);
   const { progress, markViewed } = useProgress();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [neighbors, setNeighbors] = useState<{ prev?: Topic; next?: Topic }>({});
@@ -46,6 +67,7 @@ export default function TopicPage() {
   const [readerZoom, setReaderZoom] = useState(100);
   const [autoAdvanceRead, setAutoAdvanceRead] = useState(false);
   const [autoScrollRead, setAutoScrollRead] = useState(true);
+  const [toolbarOpen, setToolbarOpen] = useState(true);
   const readerRef = useRef<KaraokeReadModeHandle | null>(null);
   const mouseStrokeRef = useRef({ x: 0, y: 0, count: 0, lastAt: 0, dragging: false });
 
@@ -106,6 +128,7 @@ export default function TopicPage() {
   const linkPrefix = `/course/${courseSlug}`;
   const goPreviousPage = () => {
     if (pageIdx > 0) {
+      playLessonSound("page", courseSettings.lessonSoundsEnabled);
       setPageTurnDirection("prev");
       setPageIdx((p) => p - 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -115,6 +138,7 @@ export default function TopicPage() {
   };
   const goNextPage = () => {
     if (pageIdx < pages.length - 1) {
+      playLessonSound("page", courseSettings.lessonSoundsEnabled);
       setPageTurnDirection("next");
       setPageIdx((p) => p + 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -236,6 +260,59 @@ export default function TopicPage() {
     finally { setBookmarking(false); }
   };
 
+  const saveFlowchartCode = async (block: any, code: string) => {
+    if (!topic) return;
+    if (activeTranslation) {
+      const nextContent = activeTranslation.content.map((item) => item === block || (item?.type === "flowchart" && item?.code === block?.code && item?.title === block?.title) ? { ...item, code } : item);
+      const nextTranslations = translations.map((translation) =>
+        translation.languageCode === activeTranslation.languageCode ? { ...translation, content: nextContent } : translation
+      );
+      await backendApi.from("topics").update({ translations: nextTranslations } as any).eq("id", topic.id);
+      setTopic({ ...topic, translations: nextTranslations } as any);
+      return;
+    }
+
+    const nextContent = (topic.content || []).map((item) => item === block || (item?.type === "flowchart" && item?.code === block?.code && item?.title === block?.title) ? { ...item, code } : item);
+    await backendApi.from("topics").update({ content: nextContent } as any).eq("id", topic.id);
+    setTopic({ ...topic, content: nextContent });
+  };
+
+  const repairFlowchart = async (block: any, mermaidError: string) => {
+    if (!isAdmin || !topic) return;
+    try {
+      const { data, error } = await backendApi.functions.invoke("repair-mermaid", {
+        body: {
+          code: block?.code,
+          title: block?.title,
+          error: mermaidError,
+          lessonTitle: displayTopic.title || topic.title,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      await saveFlowchartCode(block, data.code);
+      toast.success("Graph repaired");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Graph repair failed"));
+    }
+  };
+
+  const manualFixFlowchart = async (block: any) => {
+    if (!isAdmin) return;
+    const nextCode = window.prompt("Paste valid Mermaid flowchart syntax:", block?.code || "graph TD\n  A[Start] --> B[End]");
+    if (nextCode === null) return;
+    if (!nextCode.trim()) {
+      toast.error("Mermaid code cannot be empty");
+      return;
+    }
+    try {
+      await saveFlowchartCode(block, nextCode.trim());
+      toast.success("Graph updated");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Graph update failed"));
+    }
+  };
+
   const canGoPrevious = pageIdx > 0 || Boolean(neighbors.prev);
   const canGoNext = pageIdx < pages.length - 1 || Boolean(neighbors.next);
   const detectPageBalance = () => {
@@ -288,6 +365,19 @@ export default function TopicPage() {
     mouseStrokeRef.current.dragging = false;
   };
 
+  const updateCourseExperience = (patch: Partial<typeof courseSettings>) => {
+    const next = { ...courseSettings, ...patch };
+    setCourseSettingsValue(next);
+    playLessonSound("tap", next.lessonSoundsEnabled);
+  };
+
+  const lessonGraphicsOn = courseSettings.threeDEnabled && courseSettings.lessonGraphicsEnabled;
+  const lessonBackground =
+    !lessonGraphicsOn ? null :
+    courseSettings.lessonVisualStyle === "particles" ? <ThreeParticleBackground className="fixed opacity-45" /> :
+    courseSettings.lessonVisualStyle === "orbit" ? <ThreePageBackground className="fixed opacity-60" /> :
+    <LessonTerrainBackground className="opacity-35" />;
+
   return (
     <div
       className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10"
@@ -297,46 +387,91 @@ export default function TopicPage() {
       onMouseUp={handleReaderMouseUp}
       onMouseLeave={handleReaderMouseUp}
     >
-      <LessonTerrainBackground className="opacity-35" />
-      <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 md:flex-row md:items-center md:justify-between">
+      {lessonBackground}
+      <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
         <Button asChild variant="ghost" size="sm" className="max-w-full justify-start px-2">
           <Link to={linkPrefix} className="min-w-0">
             <ArrowLeft className="h-4 w-4 shrink-0 mr-1" />
             <span className="truncate">{course?.title || "Course"}</span>
           </Link>
         </Button>
-        <div className="grid grid-cols-6 gap-1.5 sm:flex sm:items-center sm:gap-2">
+        <ToolButton label={toolbarOpen ? "Hide lesson toolbar" : "Show lesson toolbar"} variant={toolbarOpen ? "neon" : "ghost"} size="icon" onClick={() => setToolbarOpen((value) => !value)}>
+          <Settings2 className="h-4 w-4" />
+        </ToolButton>
+      </div>
+
+      {toolbarOpen && (
+        <div className="mb-5 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger className="h-9 w-[170px]" aria-label="Lesson language" title="Lesson language">
+              <Languages className="mr-2 h-4 w-4 text-primary" />
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              {LESSON_LANGUAGES.map((language) => {
+                const ready = language.code === "en" || translations.some((translation) => translation.languageCode === language.code);
+                return (
+                  <SelectItem key={language.code} value={language.code}>
+                    {language.label} - {language.nativeLabel}{ready ? "" : " - AI"}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
           <KaraokeReadMode ref={readerRef} text={pageText} lang={selectedLanguage} onWordIndex={setActiveWord} autoScroll={autoScrollRead} onDone={autoAdvanceRead ? goNextPage : undefined} />
-          <Button
+          <ToolButton
+            label="Auto next after read mode"
             variant={autoAdvanceRead ? "neon" : "ghost"}
             size="icon"
             onClick={() => setAutoAdvanceRead((value) => !value)}
-            title="Auto next after read mode"
-            aria-label="Auto next after read mode"
           >
             <ChevronsRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={autoScrollRead ? "neon" : "ghost"}
-            size="sm"
-            onClick={() => setAutoScrollRead((value) => !value)}
-            title="Auto scroll on/off (Ctrl+O)"
-            aria-label="Auto scroll on/off"
-            className="col-span-2 px-2 sm:col-span-1"
+          </ToolButton>
+          <ToolButton
+            label="Lesson graphics on/off"
+            variant={lessonGraphicsOn ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => updateCourseExperience({ lessonGraphicsEnabled: !courseSettings.lessonGraphicsEnabled })}
           >
-            Auto scroll
-          </Button>
+            {lessonGraphicsOn ? <MonitorPlay className="h-4 w-4" /> : <MonitorOff className="h-4 w-4" />}
+          </ToolButton>
+          <ToolButton
+            label="Sounds on/off"
+            variant={courseSettings.lessonSoundsEnabled ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => updateCourseExperience({ lessonSoundsEnabled: !courseSettings.lessonSoundsEnabled })}
+          >
+            {courseSettings.lessonSoundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </ToolButton>
+          <ToolButton
+            label="Auto scroll on/off (Ctrl+O)"
+            variant={autoScrollRead ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => setAutoScrollRead((value) => !value)}
+          >
+            <MousePointer2 className="h-4 w-4" />
+          </ToolButton>
           {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
-          <Button variant="ghost" size="icon" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
+          <ToolButton label="Bookmark this page" variant="ghost" size="icon" onClick={addBookmark} disabled={bookmarking}>
             {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
-          </Button>
+          </ToolButton>
           {isAdmin && (
-            <Button asChild variant="neon" size="icon" aria-label="Edit lesson">
+            <ToolButton label="Edit lesson" asChild variant="neon" size="icon">
               <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4" /></Link>
-            </Button>
+            </ToolButton>
+          )}
+          {selectedLanguage !== "en" && !activeTranslation && isAdmin && (
+            <ToolButton label={`Generate ${languageByCode(selectedLanguage).label} version`} variant="neon" size="icon" onClick={generateLanguageVersion} disabled={generatingLanguage}>
+              {generatingLanguage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            </ToolButton>
           )}
         </div>
-      </div>
+        {selectedLanguage !== "en" && !activeTranslation && (
+          <div className="mt-2 text-xs text-muted-foreground">{languageByCode(selectedLanguage).label} version is not generated yet.</div>
+        )}
+        </div>
+      )}
 
       <div className="mb-5 grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl sm:grid-cols-2">
         {neighbors.prev ? (
@@ -368,7 +503,7 @@ export default function TopicPage() {
         )}
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl">
+      <div className="hidden">
         <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
           <SelectTrigger className="w-full sm:w-56" aria-label="Lesson language">
             <SelectValue placeholder="Lesson language" />
@@ -478,6 +613,9 @@ export default function TopicPage() {
                   wordOffset={wo}
                   activeWordIndex={activeWord}
                   onWordClick={(idx) => karaokeSeek(idx)}
+                  isAdmin={isAdmin}
+                  onRepairFlowchart={repairFlowchart}
+                  onManualFixFlowchart={manualFixFlowchart}
                 />
               );
             });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 export type ThreePositionPreset = "left" | "right" | "top" | "bottom" | "custom";
+export type LessonVisualStyle = "terrain" | "particles" | "orbit";
 
 export type AppSettings = {
   profile: {
@@ -36,6 +37,10 @@ export type CourseSettings = {
   duplicateCleanupPrompt: string;
   threeDEnabled: boolean;
   threeDSpeed: number;
+  lessonGraphicsEnabled: boolean;
+  lessonVisualStyle: LessonVisualStyle;
+  lessonSoundsEnabled: boolean;
+  quizEnhanced: boolean;
 };
 
 const APP_SETTINGS_KEY = "signal.admin.settings";
@@ -76,6 +81,10 @@ export const DEFAULT_COURSE_SETTINGS: CourseSettings = {
   duplicateCleanupPrompt: "",
   threeDEnabled: true,
   threeDSpeed: 1,
+  lessonGraphicsEnabled: true,
+  lessonVisualStyle: "terrain",
+  lessonSoundsEnabled: true,
+  quizEnhanced: true,
 };
 
 function mergeAppSettings(value: Partial<AppSettings>): AppSettings {
@@ -135,6 +144,26 @@ export function getCourseSettings(courseId?: string): CourseSettings {
 
 export function setCourseSettings(courseId: string, settings: CourseSettings) {
   localStorage.setItem(`${COURSE_SETTINGS_PREFIX}${courseId}`, JSON.stringify(settings));
+  window.dispatchEvent(new Event(SETTINGS_EVENT));
+}
+
+export function useCourseSettings(courseId?: string) {
+  const [settings, setSettingsState] = useState(() => getCourseSettings(courseId));
+  useEffect(() => {
+    const refresh = () => setSettingsState(getCourseSettings(courseId));
+    refresh();
+    window.addEventListener(SETTINGS_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(SETTINGS_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, [courseId]);
+  const update = (next: CourseSettings) => {
+    setSettingsState(next);
+    if (courseId) setCourseSettings(courseId, next);
+  };
+  return [settings, update] as const;
 }
 
 function hexToHsl(hex: string) {

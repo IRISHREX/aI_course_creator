@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { DEFAULT_COURSE_SETTINGS, getCourseSettings, setCourseSettings, type CourseSettings as CourseSettingsValue } from "@/lib/appSettings";
-import { ArrowLeft, RotateCcw, Save, Settings2 } from "lucide-react";
+import { ArrowLeft, Orbit, RotateCcw, Save, Settings2, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -62,6 +62,41 @@ export default function CourseSettings() {
           <Label>Course 3D speed: {settings.threeDSpeed.toFixed(1)}x</Label>
           <Slider min={0.2} max={3} step={0.1} value={[settings.threeDSpeed]} onValueChange={([threeDSpeed]) => setSettings({ ...settings, threeDSpeed })} />
         </div>
+        <label className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+          <span><span className="block text-sm font-medium">Lesson screen graphics</span><span className="text-xs text-muted-foreground">Show Three.js screensaver-style graphics behind lessons.</span></span>
+          <Switch checked={settings.lessonGraphicsEnabled} onCheckedChange={lessonGraphicsEnabled => setSettings({ ...settings, lessonGraphicsEnabled })} />
+        </label>
+        <div>
+          <Label>Lesson graphic style</Label>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {[
+              { value: "terrain", label: "Terrain", icon: Sparkles },
+              { value: "particles", label: "Particles", icon: Settings2 },
+              { value: "orbit", label: "Orbit", icon: Orbit },
+            ].map((option) => {
+              const Icon = option.icon;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant={settings.lessonVisualStyle === option.value ? "hero" : "outline"}
+                  onClick={() => setSettings({ ...settings, lessonVisualStyle: option.value as any })}
+                  className="justify-start gap-2"
+                >
+                  <Icon className="h-4 w-4" /> {option.label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+        <label className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+          <span><span className="block text-sm font-medium">Lesson and quiz sounds</span><span className="text-xs text-muted-foreground">Play subtle feedback tones for page turns, answers, and completion.</span></span>
+          <Switch checked={settings.lessonSoundsEnabled} onCheckedChange={lessonSoundsEnabled => setSettings({ ...settings, lessonSoundsEnabled })} />
+        </label>
+        <label className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+          <span><span className="block text-sm font-medium">Enhanced quiz screens</span><span className="text-xs text-muted-foreground">Use progress, streak, instant feedback, and review-style quiz UI.</span></span>
+          <Switch checked={settings.quizEnhanced} onCheckedChange={quizEnhanced => setSettings({ ...settings, quizEnhanced })} />
+        </label>
       </div>
 
       <div className="mt-5 flex gap-2">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { Loader2, Pencil, RotateCcw, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Node { id: string; label: string; info?: string; detail?: string; description?: string; children?: Node[] }
@@ -334,19 +334,73 @@ export function Mindmap({ data, exportMode = false }: { data: Node | null | unde
 }
 
 /** Generic mermaid renderer for flowcharts */
-export function MermaidDiagram({ code }: { code: string }) {
+export function MermaidDiagram({
+  code,
+  isAdmin = false,
+  onRepair,
+  onManualFix,
+}: {
+  code: string;
+  isAdmin?: boolean;
+  onRepair?: (errorMessage: string) => void | Promise<void>;
+  onManualFix?: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState("");
+  const [repairing, setRepairing] = useState(false);
   useEffect(() => {
-    if (!code || !ref.current) return;
+    if (!code) return;
     let active = true;
+    setError("");
+    setSvg("");
+    if (ref.current) ref.current.innerHTML = "";
     const id = "md-" + Math.random().toString(36).slice(2, 9);
     const safeCode = sanitizeMermaidFlowchart(code);
-    loadMermaid().then((mermaid) => mermaid.render(id, safeCode)).then(({ svg }) => {
-      if (active && ref.current) ref.current.innerHTML = svg;
+    loadMermaid().then(async (mermaid) => {
+      const parsed = await mermaid.parse(safeCode, { suppressErrors: true } as any);
+      if (parsed === false) throw new Error("Mermaid graph could not parse");
+      return mermaid.render(id, safeCode);
+    }).then((result) => {
+      const nextSvg = result.svg || "";
+      const isMermaidError = /Syntax error in text|mermaid version|error-icon|class="error"/i.test(nextSvg);
+      if (isMermaidError) throw new Error("Mermaid graph could not render");
+      if (active) setSvg(nextSvg);
     }).catch(err => {
-      if (active && ref.current) ref.current.innerHTML = `<pre class="text-xs text-destructive p-3">${err.message}</pre>`;
+      if (active) setError(err?.message || "Mermaid graph could not render");
     });
     return () => { active = false; };
   }, [code]);
-  return <div ref={ref} className="w-full overflow-auto" />;
+
+  const repair = async () => {
+    if (!onRepair) return;
+    setRepairing(true);
+    try {
+      await onRepair(error);
+    } finally {
+      setRepairing(false);
+    }
+  };
+
+  if (error) {
+    if (!isAdmin) return null;
+    return (
+      <div className="rounded-xl border border-destructive/35 bg-destructive/5 p-3 text-sm">
+        <div className="font-medium text-destructive">Mermaid graph needs repair</div>
+        <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{error}</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="neon" size="sm" onClick={repair} disabled={repairing || !onRepair}>
+            {repairing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1 h-3.5 w-3.5" />}
+            Reimagine graph
+          </Button>
+          <Button variant="outline" size="sm" onClick={onManualFix} disabled={!onManualFix}>
+            <Pencil className="mr-1 h-3.5 w-3.5" />
+            Manual fix
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return <div ref={ref} className="w-full overflow-auto" dangerouslySetInnerHTML={svg ? { __html: svg } : undefined} />;
 }
