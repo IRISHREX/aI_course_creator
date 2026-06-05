@@ -20,6 +20,10 @@ interface Props {
 /** Strip lightweight inline markers (used when computing tokens for TTS). */
 function stripMarkup(s: string): string {
   return s
+    .replace(/\$\$([\s\S]+?)\$\$/g, "$1")
+    .replace(/\$([^$\n]+?)\$/g, "$1")
+    .replace(/\\\[([\s\S]+?)\\\]/g, "$1")
+    .replace(/\\\(([\s\S]+?)\\\)/g, "$1")
     .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/`(.+?)`/g, "$1");
@@ -31,7 +35,7 @@ type TextSegment = { type: "text"; value: string } | { type: "math"; value: stri
 
 function splitMathSegments(value: string): TextSegment[] {
   const segments: TextSegment[] = [];
-  const pattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\))/g;
+  const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\))/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(value))) {
@@ -39,6 +43,8 @@ function splitMathSegments(value: string): TextSegment[] {
     const raw = match[0];
     const math = raw.startsWith("$$")
       ? raw.slice(2, -2)
+      : raw.startsWith("$")
+        ? raw.slice(1, -1)
       : raw.startsWith("\\[") || raw.startsWith("\\(")
         ? raw.slice(2, -2)
         : raw;
@@ -204,6 +210,7 @@ function normalizeMathValue(value: unknown, caption: unknown = "") {
 
   const patterns = [
     /\$\$([\s\S]+?)\$\$/,
+    /\$([^$\n]+?)\$/,
     /\\\[([\s\S]+?)\\\]/,
     /\\\(([\s\S]+?)\\\)/,
   ];

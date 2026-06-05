@@ -457,6 +457,7 @@ function normalizeMathValue(value: unknown, caption: unknown = "") {
 
   const patterns = [
     /\$\$([\s\S]+?)\$\$/,
+    /\$([^$\n]+?)\$/,
     /\\\[([\s\S]+?)\\\]/,
     /\\\(([\s\S]+?)\\\)/,
   ];
