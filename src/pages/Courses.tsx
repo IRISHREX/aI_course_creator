@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { useCourses } from "@/hooks/useCourses";
@@ -6,7 +6,7 @@ import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUpDown, BookOpen, CalendarDays, Check, ChevronDown, Plus, SlidersHorizontal, Sparkles, Tag, Trash2, X } from "lucide-react";
+import { ArrowUpDown, BookOpen, CalendarDays, Check, ChevronDown, PlayCircle, Plus, SlidersHorizontal, Sparkles, Tag, Trash2, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { backendApi } from "@/integrations/api/client";
@@ -37,6 +37,7 @@ function dateInputTime(value: string, endOfDay = false) {
 export default function Courses() {
   const { courses, loading, refresh } = useCourses();
   const { isAdmin } = useIsAdmin();
+  const navigate = useNavigate();
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [dateMode, setDateMode] = useState<DateMode>("all");
@@ -266,8 +267,17 @@ export default function Courses() {
                       {c.tags.length > 4 && <span className="text-[10px] text-muted-foreground">+{c.tags.length - 4}</span>}
                     </div>
                   )}
-                  <div className="mt-5 flex items-center justify-between">
+                  <div className="mt-5 flex items-center justify-between gap-2">
                     <span className="text-xs font-mono text-primary inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> Open course -&gt;</span>
+                    <button
+                      onClick={(e) => { e.preventDefault(); navigate(`/course/${c.slug}/read`); }}
+                      className="inline-flex h-8 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 text-xs font-medium text-primary transition hover:bg-primary/20"
+                      title="Play course slides"
+                      aria-label={`Play ${c.title} slides`}
+                    >
+                      <PlayCircle className="h-3.5 w-3.5" />
+                      Play
+                    </button>
                     {isAdmin && (
                       <button onClick={(e) => { e.preventDefault(); remove(c.id, c.title); }}
                         className="text-muted-foreground hover:text-destructive p-1">

@@ -221,8 +221,8 @@ function readSavedPositions(storageKey: string): SavedPositions {
 function nodeSize(depth: number, hasInfo: boolean) {
   const isRoot = depth === 0;
   return {
-    width: isRoot ? 190 : depth === 1 ? 160 : 138,
-    height: isRoot ? 86 : hasInfo ? 86 : 62,
+    width: isRoot ? 192 : depth === 1 ? 162 : 140,
+    height: isRoot ? 88 : hasInfo ? 88 : 64,
   };
 }
 
@@ -284,7 +284,7 @@ function MindmapNode({
       </div>
       {info && (
         <div
-          className="mt-1 line-clamp-3 text-[10px] leading-snug"
+          className="mt-1 line-clamp-3 text-[9.5px] leading-[1.25]"
           style={{ color: isRoot ? "hsl(var(--primary-foreground) / 0.78)" : depth === 1 ? color.text : "hsl(var(--muted-foreground))" }}
         >
           {info}
@@ -294,11 +294,13 @@ function MindmapNode({
   );
 }
 
-export function Mindmap({ data, exportMode = false }: { data: Node | null | undefined; exportMode?: boolean }) {
+export function Mindmap({ data, exportMode = false, fitView = false }: { data: Node | null | undefined; exportMode?: boolean; fitView?: boolean }) {
   const storageKey = useMemo(() => storageKeyForMindmap(data), [data]);
   const basePositioned = useMemo(() => data ? layoutMindmap(data) : [], [data]);
   const [savedPositions, setSavedPositions] = useState<SavedPositions>(() => readSavedPositions(storageKey));
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState>(null);
 
   useEffect(() => {
@@ -306,6 +308,15 @@ export function Mindmap({ data, exportMode = false }: { data: Node | null | unde
     setDraggingKey(null);
     dragRef.current = null;
   }, [storageKey]);
+
+  useEffect(() => {
+    if (!fitView || !containerRef.current) return;
+    const updateWidth = () => setContainerWidth(containerRef.current?.clientWidth || 0);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [fitView]);
 
   const positioned = useMemo(() => basePositioned.map((item) => {
     const saved = savedPositions[item.key];
@@ -326,7 +337,13 @@ export function Mindmap({ data, exportMode = false }: { data: Node | null | unde
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>, item: PositionedNode, width: number, height: number) => {
     const drag = dragRef.current;
     if (!drag || drag.key !== item.key) return;
-    const nextPoint = clampNodePosition(drag.startX + event.clientX - drag.startClientX, drag.startY + event.clientY - drag.startClientY, width, height);
+    const scale = fitView && containerWidth ? Math.min(1, Math.max(0.58, (containerWidth - 24) / CANVAS.width)) : 1;
+    const nextPoint = clampNodePosition(
+      drag.startX + (event.clientX - drag.startClientX) / scale,
+      drag.startY + (event.clientY - drag.startClientY) / scale,
+      width,
+      height,
+    );
     setSavedPositions((current) => {
       const next = { ...current, [item.key]: nextPoint };
       persistPositions(next);
@@ -348,70 +365,79 @@ export function Mindmap({ data, exportMode = false }: { data: Node | null | unde
   if (!data) return null;
   const branches = data.children || [];
   const byKey = new Map(positioned.map((item) => [item.key, item]));
+  const scale = fitView && containerWidth ? Math.min(1, Math.max(0.58, (containerWidth - 24) / CANVAS.width)) : 1;
   return (
-    <div className="w-full overflow-auto rounded-xl border border-border/70 bg-background/35 p-3">
+    <div ref={containerRef} className="w-full overflow-auto rounded-xl border border-border/70 bg-background/35 p-3">
       {branches.length > 0 ? (
-        <div className="relative mx-auto min-w-[980px]" style={{ width: CANVAS.width, height: CANVAS.height }}>
-          {!exportMode && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute right-2 top-2 z-40 h-8 bg-background/70 px-2 text-xs backdrop-blur"
-              onClick={resetLayout}
-              title="Reset mind map layout"
-            >
-              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset layout
-            </Button>
-          )}
-          <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${CANVAS.width} ${CANVAS.height}`} aria-hidden="true">
-            {[105, 190, 300, 415].map((radius) => (
-              <circle
-                key={radius}
-                cx={CANVAS.cx}
-                cy={CANVAS.cy}
-                r={radius}
-                fill="none"
-                stroke="hsl(var(--border))"
-                strokeDasharray="5 8"
-                strokeOpacity="0.46"
+        <div
+          className="relative mx-auto"
+          style={{ width: CANVAS.width * scale, height: CANVAS.height * scale, minWidth: fitView ? undefined : CANVAS.width }}
+        >
+          <div
+            className="relative"
+            style={{ width: CANVAS.width, height: CANVAS.height, transform: `scale(${scale})`, transformOrigin: "top left" }}
+          >
+            {!exportMode && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-2 top-2 z-40 h-8 bg-background/70 px-2 text-xs backdrop-blur"
+                onClick={resetLayout}
+                title="Reset mind map layout"
+              >
+                <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset layout
+              </Button>
+            )}
+            <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${CANVAS.width} ${CANVAS.height}`} aria-hidden="true">
+              {[105, 190, 300, 415].map((radius) => (
+                <circle
+                  key={radius}
+                  cx={CANVAS.cx}
+                  cy={CANVAS.cy}
+                  r={radius}
+                  fill="none"
+                  stroke="hsl(var(--border))"
+                  strokeDasharray="5 8"
+                  strokeOpacity="0.46"
+                />
+              ))}
+              {branches.map((_branch, index) => {
+                const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(branches.length, 1);
+                const end = polarPoint(angle, 440);
+                return <line key={index} x1={CANVAS.cx} y1={CANVAS.cy} x2={end.x} y2={end.y} stroke="hsl(var(--border))" strokeOpacity="0.28" />;
+              })}
+              {positioned.filter((item) => item.parentKey).map((item) => {
+                const parent = byKey.get(item.parentKey!);
+                if (!parent) return null;
+                const color = BRANCH_COLORS[item.branchIndex % BRANCH_COLORS.length];
+                const midRadius = item.depth === 1 ? 70 : 34;
+                const cx1 = parent.x + Math.cos(parent.angle) * midRadius;
+                const cy1 = parent.y + Math.sin(parent.angle) * midRadius;
+                const cx2 = item.x - Math.cos(item.angle) * midRadius;
+                const cy2 = item.y - Math.sin(item.angle) * midRadius;
+                return (
+                  <path
+                    key={`${parent.key}-${item.key}`}
+                    d={`M ${parent.x} ${parent.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${item.x} ${item.y}`}
+                    fill="none"
+                    stroke={color.border}
+                    strokeWidth={item.depth === 1 ? 3 : 1.7}
+                    strokeOpacity={item.depth === 1 ? 0.9 : 0.72}
+                  />
+                );
+              })}
+            </svg>
+            {positioned.map((item) => (
+              <MindmapNode
+                key={item.key}
+                item={item}
+                isDragging={draggingKey === item.key}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
               />
             ))}
-            {branches.map((_branch, index) => {
-              const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(branches.length, 1);
-              const end = polarPoint(angle, 440);
-              return <line key={index} x1={CANVAS.cx} y1={CANVAS.cy} x2={end.x} y2={end.y} stroke="hsl(var(--border))" strokeOpacity="0.28" />;
-            })}
-            {positioned.filter((item) => item.parentKey).map((item) => {
-              const parent = byKey.get(item.parentKey!);
-              if (!parent) return null;
-              const color = BRANCH_COLORS[item.branchIndex % BRANCH_COLORS.length];
-              const midRadius = item.depth === 1 ? 70 : 34;
-              const cx1 = parent.x + Math.cos(parent.angle) * midRadius;
-              const cy1 = parent.y + Math.sin(parent.angle) * midRadius;
-              const cx2 = item.x - Math.cos(item.angle) * midRadius;
-              const cy2 = item.y - Math.sin(item.angle) * midRadius;
-              return (
-                <path
-                  key={`${parent.key}-${item.key}`}
-                  d={`M ${parent.x} ${parent.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${item.x} ${item.y}`}
-                  fill="none"
-                  stroke={color.border}
-                  strokeWidth={item.depth === 1 ? 3 : 1.7}
-                  strokeOpacity={item.depth === 1 ? 0.9 : 0.72}
-                />
-              );
-            })}
-          </svg>
-          {positioned.map((item) => (
-            <MindmapNode
-              key={item.key}
-              item={item}
-              isDragging={draggingKey === item.key}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-            />
-          ))}
+          </div>
         </div>
       ) : (
         <div className="text-center text-sm text-muted-foreground">No branches in this mind map yet.</div>

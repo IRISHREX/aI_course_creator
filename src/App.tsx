@@ -14,6 +14,7 @@ const Index = lazy(() => import("./pages/Index"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Courses = lazy(() => import("./pages/Courses"));
 const CourseDetail = lazy(() => import("./pages/CourseDetail"));
+const CourseReader = lazy(() => import("./pages/CourseReader"));
 const CourseEdit = lazy(() => import("./pages/CourseEdit"));
 const AdminUpload = lazy(() => import("./pages/AdminUpload"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -62,6 +63,7 @@ const Content = () => {
               </Route>
               <Route path="/bookmarks" element={<Bookmarks />} />
               <Route path="/course/:courseSlug" element={<CourseDetail />} />
+              <Route path="/course/:courseSlug/read" element={<CourseReader />} />
               <Route path="/course/:courseSlug/edit" element={<CourseEdit />} />
               <Route path="/course/:courseSlug/settings" element={<CourseSettings />} />
               <Route path="/course/:courseSlug/board" element={<CoverageBoard />} />
