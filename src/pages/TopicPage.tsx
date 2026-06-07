@@ -9,6 +9,7 @@ import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { KaraokeReadMode, karaokeSeek, type KaraokeReadModeHandle } from "@/components/KaraokeReadMode";
 import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
@@ -17,7 +18,7 @@ import { Mindmap } from "@/components/Mindmap";
 import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 import ThreePageBackground from "@/components/ThreePageBackground";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck, Volume2, VolumeX, MonitorPlay, MonitorOff, Settings2, Languages, MousePointer2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck, Volume2, VolumeX, MonitorPlay, MonitorOff, Settings2, Languages, MousePointer2, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
@@ -541,8 +542,28 @@ export default function TopicPage() {
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} dir={displayTopic.dir}>
         <div className="text-xs font-mono text-primary tracking-widest mb-2">UNIT {topic.unit} · LESSON {topic.order_index}</div>
-        <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl md:text-5xl">{displayTopic.title}</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base md:text-lg">{displayTopic.summary}</p>
+        <div className="flex max-w-5xl items-start gap-2">
+          <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl md:text-5xl">{displayTopic.title}</h1>
+          {displayTopic.summary && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="mt-1 h-8 w-8 flex-none rounded-full text-muted-foreground hover:text-primary sm:mt-2 md:mt-3"
+                  aria-label="Lesson description"
+                  title="Lesson description"
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="bottom" className="w-[min(28rem,calc(100vw-2rem))] text-sm leading-6 text-muted-foreground">
+                {displayTopic.summary}
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
       </motion.div>
 
       <div className="my-5 sm:my-8"><Visualization kind={topic.visualization} /></div>
