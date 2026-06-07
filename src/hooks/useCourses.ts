@@ -8,6 +8,7 @@ export interface Course {
   description: string;
   cover_emoji: string | null;
   order_index: number;
+  mindmap?: unknown;
   tags?: string[] | null;
   created_at?: string | null;
   updated_at?: string | null;

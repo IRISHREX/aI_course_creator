@@ -165,6 +165,11 @@ export default function TopicPage() {
         });
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        readerRef.current?.toggleRead();
+        return;
+      }
       if (event.key === "ArrowRight") {
         event.preventDefault();
         goNextPage();
@@ -447,7 +452,7 @@ export default function TopicPage() {
             {courseSettings.lessonSoundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </ToolButton>
           <ToolButton
-            label="Auto scroll on/off (Ctrl+O)"
+            label="Auto scroll on/off (Ctrl+O). Read on/off uses Ctrl+I"
             variant={autoScrollRead ? "neon" : "ghost"}
             size="icon"
             onClick={() => setAutoScrollRead((value) => !value)}

@@ -17,6 +17,7 @@ interface Props {
 }
 
 export interface KaraokeReadModeHandle {
+  toggleRead: () => void;
   togglePause: () => void;
   pause: () => void;
   resume: () => void;
@@ -186,7 +187,24 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
     else if (state === "paused") { window.speechSynthesis.resume(); setState("playing"); }
   };
 
+  const stop = () => {
+    if (!supported) return;
+    stopRequestedRef.current = true;
+    utterIdRef.current += 1;
+    window.speechSynthesis.cancel();
+    utterRef.current = null;
+    setState("idle");
+    onWordIndex?.(null);
+  };
+
+  const toggleRead = () => {
+    if (!supported) return;
+    if (state === "idle") start();
+    else stop();
+  };
+
   useImperativeHandle(ref, () => ({
+    toggleRead,
     togglePause,
     pause: () => {
       if (!supported || state !== "playing") return;
@@ -199,16 +217,6 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
       setState("playing");
     },
   }), [state, supported]);
-
-  const stop = () => {
-    if (!supported) return;
-    stopRequestedRef.current = true;
-    utterIdRef.current += 1;
-    window.speechSynthesis.cancel();
-    utterRef.current = null;
-    setState("idle");
-    onWordIndex?.(null);
-  };
 
   if (!supported) {
     return (

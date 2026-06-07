@@ -92,6 +92,7 @@ export default function CourseReader() {
     }
     topics.forEach((topic) => {
       const item = topic as TopicWithMindmap;
+      if (!item.mindmap) return;
       list.push({
         id: item.id,
         kind: "lesson",

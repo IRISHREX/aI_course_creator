@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCourses } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,25 @@ export default function Courses() {
   const [dateMode, setDateMode] = useState<DateMode>("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [coursesWithLessonMindmaps, setCoursesWithLessonMindmaps] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const courseIds = courses.map((course) => course.id);
+    if (!courseIds.length) {
+      setCoursesWithLessonMindmaps(new Set());
+      return;
+    }
+
+    let active = true;
+    backendApi.from("topics").select("course_id,mindmap").in("course_id", courseIds)
+      .then(({ data }) => {
+        if (!active) return;
+        setCoursesWithLessonMindmaps(new Set(((data as any[]) || [])
+          .filter((topic) => topic.mindmap)
+          .map((topic) => topic.course_id)));
+      });
+    return () => { active = false; };
+  }, [courses]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -269,15 +288,17 @@ export default function Courses() {
                   )}
                   <div className="mt-5 flex items-center justify-between gap-2">
                     <span className="text-xs font-mono text-primary inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> Open course -&gt;</span>
-                    <button
-                      onClick={(e) => { e.preventDefault(); navigate(`/course/${c.slug}/read`); }}
-                      className="inline-flex h-8 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 text-xs font-medium text-primary transition hover:bg-primary/20"
-                      title="Play course slides"
-                      aria-label={`Play ${c.title} slides`}
-                    >
-                      <PlayCircle className="h-3.5 w-3.5" />
-                      Play
-                    </button>
+                    {(c.mindmap || coursesWithLessonMindmaps.has(c.id)) && (
+                      <button
+                        onClick={(e) => { e.preventDefault(); navigate(`/course/${c.slug}/read`); }}
+                        className="inline-flex h-8 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 text-xs font-medium text-primary transition hover:bg-primary/20"
+                        title="Play course slides"
+                        aria-label={`Play ${c.title} slides`}
+                      >
+                        <PlayCircle className="h-3.5 w-3.5" />
+                        Play
+                      </button>
+                    )}
                     {isAdmin && (
                       <button onClick={(e) => { e.preventDefault(); remove(c.id, c.title); }}
                         className="text-muted-foreground hover:text-destructive p-1">

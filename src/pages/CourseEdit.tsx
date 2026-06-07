@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useCourseBySlug } from "@/hooks/useCourses";
@@ -106,6 +106,7 @@ export default function CourseEdit() {
   const [duplicateScanning, setDuplicateScanning] = useState(false);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateScanGroup[]>([]);
   const [duplicateDeleting, setDuplicateDeleting] = useState<string | null>(null);
+  const [draggingTopicId, setDraggingTopicId] = useState<string | null>(null);
   const duplicateUnitFallback = Array.from(new Set(topics.map(t => Number(t.unit)).filter(Number.isFinite))).sort((a, b) => a - b)[0] || 1;
   const units = Array.from(new Set(topics.map(t => Number(t.unit)).filter(Number.isFinite))).sort((a, b) => a - b);
   const selectedDuplicateUnits = duplicateSelectedUnits.length ? duplicateSelectedUnits : [duplicateUnitFallback];
@@ -136,6 +137,7 @@ export default function CourseEdit() {
   const selectedLanguage = languageByCode(translationLanguage);
   const translatedCount = topics.filter((topic) => normalizeTranslations((topic as any).translations).some((item) => item.languageCode === translationLanguage)).length;
   const missingTranslationCount = Math.max(0, topics.length - translatedCount);
+  const nextUnitNumber = units.length + 1;
 
   const refreshTopics = async () => {
     const { data } = await backendApi.from("topics").select("*").eq("course_id", course.id).order("unit").order("order_index");
@@ -218,27 +220,93 @@ export default function CourseEdit() {
     }
   };
 
-  const resequenceTopics = async (sourceTopics = topics, removedIds: string[] = []) => {
+  const sortedTopics = [...topics].sort((a, b) => a.unit === b.unit ? a.order_index - b.order_index : a.unit - b.unit);
+
+  const serializeTopics = (sourceTopics: typeof topics) => {
+    const unitMap = new Map<number, number>();
+    const nextOrderByUnit = new Map<number, number>();
+
+    return sourceTopics.map((topic) => {
+      const rawUnit = Number.isFinite(Number(topic.unit)) && Number(topic.unit) > 0 ? Number(topic.unit) : 1;
+      if (!unitMap.has(rawUnit)) unitMap.set(rawUnit, unitMap.size + 1);
+      const unit = unitMap.get(rawUnit)!;
+      const orderIndex = nextOrderByUnit.get(unit) ?? 0;
+      nextOrderByUnit.set(unit, orderIndex + 1);
+      return { ...topic, unit, order_index: orderIndex };
+    });
+  };
+
+  const persistSerializedTopics = async (orderedTopics: typeof topics, message = "Lesson order updated") => {
+    const serialized = serializeTopics(orderedTopics);
+    setTopics(serialized);
+    const updates = serialized
+      .filter((topic) => {
+        const before = topics.find((item) => item.id === topic.id);
+        return !before || before.unit !== topic.unit || before.order_index !== topic.order_index;
+      })
+      .map((topic) => backendApi.from("topics").update({ unit: topic.unit, order_index: topic.order_index } as any).eq("id", topic.id).then(({ error }) => {
+        if (error) throw error;
+      }));
+    await Promise.all(updates);
+    await refreshTopics();
+    if (updates.length) toast.success(message);
+    else toast.info("Lessons are already serialized");
+  };
+
+  const resequenceTopics = async (sourceTopics = topics, removedIds: string[] = [], message = "Lessons reserialized") => {
     const removed = new Set(removedIds);
     const nextTopics = sourceTopics
       .filter((topic) => !removed.has(topic.id))
       .sort((a, b) => a.unit === b.unit ? a.order_index - b.order_index : a.unit - b.unit);
-    const byUnit = nextTopics.reduce<Record<number, typeof nextTopics>>((acc, topic) => {
-      (acc[topic.unit] ||= []).push(topic);
-      return acc;
-    }, {});
+    await persistSerializedTopics(nextTopics, message);
+  };
 
-    const updates: Promise<unknown>[] = [];
-    Object.values(byUnit).forEach((unitTopics) => {
-      unitTopics.forEach((topic, index) => {
-        if (topic.order_index !== index) {
-          updates.push(backendApi.from("topics").update({ order_index: index } as any).eq("id", topic.id).then(({ error }) => {
-            if (error) throw error;
-          }));
-        }
-      });
-    });
-    await Promise.all(updates);
+  const handleSerializeLessons = async () => {
+    setBulkBusy(true);
+    try {
+      await resequenceTopics(topics, [], "Lessons reserialized");
+    } catch (e: any) {
+      toast.error(e.message || "Could not reserialize lessons");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleLessonDragStart = (event: DragEvent<HTMLTableRowElement>, topicId: string) => {
+    setDraggingTopicId(topicId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", topicId);
+  };
+
+  const handleLessonDrop = async (event: DragEvent<HTMLTableRowElement>, targetTopicId: string) => {
+    event.preventDefault();
+    const sourceId = event.dataTransfer.getData("text/plain") || draggingTopicId;
+    setDraggingTopicId(null);
+    if (!sourceId || sourceId === targetTopicId) return;
+
+    const sourceTopic = sortedTopics.find((topic) => topic.id === sourceId);
+    const targetTopic = sortedTopics.find((topic) => topic.id === targetTopicId);
+    if (!sourceTopic || !targetTopic) return;
+
+    const withoutSource = sortedTopics.filter((topic) => topic.id !== sourceId);
+    const targetIndex = withoutSource.findIndex((topic) => topic.id === targetTopicId);
+    if (targetIndex < 0) return;
+    const movedTopic = { ...sourceTopic, unit: targetTopic.unit };
+    const ordered = [
+      ...withoutSource.slice(0, targetIndex),
+      movedTopic,
+      ...withoutSource.slice(targetIndex),
+    ];
+
+    setBulkBusy(true);
+    try {
+      await persistSerializedTopics(ordered, "Lesson moved and reserialized");
+    } catch (e: any) {
+      toast.error(e.message || "Could not move lesson");
+      await refreshTopics();
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   const generateOne = async (topicId: string) => {
@@ -373,7 +441,8 @@ export default function CourseEdit() {
     if (error) toast.error(error.message);
     else {
       toast.success(orderIndex === 0 ? "Unit title updated" : "Lesson indexing updated");
-      await refreshTopics();
+      const nextTopics = await refreshTopics();
+      await resequenceTopics(nextTopics, [], "Lessons reserialized");
     }
   };
 
@@ -397,7 +466,7 @@ export default function CourseEdit() {
     const titleIn = prompt("New lesson title:");
     if (!titleIn) return;
     const summaryIn = prompt("Short summary (optional):") || "";
-    const unitIn = Number(prompt("Unit number (e.g. 1):", "1") || 1);
+    const unitIn = Number(prompt("Unit number:", String(nextUnitNumber)) || nextUnitNumber);
     try {
       const { data, error } = await backendApi.functions.invoke("create-topic", {
         body: { courseId: course.id, title: titleIn, summary: summaryIn, unit: unitIn, generate: !!opts?.aiGenerate },
@@ -405,7 +474,8 @@ export default function CourseEdit() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const created = data.topic;
-      await refreshTopics();
+      const nextTopics = await refreshTopics();
+      await resequenceTopics(nextTopics, [], "Lesson added and order updated");
       if (opts?.aiGenerate && created) {
         toast.info("Generating lesson with AI…");
         await generateOne(created.id);
@@ -532,7 +602,8 @@ export default function CourseEdit() {
       setBulkText("");
       setBulkJson("");
       setBulkOpen(false);
-      await refreshTopics();
+      const nextTopics = await refreshTopics();
+      await resequenceTopics(nextTopics, [], "Lessons added and reserialized");
     } catch (e: any) {
       toast.error(e.message || "Bulk lesson creation failed");
     } finally {
@@ -1036,6 +1107,9 @@ export default function CourseEdit() {
           <ToolButton label="Bulk lesson input" onClick={() => setBulkOpen(true)} variant="ghost" size="icon">
             <Layers3 className="h-4 w-4" />
           </ToolButton>
+          <ToolButton label="Reserialize lessons" onClick={handleSerializeLessons} variant="ghost" size="icon" disabled={bulkBusy}>
+            {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </ToolButton>
           <ToolButton label="Add empty lesson" onClick={() => addTopic({ aiGenerate: false })} variant="ghost" size="icon">
             <Plus className="h-4 w-4" />
           </ToolButton>
@@ -1107,14 +1181,25 @@ export default function CourseEdit() {
             </tr>
           </thead>
           <tbody>
-            {topics.map(t => {
+            {sortedTopics.map(t => {
               const status = (t as any).generation_status || "ready";
               const isReady = status === "ready";
               const isGen = generating === t.id;
               const blockCount = Array.isArray((t as any).content) ? (t as any).content.length : 0;
               const translated = hasTranslation(t);
               return (
-                <tr key={t.id} className="border-t border-border/50">
+                <tr
+                  key={t.id}
+                  draggable={!bulkBusy}
+                  onDragStart={(event) => handleLessonDragStart(event, t.id)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => handleLessonDrop(event, t.id)}
+                  onDragEnd={() => setDraggingTopicId(null)}
+                  className={`border-t border-border/50 transition ${draggingTopicId === t.id ? "opacity-45" : "hover:bg-muted/20"}`}
+                >
                   <td className="p-3">
                     <Checkbox checked={selectedIds.includes(t.id)} onCheckedChange={() => toggleSelection(t.id)} aria-label={`Select ${t.title}`} />
                   </td>
