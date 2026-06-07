@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "./useAuth";
 
@@ -11,9 +11,9 @@ export interface Topic {
   order_index: number;
   title: string;
   summary: string;
-  content: any[];
-  translations?: any[];
-  mindmap?: any;
+  content: unknown[];
+  translations?: unknown[];
+  mindmap?: unknown;
   visualization: string | null;
   quiz: QuizQ[];
 }
@@ -46,16 +46,17 @@ export const useProgress = () => {
   const [progress, setProgress] = useState<Record<string, Progress>>({});
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!user) { setProgress({}); setLoading(false); return; }
+    setLoading(true);
     const { data } = await backendApi.from("topic_progress").select("*").eq("user_id", user.id);
     const map: Record<string, Progress> = {};
-    (data ?? []).forEach((p: any) => { map[p.topic_id] = p; });
+    ((data ?? []) as Progress[]).forEach((p) => { map[p.topic_id] = p; });
     setProgress(map);
     setLoading(false);
-  };
+  }, [user]);
 
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user?.id]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const markViewed = async (topicId: string) => {
     if (!user) return;
@@ -64,7 +65,7 @@ export const useProgress = () => {
       best_quiz_score: existing?.best_quiz_score ?? 0, passed: existing?.passed ?? false,
       attempts: existing?.attempts ?? 0 };
     await backendApi.from("topic_progress").upsert(next, { onConflict: "user_id,topic_id" });
-    refresh();
+    void refresh();
   };
 
   const recordQuiz = async (topicId: string, score: number, total: number) => {
@@ -78,7 +79,7 @@ export const useProgress = () => {
       best_quiz_score: best, passed,
       attempts: (existing?.attempts ?? 0) + 1,
     }, { onConflict: "user_id,topic_id" });
-    refresh();
+    void refresh();
     return { pct, passed };
   };
 

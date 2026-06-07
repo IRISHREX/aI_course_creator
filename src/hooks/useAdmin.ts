@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "./useAuth";
 
+type RoleRow = { role: string };
+
 export const useIsAdmin = () => {
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -13,13 +15,13 @@ export const useIsAdmin = () => {
     backendApi.from("user_roles").select("role").eq("user_id", user.id)
       .then(({ data }) => {
         if (!active) return;
-        const roles = (data || []).map((r: any) => r.role);
+        const roles = ((data || []) as RoleRow[]).map((r) => r.role);
         const sa = roles.includes("super_admin");
         setIsSuperAdmin(sa);
         setIsAdmin(sa || roles.includes("admin"));
         setLoading(false);
       });
     return () => { active = false; };
-  }, [user?.id]);
+  }, [user]);
   return { isAdmin, isSuperAdmin, loading };
 };

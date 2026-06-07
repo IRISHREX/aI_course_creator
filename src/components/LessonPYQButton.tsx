@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { backendApi } from "@/integrations/api/client";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,6 +11,10 @@ interface PYQ {
   marks: number | null; year: number | null;
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export const LessonPYQButton = ({ topicId, courseId }: { topicId: string; courseId: string }) => {
   const { isAdmin } = useIsAdmin();
   const [items, setItems] = useState<PYQ[]>([]);
@@ -18,17 +22,23 @@ export const LessonPYQButton = ({ topicId, courseId }: { topicId: string; course
   const [loading, setLoading] = useState(false);
   const [genIdx, setGenIdx] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await backendApi
-      .from("pyq_topics")
-      .select("course_pyq!inner(id, course_id, question, answer, marks, year)")
-      .eq("topic_id", topicId)
-      .eq("course_pyq.course_id", courseId);
-    setItems(((data as any[]) || []).map(r => r.course_pyq).filter(Boolean));
-    setLoading(false);
-  };
-  useEffect(() => { if (open) load(); /* eslint-disable-next-line */ }, [open, topicId]);
+    try {
+      const { data, error } = await backendApi
+        .from("pyq_topics")
+        .select("course_pyq!inner(id, course_id, question, answer, marks, year)")
+        .eq("topic_id", topicId)
+        .eq("course_pyq.course_id", courseId);
+      if (error) throw error;
+      setItems(((data as { course_pyq?: PYQ }[]) || []).map(r => r.course_pyq).filter((item): item is PYQ => Boolean(item)));
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not load PYQs"));
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId, topicId]);
+  useEffect(() => { if (open) void load(); }, [load, open]);
 
   const generateAnswer = async (pyq: PYQ) => {
     setGenIdx(pyq.id);
@@ -39,8 +49,8 @@ export const LessonPYQButton = ({ topicId, courseId }: { topicId: string; course
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Answer generated");
-      load();
-    } catch (e: any) { toast.error(e.message || "Failed"); }
+      void load();
+    } catch (error) { toast.error(errorMessage(error, "Failed")); }
     finally { setGenIdx(null); }
   };
 

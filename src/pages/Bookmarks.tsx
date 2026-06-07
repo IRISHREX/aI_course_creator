@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,8 +14,12 @@ interface BookmarkRow {
   word_index: number;
   label: string | null;
   created_at: string;
-  topic?: { slug: string; title: string };
-  course?: { slug: string; title: string };
+  topic?: { id: string; slug: string; title: string };
+  course?: { id: string; slug: string; title: string };
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export default function Bookmarks() {
@@ -23,31 +27,41 @@ export default function Bookmarks() {
   const [items, setItems] = useState<BookmarkRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!user) { setItems([]); setLoading(false); return; }
     setLoading(true);
-    const { data: bms } = await backendApi.from("bookmarks").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    const rows = (bms || []) as BookmarkRow[];
-    if (rows.length) {
-      const tIds = Array.from(new Set(rows.map(r => r.topic_id)));
-      const cIds = Array.from(new Set(rows.map(r => r.course_id)));
-      const [{ data: topics }, { data: courses }] = await Promise.all([
-        backendApi.from("topics").select("id, slug, title").in("id", tIds),
-        backendApi.from("courses").select("id, slug, title").in("id", cIds),
-      ]);
-      const tMap = new Map((topics || []).map(t => [t.id, t]));
-      const cMap = new Map((courses || []).map(c => [c.id, c]));
-      rows.forEach(r => { r.topic = tMap.get(r.topic_id) as any; r.course = cMap.get(r.course_id) as any; });
+    try {
+      const { data: bms, error } = await backendApi.from("bookmarks").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+      if (error) throw error;
+      const rows = (bms || []) as BookmarkRow[];
+      if (rows.length) {
+        const tIds = Array.from(new Set(rows.map(r => r.topic_id)));
+        const cIds = Array.from(new Set(rows.map(r => r.course_id)));
+        const [{ data: topics, error: topicError }, { data: courses, error: courseError }] = await Promise.all([
+          backendApi.from("topics").select("id, slug, title").in("id", tIds),
+          backendApi.from("courses").select("id, slug, title").in("id", cIds),
+        ]);
+        if (topicError) throw topicError;
+        if (courseError) throw courseError;
+        const tMap = new Map(((topics || []) as NonNullable<BookmarkRow["topic"]>[]).map(t => [t.id, t]));
+        const cMap = new Map(((courses || []) as NonNullable<BookmarkRow["course"]>[]).map(c => [c.id, c]));
+        setItems(rows.map(r => ({ ...r, topic: tMap.get(r.topic_id), course: cMap.get(r.course_id) })));
+      } else {
+        setItems([]);
+      }
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not load bookmarks"));
+      setItems([]);
+    } finally {
+      setLoading(false);
     }
-    setItems(rows);
-    setLoading(false);
-  };
+  }, [user]);
 
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user?.id]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const remove = async (id: string) => {
     const { error } = await backendApi.from("bookmarks").delete().eq("id", id);
-    if (error) toast.error(error.message); else { toast.success("Removed"); refresh(); }
+    if (error) toast.error(error.message); else { toast.success("Removed"); void refresh(); }
   };
 
   if (aLoad) return <div className="container py-20 text-muted-foreground">Loading…</div>;

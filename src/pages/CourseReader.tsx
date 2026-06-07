@@ -48,13 +48,19 @@ function useSlideEntries(courseId?: string) {
     }
   }, [storageKey]);
 
-  const updateEntry = (slideId: string, value: string) => {
+  const updateEntry = useCallback((slideId: string, value: string) => {
     setEntries((current) => {
       const next = { ...current, [slideId]: value };
-      if (storageKey) localStorage.setItem(storageKey, JSON.stringify(next));
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch {
+          // Ignore storage quota/privacy mode failures; the note still works for this session.
+        }
+      }
       return next;
     });
-  };
+  }, [storageKey]);
 
   return { entries, updateEntry };
 }
@@ -129,6 +135,12 @@ export default function CourseReader() {
     setSpeechState("idle");
   }, [supported]);
 
+  useEffect(() => {
+    setSlideIndex(0);
+    setPendingRead(false);
+    stopReading();
+  }, [course?.id, stopReading]);
+
   const startReading = useCallback((text: string, onDone?: () => void) => {
     if (!supported || !text.trim()) return;
     const token = readTokenRef.current + 1;
@@ -169,7 +181,7 @@ export default function CourseReader() {
   useEffect(() => () => stopReading(), [stopReading]);
 
   const playCurrent = useCallback(() => {
-    if (!current) return;
+    if (!current || !supported) return;
     if (speechState === "paused") {
       window.speechSynthesis.resume();
       setSpeechState("playing");
@@ -178,7 +190,7 @@ export default function CourseReader() {
     startReading(readText, () => {
       if (autoSlide && slideIndex < slides.length - 1) goToSlide(slideIndex + 1, true);
     });
-  }, [autoSlide, current, goToSlide, readText, slideIndex, slides.length, speechState, startReading]);
+  }, [autoSlide, current, goToSlide, readText, slideIndex, slides.length, speechState, startReading, supported]);
 
   const pauseReading = useCallback(() => {
     if (!supported) return;

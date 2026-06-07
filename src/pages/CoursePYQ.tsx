@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
@@ -17,6 +17,13 @@ interface PYQ {
   topic_ids?: string[];
 }
 
+type PyqTopicLink = { pyq_id: string; topic_id: string };
+type TopicOption = { id: string; title: string };
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function CoursePYQ() {
   const { courseSlug } = useParams();
   const nav = useNavigate();
@@ -26,27 +33,38 @@ export default function CoursePYQ() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [answeringId, setAnsweringId] = useState<string | null>(null);
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [topicFilter, setTopicFilter] = useState<string>("all");
-  const [topics, setTopics] = useState<{ id: string; title: string }[]>([]);
+  const [topics, setTopics] = useState<TopicOption[]>([]);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     if (!course?.id) return;
     setLoading(true);
-    const [{ data: pyqs }, { data: links }, { data: ts }] = await Promise.all([
-      backendApi.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index"),
-      backendApi.from("pyq_topics").select("pyq_id, topic_id, course_pyq!inner(course_id)").eq("course_pyq.course_id", course.id),
-      backendApi.from("topics").select("id, title").eq("course_id", course.id).order("unit").order("order_index"),
-    ]);
-    const linkMap = new Map<string, string[]>();
-    (links || []).forEach((l: any) => {
-      const arr = linkMap.get(l.pyq_id) || []; arr.push(l.topic_id); linkMap.set(l.pyq_id, arr);
-    });
-    setItems(((pyqs as any[]) || []).map(p => ({ ...p, topic_ids: linkMap.get(p.id) || [] })));
-    setTopics((ts as any[]) || []);
-    setLoading(false);
-  };
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [course?.id]);
+    try {
+      const [{ data: pyqs, error: pyqError }, { data: links, error: linkError }, { data: ts, error: topicError }] = await Promise.all([
+        backendApi.from("course_pyq").select("*").eq("course_id", course.id).order("year", { ascending: false }).order("order_index"),
+        backendApi.from("pyq_topics").select("pyq_id, topic_id, course_pyq!inner(course_id)").eq("course_pyq.course_id", course.id),
+        backendApi.from("topics").select("id, title").eq("course_id", course.id).order("unit").order("order_index"),
+      ]);
+      if (pyqError) throw pyqError;
+      if (linkError) throw linkError;
+      if (topicError) throw topicError;
+      const linkMap = new Map<string, string[]>();
+      ((links || []) as PyqTopicLink[]).forEach((link) => {
+        const arr = linkMap.get(link.pyq_id) || [];
+        arr.push(link.topic_id);
+        linkMap.set(link.pyq_id, arr);
+      });
+      setItems(((pyqs as PYQ[]) || []).map(p => ({ ...p, topic_ids: p.id ? linkMap.get(p.id) || [] : [] })));
+      setTopics((ts as TopicOption[]) || []);
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not load questions"));
+    } finally {
+      setLoading(false);
+    }
+  }, [course?.id]);
+  useEffect(() => { void reload(); }, [reload]);
 
   if (cLoad || aLoad) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
@@ -58,22 +76,27 @@ export default function CoursePYQ() {
 
   const toggleTag = async (pyqId: string, topicId: string, on: boolean) => {
     if (!isAdmin) return;
-    if (on) {
-      await backendApi.from("pyq_topics").insert({ pyq_id: pyqId, topic_id: topicId });
-    } else {
-      await backendApi.from("pyq_topics").delete().eq("pyq_id", pyqId).eq("topic_id", topicId);
+    try {
+      const { error } = on
+        ? await backendApi.from("pyq_topics").insert({ pyq_id: pyqId, topic_id: topicId })
+        : await backendApi.from("pyq_topics").delete().eq("pyq_id", pyqId).eq("topic_id", topicId);
+      if (error) throw error;
+      await reload();
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not update lesson tag"));
     }
-    reload();
   };
 
   const genAnswer = async (pyqId: string) => {
+    setAnsweringId(pyqId);
     try {
       const { data, error } = await backendApi.functions.invoke("generate-pyq-answer", { body: { pyqId } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Answer generated");
-      reload();
-    } catch (e: any) { toast.error(e.message || "Failed"); }
+      await reload();
+    } catch (error) { toast.error(errorMessage(error, "Failed")); }
+    finally { setAnsweringId(null); }
   };
 
   const generate = async () => {
@@ -83,15 +106,18 @@ export default function CoursePYQ() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success(`Added ${data.inserted} AI-generated questions${data.tagged ? ` with ${data.tagged} lesson tag(s)` : ""}`);
-      reload();
-    } catch (e: any) { toast.error(e.message || "Failed"); }
+      await reload();
+    } catch (error) { toast.error(errorMessage(error, "Failed")); }
     finally { setGenerating(false); }
   };
 
   const addBlank = () => setItems([...items, { question: "", answer: "", order_index: items.length, source: "manual" }]);
   const removeAt = async (i: number) => {
     const it = items[i];
-    if (it.id) await backendApi.from("course_pyq").delete().eq("id", it.id);
+    if (it.id) {
+      const { error } = await backendApi.from("course_pyq").delete().eq("id", it.id);
+      if (error) { toast.error(error.message); return; }
+    }
     setItems(items.filter((_, j) => j !== i));
   };
   const update = (i: number, patch: Partial<PYQ>) => {
@@ -115,8 +141,8 @@ export default function CoursePYQ() {
         }
       }
       toast.success("Saved");
-      reload();
-    } catch (e: any) { toast.error(e.message || "Save failed"); }
+      await reload();
+    } catch (error) { toast.error(errorMessage(error, "Save failed")); }
     finally { setSaving(false); }
   };
 
@@ -188,8 +214,8 @@ export default function CoursePYQ() {
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs">Answer</Label>
                       {it.id && !it.answer && (
-                        <Button size="sm" variant="neon" onClick={() => genAnswer(it.id!)}>
-                          <Sparkles className="h-3 w-3 mr-1" /> Generate AI answer
+                        <Button size="sm" variant="neon" onClick={() => genAnswer(it.id!)} disabled={answeringId === it.id}>
+                          {answeringId === it.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />} Generate AI answer
                         </Button>
                       )}
                     </div>
