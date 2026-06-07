@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -92,16 +92,16 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
     onWordIndex?.(null);
   }, [supported, text, onWordIndex]);
 
-  const pickVoice = () => {
+  const pickVoice = useCallback(() => {
     const selected = voices.find(x => x.voiceURI === prefs.voiceURI);
     if (selected) return selected;
     const lower = speechLang.toLowerCase();
     return voices.find((voice) => voice.lang.toLowerCase() === lower)
       || voices.find((voice) => voice.lang.toLowerCase().startsWith(lower.split("-")[0]))
       || null;
-  };
+  }, [prefs.voiceURI, speechLang, voices]);
 
-  const startFrom = (charOffset: number) => {
+  const startFrom = useCallback((charOffset: number) => {
     if (!supported || !text.trim()) return;
     const utterId = utterIdRef.current + 1;
     utterIdRef.current = utterId;
@@ -159,16 +159,16 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
       window.speechSynthesis.speak(u);
       setState("playing");
     }, 40);
-  };
+  }, [autoScroll, onDone, onWordIndex, pickVoice, prefs.pitch, prefs.rate, speechLang, supported, text, tokens]);
 
-  const start = () => startFrom(0);
+  const start = useCallback(() => startFrom(0), [startFrom]);
 
   /** Public: jump to word index */
-  const seekTo = (wordIdx: number) => {
+  const seekTo = useCallback((wordIdx: number) => {
     const t = tokens[wordIdx];
     if (!t) return;
     startFrom(t.start);
-  };
+  }, [startFrom, tokens]);
 
   // Expose seek through a custom event so non-React code (renderer) can trigger it
   useEffect(() => {
@@ -176,18 +176,17 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
       const idx = (e as CustomEvent<number>).detail;
       if (typeof idx === "number") seekTo(idx);
     };
-    window.addEventListener("karaoke:seek", handler as any);
-    return () => window.removeEventListener("karaoke:seek", handler as any);
-    // eslint-disable-next-line
-  }, [tokens, voices, prefs]);
+    window.addEventListener("karaoke:seek", handler as EventListener);
+    return () => window.removeEventListener("karaoke:seek", handler as EventListener);
+  }, [seekTo]);
 
-  const togglePause = () => {
+  const togglePause = useCallback(() => {
     if (!supported) return;
     if (state === "playing") { window.speechSynthesis.pause(); setState("paused"); }
     else if (state === "paused") { window.speechSynthesis.resume(); setState("playing"); }
-  };
+  }, [state, supported]);
 
-  const stop = () => {
+  const stop = useCallback(() => {
     if (!supported) return;
     stopRequestedRef.current = true;
     utterIdRef.current += 1;
@@ -195,13 +194,13 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
     utterRef.current = null;
     setState("idle");
     onWordIndex?.(null);
-  };
+  }, [onWordIndex, supported]);
 
-  const toggleRead = () => {
+  const toggleRead = useCallback(() => {
     if (!supported) return;
     if (state === "idle") start();
     else stop();
-  };
+  }, [start, state, stop, supported]);
 
   useImperativeHandle(ref, () => ({
     toggleRead,
@@ -216,7 +215,7 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
       window.speechSynthesis.resume();
       setState("playing");
     },
-  }), [state, supported]);
+  }), [state, supported, togglePause, toggleRead]);
 
   if (!supported) {
     return (

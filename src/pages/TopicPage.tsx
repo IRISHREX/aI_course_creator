@@ -1,4 +1,4 @@
-import { type ComponentProps, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentProps, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -128,7 +128,7 @@ export default function TopicPage() {
   }, [pageIdx, pages.length]);
 
   const linkPrefix = `/course/${courseSlug}`;
-  const goPreviousPage = () => {
+  const goPreviousPage = useCallback(() => {
     if (pageIdx > 0) {
       playLessonSound("page", courseSettings.lessonSoundsEnabled);
       setPageTurnDirection("prev");
@@ -137,8 +137,8 @@ export default function TopicPage() {
       return;
     }
     if (neighbors.prev) nav(`${linkPrefix}/topic/${neighbors.prev.slug}`);
-  };
-  const goNextPage = () => {
+  }, [courseSettings.lessonSoundsEnabled, linkPrefix, nav, neighbors.prev, pageIdx]);
+  const goNextPage = useCallback(() => {
     if (pageIdx < pages.length - 1) {
       playLessonSound("page", courseSettings.lessonSoundsEnabled);
       setPageTurnDirection("next");
@@ -147,7 +147,7 @@ export default function TopicPage() {
       return;
     }
     if (neighbors.next) nav(`${linkPrefix}/topic/${neighbors.next.slug}`);
-  };
+  }, [courseSettings.lessonSoundsEnabled, linkPrefix, nav, neighbors.next, pageIdx, pages.length]);
 
   useEffect(() => {
     const isTypingTarget = (target: EventTarget | null) => {

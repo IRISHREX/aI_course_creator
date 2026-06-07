@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, CheckSquare, Download, Edit3, FileJson, FileText, Languages, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CheckSquare, Download, Edit3, FileJson, FileText, GripVertical, Languages, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
 
@@ -107,6 +107,7 @@ export default function CourseEdit() {
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateScanGroup[]>([]);
   const [duplicateDeleting, setDuplicateDeleting] = useState<string | null>(null);
   const [draggingTopicId, setDraggingTopicId] = useState<string | null>(null);
+  const [dragOverTopicId, setDragOverTopicId] = useState<string | null>(null);
   const duplicateUnitFallback = Array.from(new Set(topics.map(t => Number(t.unit)).filter(Number.isFinite))).sort((a, b) => a - b)[0] || 1;
   const units = Array.from(new Set(topics.map(t => Number(t.unit)).filter(Number.isFinite))).sort((a, b) => a - b);
   const selectedDuplicateUnits = duplicateSelectedUnits.length ? duplicateSelectedUnits : [duplicateUnitFallback];
@@ -272,16 +273,24 @@ export default function CourseEdit() {
     }
   };
 
-  const handleLessonDragStart = (event: DragEvent<HTMLTableRowElement>, topicId: string) => {
+  const handleLessonDragStart = (event: DragEvent<HTMLButtonElement>, topicId: string) => {
     setDraggingTopicId(topicId);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", topicId);
+  };
+
+  const handleLessonDragOver = (event: DragEvent<HTMLTableRowElement>, topicId: string) => {
+    if (bulkBusy || !draggingTopicId || draggingTopicId === topicId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverTopicId(topicId);
   };
 
   const handleLessonDrop = async (event: DragEvent<HTMLTableRowElement>, targetTopicId: string) => {
     event.preventDefault();
     const sourceId = event.dataTransfer.getData("text/plain") || draggingTopicId;
     setDraggingTopicId(null);
+    setDragOverTopicId(null);
     if (!sourceId || sourceId === targetTopicId) return;
 
     const sourceTopic = sortedTopics.find((topic) => topic.id === sourceId);
@@ -1097,7 +1106,7 @@ export default function CourseEdit() {
         <div>
           <h2 className="font-display text-2xl font-bold">Lessons ({topics.length})</h2>
           <div className="text-xs text-muted-foreground mt-1">
-            {selectedIds.length ? `${selectedIds.length} selected` : "Select lessons for batch controls"}
+            {selectedIds.length ? `${selectedIds.length} selected` : "Use the grip handle to reorder lessons"}
           </div>
         </div>
         <div className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-background/50 p-1.5">
@@ -1170,6 +1179,7 @@ export default function CourseEdit() {
         <table className="w-full text-sm">
           <thead className="bg-muted/30 text-xs font-mono text-muted-foreground uppercase">
             <tr>
+              <th className="p-3 w-10"></th>
               <th className="text-left p-3 w-10">
                 <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all lessons" />
               </th>
@@ -1190,16 +1200,28 @@ export default function CourseEdit() {
               return (
                 <tr
                   key={t.id}
-                  draggable={!bulkBusy}
-                  onDragStart={(event) => handleLessonDragStart(event, t.id)}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                  }}
+                  onDragOver={(event) => handleLessonDragOver(event, t.id)}
                   onDrop={(event) => handleLessonDrop(event, t.id)}
-                  onDragEnd={() => setDraggingTopicId(null)}
-                  className={`border-t border-border/50 transition ${draggingTopicId === t.id ? "opacity-45" : "hover:bg-muted/20"}`}
+                  onDragLeave={() => setDragOverTopicId((id) => id === t.id ? null : id)}
+                  className={`border-t border-border/50 transition ${draggingTopicId === t.id ? "opacity-45" : dragOverTopicId === t.id ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : "hover:bg-muted/20"}`}
                 >
+                  <td className="p-3 pr-0 align-middle">
+                    <button
+                      type="button"
+                      draggable={!bulkBusy}
+                      onDragStart={(event) => handleLessonDragStart(event, t.id)}
+                      onDragEnd={() => {
+                        setDraggingTopicId(null);
+                        setDragOverTopicId(null);
+                      }}
+                      className="inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-primary active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Drag to reorder"
+                      aria-label={`Drag ${t.title} to reorder`}
+                      disabled={bulkBusy}
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </button>
+                  </td>
                   <td className="p-3">
                     <Checkbox checked={selectedIds.includes(t.id)} onCheckedChange={() => toggleSelection(t.id)} aria-label={`Select ${t.title}`} />
                   </td>
