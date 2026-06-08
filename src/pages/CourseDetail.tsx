@@ -364,11 +364,13 @@ export default function CourseDetail() {
       const [{ default: html2canvas }, pdfLib] = await Promise.all([import("html2canvas"), import("pdf-lib")]);
       const pdf = await pdfLib.PDFDocument.create();
       const pageSize: [number, number] = [842, 595];
+      const exportWidth = 1280;
+      const exportMinHeight = 920;
       const host = document.createElement("div");
       host.style.position = "fixed";
       host.style.left = "-10000px";
       host.style.top = "0";
-      host.style.width = "1120px";
+      host.style.width = `${exportWidth}px`;
       host.style.background = "#f8fafc";
       host.style.zIndex = "-1";
       document.body.appendChild(host);
@@ -381,7 +383,7 @@ export default function CourseDetail() {
           root.render(
             <div
               className="bg-slate-50 p-6 text-slate-950"
-              style={{ width: 1120, minHeight: 820, fontFamily: "Inter, Arial, sans-serif" }}
+              style={{ width: exportWidth, minHeight: exportMinHeight, fontFamily: "Inter, Arial, sans-serif" }}
               data-mindmap-export-page="true"
             >
               <div className="mb-4 rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
@@ -402,8 +404,10 @@ export default function CourseDetail() {
             scale: 2,
             useCORS: true,
             logging: false,
-            windowWidth: 1120,
-            windowHeight: Math.max(820, target.scrollHeight),
+            width: Math.max(exportWidth, target.scrollWidth),
+            height: Math.max(exportMinHeight, target.scrollHeight),
+            windowWidth: Math.max(exportWidth, target.scrollWidth),
+            windowHeight: Math.max(exportMinHeight, target.scrollHeight),
           });
           const png = await pdf.embedPng(canvas.toDataURL("image/png"));
           const pdfPage = pdf.addPage(pageSize);

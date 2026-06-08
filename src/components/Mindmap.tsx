@@ -431,7 +431,11 @@ export function Mindmap({ data, exportMode = false, fitView = false }: { data: N
   const byKey = new Map(positioned.map((item) => [item.key, item]));
   const scale = fitView && containerWidth ? Math.min(1, Math.max(0.58, (containerWidth - 24) / CANVAS.width)) : 1;
   return (
-    <div ref={containerRef} className="w-full overflow-auto rounded-xl border border-border/70 bg-background/35 p-3">
+    <div
+      ref={containerRef}
+      className={`w-full rounded-xl border border-border/70 bg-background/35 p-3 ${exportMode ? "overflow-visible" : "overflow-auto"}`}
+      style={exportMode ? { width: CANVAS.width + 24 } : undefined}
+    >
       {branches.length > 0 ? (
         <div
           className="relative mx-auto"
