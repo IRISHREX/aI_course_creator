@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, BookOpen, FileText, Gauge, ListTree, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward, Square } from "lucide-react";
+import { ArrowLeft, BookOpen, FileText, Gauge, ListTree, Maximize2, Minimize2, MonitorOff, MonitorPlay, Orbit, Pause, Play, Settings2, SkipBack, SkipForward, Sparkles, Square, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -11,6 +14,10 @@ import { useIsAdmin } from "@/hooks/useAdmin";
 import { Mindmap } from "@/components/Mindmap";
 import { blockToText } from "@/components/BlockRenderer";
 import { SphericalLoader } from "@/components/SphericalLoader";
+import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
+import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
+import ThreePageBackground from "@/components/ThreePageBackground";
+import { useCourseSettings, type LessonVisualStyle } from "@/lib/appSettings";
 
 type MindmapData = Parameters<typeof Mindmap>[0]["data"];
 type CourseWithMindmap = Course & { mindmap?: MindmapData };
@@ -25,6 +32,7 @@ type Slide = {
   topicSlug?: string;
 };
 type SpeechState = "idle" | "playing" | "paused";
+const READER_VOICE_KEY = "signal-reader-voice";
 
 function lessonText(topic: TopicWithMindmap) {
   const body = (topic.content || []).map((block) => blockToText(block)).filter(Boolean).join(" ");
@@ -71,9 +79,15 @@ export default function CourseReader() {
   const { course, loading: courseLoading } = useCourseBySlug(courseSlug);
   const { topics, loading: topicsLoading } = useTopics(course?.id);
   const { isAdmin } = useIsAdmin();
+  const [courseSettings, setCourseSettingsValue] = useCourseSettings(course?.id);
   const rootRef = useRef<HTMLDivElement>(null);
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const readTokenRef = useRef(0);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceURI, setVoiceURI] = useState(() => {
+    try { return localStorage.getItem(READER_VOICE_KEY) || ""; }
+    catch { return ""; }
+  });
   const [slideIndex, setSlideIndex] = useState(0);
   const [autoSlide, setAutoSlide] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -117,6 +131,30 @@ export default function CourseReader() {
   const customEntry = current ? entries[current.id] || "" : "";
   const readText = current ? [customEntry, current.text].filter(Boolean).join(". ") : "";
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const selectedVoice = useMemo(() => voices.find((voice) => voice.voiceURI === voiceURI) || null, [voiceURI, voices]);
+  const readerBackground = courseSettings.lessonGraphicsEnabled ? (
+    courseSettings.lessonVisualStyle === "particles" ? <ThreeParticleBackground className="fixed opacity-40" /> :
+    courseSettings.lessonVisualStyle === "orbit" ? <ThreePageBackground className="fixed opacity-55" /> :
+    <LessonTerrainBackground className="fixed opacity-35" />
+  ) : null;
+
+  useEffect(() => {
+    if (!supported) return;
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, [supported]);
+
+  const updateVoice = (nextVoiceURI: string) => {
+    setVoiceURI(nextVoiceURI);
+    try { localStorage.setItem(READER_VOICE_KEY, nextVoiceURI); }
+    catch { /* ignore private-mode storage errors */ }
+  };
+
+  const updateVisualStyle = (lessonVisualStyle: LessonVisualStyle) => {
+    setCourseSettingsValue({ ...courseSettings, lessonGraphicsEnabled: true, lessonVisualStyle });
+  };
 
   useEffect(() => {
     if (slideIndex > slides.length - 1) setSlideIndex(Math.max(slides.length - 1, 0));
@@ -148,6 +186,10 @@ export default function CourseReader() {
     readTokenRef.current = token;
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
+    if (selectedVoice) {
+      utter.voice = selectedVoice;
+      utter.lang = selectedVoice.lang;
+    }
     utter.rate = speed;
     utter.pitch = 1;
     utter.onend = () => {
@@ -162,7 +204,7 @@ export default function CourseReader() {
     utterRef.current = utter;
     window.speechSynthesis.speak(utter);
     setSpeechState("playing");
-  }, [speed, supported]);
+  }, [selectedVoice, speed, supported]);
 
   const goToSlide = useCallback((index: number, read = true) => {
     const next = Math.min(Math.max(index, 0), Math.max(slides.length - 1, 0));
@@ -241,8 +283,9 @@ export default function CourseReader() {
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
   return (
-    <div ref={rootRef} className="min-h-screen bg-background px-4 py-4 text-foreground">
-      <div className="mx-auto flex max-w-7xl flex-col gap-4">
+    <div ref={rootRef} className="relative min-h-screen overflow-hidden bg-background px-4 py-4 text-foreground">
+      {readerBackground}
+      <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-4">
         <div className="overflow-hidden rounded-lg border border-border/70 bg-card/80 shadow-sm">
           <div className="h-1 bg-muted">
             <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
@@ -259,11 +302,98 @@ export default function CourseReader() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant={autoSlide ? "neon" : "outline"} size="sm" onClick={() => setAutoSlide((value) => !value)}>Auto slide</Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon" title="Narration voice settings" aria-label="Narration voice settings">
+                    <Volume2 className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="end">
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-xs">Narration voice</Label>
+                      <Select value={voiceURI || "system"} onValueChange={(value) => updateVoice(value === "system" ? "" : value)} disabled={!supported}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="System default" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          <SelectItem value="system">System default</SelectItem>
+                          {voices.map((voice) => (
+                            <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
+                              {voice.name} ({voice.lang})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs flex justify-between">
+                        <span>Speed</span>
+                        <span className="font-mono text-primary">{speed.toFixed(2)}x</span>
+                      </Label>
+                      <Slider min={0.6} max={1.8} step={0.05} value={[speed]} onValueChange={(value) => setSpeed(value[0])} className="mt-2" />
+                    </div>
+                    {!supported && <p className="text-xs text-muted-foreground">Speech synthesis is not supported in this browser.</p>}
+                  </div>
+                </PopoverContent>
+              </Popover>
               <div className="flex w-44 items-center gap-2 rounded-md border border-border/70 px-2 py-1">
                 <Gauge className="h-4 w-4 text-primary" />
                 <Slider min={0.6} max={1.8} step={0.05} value={[speed]} onValueChange={(value) => setSpeed(value[0])} />
                 <span className="w-10 text-right text-xs font-mono text-primary">{speed.toFixed(2)}x</span>
               </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={courseSettings.lessonGraphicsEnabled ? "neon" : "outline"}
+                    size="icon"
+                    title="Presentation background"
+                    aria-label="Presentation background"
+                  >
+                    {courseSettings.lessonGraphicsEnabled ? <MonitorPlay className="h-4 w-4" /> : <MonitorOff className="h-4 w-4" />}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72" align="end">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-xs">Three.js background</Label>
+                        <p className="text-[11px] text-muted-foreground">Applies only to presentation mode.</p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={courseSettings.lessonGraphicsEnabled ? "neon" : "outline"}
+                        onClick={() => setCourseSettingsValue({ ...courseSettings, lessonGraphicsEnabled: !courseSettings.lessonGraphicsEnabled })}
+                      >
+                        {courseSettings.lessonGraphicsEnabled ? "On" : "Off"}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: "terrain" as const, label: "Terrain", icon: Sparkles },
+                        { value: "particles" as const, label: "Particles", icon: Settings2 },
+                        { value: "orbit" as const, label: "Orbit", icon: Orbit },
+                      ].map((option) => {
+                        const Icon = option.icon;
+                        return (
+                          <Button
+                            key={option.value}
+                            type="button"
+                            size="sm"
+                            variant={courseSettings.lessonVisualStyle === option.value && courseSettings.lessonGraphicsEnabled ? "hero" : "outline"}
+                            className="h-auto flex-col gap-1 py-2 text-[11px]"
+                            onClick={() => updateVisualStyle(option.value)}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {option.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Button variant="ghost" size="icon" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"} aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
