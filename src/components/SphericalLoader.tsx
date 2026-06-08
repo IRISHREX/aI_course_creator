@@ -18,7 +18,7 @@ export function SphericalLoader({ label = "Loading", className }: SphericalLoade
     let visible = true;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-    camera.position.z = 7;
+    camera.position.z = 8.25;
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power" });
     renderer.setClearColor(0x000000, 0);
@@ -28,7 +28,7 @@ export function SphericalLoader({ label = "Loading", className }: SphericalLoade
     const group = new THREE.Group();
     scene.add(group);
 
-    const sphereGeometry = new THREE.SphereGeometry(1.5, 48, 32);
+    const sphereGeometry = new THREE.SphereGeometry(2.15, 56, 36);
     const sphereMaterial = new THREE.MeshBasicMaterial({
       color: 0x38e8ff,
       transparent: true,
@@ -44,7 +44,7 @@ export function SphericalLoader({ label = "Loading", className }: SphericalLoade
       opacity: 0.55,
     });
     const rings = [0, 1, 2].map((index) => {
-      const curve = new THREE.EllipseCurve(0, 0, 1.9 + index * 0.18, 1.9 + index * 0.18, 0, Math.PI * 2);
+      const curve = new THREE.EllipseCurve(0, 0, 2.65 + index * 0.24, 2.65 + index * 0.24, 0, Math.PI * 2);
       const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(160));
       const ring = new THREE.LineLoop(geometry, ringMaterial);
       ring.rotation.x = Math.PI / (2.5 + index * 0.45);
@@ -59,7 +59,7 @@ export function SphericalLoader({ label = "Loading", className }: SphericalLoade
     for (let i = 0; i < pointCount; i += 1) {
       const phi = Math.acos(1 - 2 * ((i + 0.5) / pointCount));
       const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      const radius = 1.75 + (i % 5) * 0.035;
+      const radius = 2.5 + (i % 5) * 0.045;
       positions[i * 3] = Math.cos(theta) * Math.sin(phi) * radius;
       positions[i * 3 + 1] = Math.sin(theta) * Math.sin(phi) * radius;
       positions[i * 3 + 2] = Math.cos(phi) * radius;
@@ -134,7 +134,7 @@ export function SphericalLoader({ label = "Loading", className }: SphericalLoade
 
   return (
     <div className={cn("flex min-h-[18rem] flex-col items-center justify-center gap-3 text-muted-foreground", className)}>
-      <div ref={containerRef} className="h-28 w-28 sm:h-36 sm:w-36" aria-hidden="true" />
+      <div ref={containerRef} className="h-40 w-40 sm:h-52 sm:w-52" aria-hidden="true" />
       <div className="font-mono text-[11px] uppercase tracking-[0.35em] text-primary">{label}</div>
     </div>
   );
