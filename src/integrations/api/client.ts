@@ -838,6 +838,12 @@ async function findPyq(pyqId: string) {
 
 function exportCleanText(value: unknown) {
   return String(value ?? "")
+    .replace(/Ã—/g, "\\times")
+    .replace(/â†’/g, "->")
+    .replace(/â€”/g, "-")
+    .replace(/â€“/g, "-")
+    .replace(/â€™/g, "'")
+    .replace(/â€œ|â€/g, '"')
     .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/`(.+?)`/g, "$1")
@@ -845,18 +851,35 @@ function exportCleanText(value: unknown) {
     .trim();
 }
 
+function htmlEscape(value: unknown) {
+  return exportCleanText(value).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[char]!));
+}
+
 function shouldExportBlock(block: any, options: Required<ExportOptions>) {
   if (!block || typeof block !== "object") return false;
   if (block.type === "image") return options.includeImages;
-  if (block.type === "flowchart" || block.type === "chart") return options.includeGraphs;
+  if (block.type === "flowchart" || block.type === "flow" || block.type === "chart") return options.includeGraphs;
   if (block.type === "code") return options.includeCode;
   return true;
+}
+
+function exportFlowCode(block: any) {
+  if (block.type === "flowchart") return exportCleanText(block.code || block.value || "");
+  const steps = Array.isArray(block.steps) ? block.steps.map(exportCleanText).filter(Boolean) : [];
+  if (!steps.length) return exportCleanText(block.value || block.code || "");
+  return [
+    "graph TD",
+    ...steps.map((step: string, index: number) => {
+      const current = `S${index + 1}["${step.replace(/"/g, "'")}"]`;
+      return index === 0 ? `  ${current}` : `  S${index} --> ${current}`;
+    }),
+  ].join("\n");
 }
 
 function exportBlockLines(block: any, options: Required<ExportOptions>): string[] {
   if (!shouldExportBlock(block, options)) return [];
   if (!block || typeof block !== "object") return [];
-  if (block.type === "text") return [exportCleanText(block.value)];
+  if (block.type === "text") return [exportCleanText(block.title), exportCleanText(block.value)].filter(Boolean);
   if (block.type === "highlight") return [`Key point: ${exportCleanText(block.value)}`];
   if (block.type === "list") return [exportCleanText(block.title), ...(block.items || []).map((it: string) => `- ${exportCleanText(it)}`)].filter(Boolean);
   if (block.type === "timeline") return (block.items || []).map((it: any) => `${exportCleanText(it.label)}: ${exportCleanText(it.desc)}`);
@@ -865,12 +888,46 @@ function exportBlockLines(block: any, options: Required<ExportOptions>): string[
     Array.isArray(block.headers) ? block.headers.map(exportCleanText).join(" | ") : "",
     ...(block.rows || []).map((row: unknown[]) => Array.isArray(row) ? row.map(exportCleanText).join(" | ") : exportCleanText(row)),
   ].filter(Boolean);
-  if (block.type === "flowchart") return [exportCleanText(block.title), exportCleanText(block.code)].filter(Boolean);
+  if (block.type === "flowchart" || block.type === "flow") return [exportCleanText(block.title || "Flow"), exportFlowCode(block)].filter(Boolean);
   if (block.type === "chart") return [exportCleanText(block.title || "Chart"), ...(block.data || []).map((it: any) => `${exportCleanText(it.name)}: ${exportCleanText(it.value)}`)].filter(Boolean);
   if (block.type === "image") return [exportCleanText(block.caption), exportCleanText(block.url)].filter(Boolean);
-  if (block.type === "math") return [exportCleanText(block.caption), exportCleanText(block.value)].filter(Boolean);
+  if (block.type === "math") return [exportCleanText(block.title || block.caption || "Formula"), exportCleanText(block.value)].filter(Boolean);
   if (block.type === "code") return [exportCleanText(block.caption || `${block.language || "Code"} example`), exportCleanText(block.value)].filter(Boolean);
   return [exportCleanText(block.value || block.title || JSON.stringify(block))].filter(Boolean);
+}
+
+function exportBlockHtml(block: any, options: Required<ExportOptions>) {
+  if (!shouldExportBlock(block, options)) return "";
+  if (!block || typeof block !== "object") return "";
+  const title = htmlEscape(block.title || block.caption || "");
+  const heading = title ? `<h4>${title}</h4>` : "";
+  if (block.type === "text") return `<section class="block text-block">${heading}<p>${htmlEscape(block.value)}</p></section>`;
+  if (block.type === "highlight") return `<aside class="block highlight"><strong>Key point</strong><p>${htmlEscape(block.value)}</p></aside>`;
+  if (block.type === "list") {
+    const items = (Array.isArray(block.items) ? block.items : []).map((item: unknown) => `<li>${htmlEscape(item)}</li>`).join("");
+    return `<section class="block">${heading}<ul>${items}</ul></section>`;
+  }
+  if (block.type === "timeline") {
+    const rows = (Array.isArray(block.items) ? block.items : []).map((item: any) => `<tr><th>${htmlEscape(item.label)}</th><td>${htmlEscape(item.desc || item.value)}</td></tr>`).join("");
+    return `<section class="block">${heading || "<h4>Timeline</h4>"}<table>${rows}</table></section>`;
+  }
+  if (block.type === "table") {
+    const headers = Array.isArray(block.headers) ? block.headers : [];
+    const rows = Array.isArray(block.rows) ? block.rows : [];
+    return `<section class="block">${heading}<table>${headers.length ? `<thead><tr>${headers.map((header: unknown) => `<th>${htmlEscape(header)}</th>`).join("")}</tr></thead>` : ""}<tbody>${rows.map((row: unknown[]) => `<tr>${(Array.isArray(row) ? row : [row]).map((cell: unknown) => `<td>${htmlEscape(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></section>`;
+  }
+  if (block.type === "math") return `<section class="block math-block">${heading || "<h4>Formula</h4>"}<pre>${htmlEscape(block.value)}</pre></section>`;
+  if (block.type === "code") return `<section class="block code-block">${heading || `<h4>${htmlEscape(block.language || "Code")}</h4>`}<pre>${htmlEscape(block.value)}</pre></section>`;
+  if (block.type === "flowchart" || block.type === "flow") return `<section class="block flow-block">${heading || "<h4>Flow</h4>"}<pre>${htmlEscape(exportFlowCode(block))}</pre></section>`;
+  if (block.type === "chart") {
+    const rows = (Array.isArray(block.data) ? block.data : []).map((item: any) => `<tr><th>${htmlEscape(item.name || item.label)}</th><td>${htmlEscape(item.value)}</td></tr>`).join("");
+    return `<section class="block">${heading || "<h4>Chart Data</h4>"}<table>${rows}</table></section>`;
+  }
+  if (block.type === "image") {
+    const url = htmlEscape(block.url);
+    return `<figure class="block image-block">${url ? `<img src="${url}" alt="${title || "Lesson image"}">` : ""}${title ? `<figcaption>${title}</figcaption>` : ""}</figure>`;
+  }
+  return `<section class="block"><pre>${htmlEscape(JSON.stringify(block, null, 2))}</pre></section>`;
 }
 
 function wrapExportText(text: string, maxChars: number) {
@@ -1221,9 +1278,28 @@ async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], l
     includeCode: rawOptions.includeCode !== false,
   };
   const lines: string[] = [course?.title || "Course", course?.description || ""];
-  topics.forEach((topic: any) => {
+  const sortedTopics = topics.slice().sort((a: any, b: any) => Number(a.unit) - Number(b.unit) || Number(a.order_index) - Number(b.order_index));
+  const topicSections: string[] = [];
+  const pyqTopicMap = new Map<string, string[]>();
+
+  sortedTopics.forEach((topic: any) => {
     lines.push("", `Unit ${topic.unit}`, `${topic.unit}.${topic.order_index} ${topic.title}`, topic.summary || "");
     (topic.content || []).forEach((block: any) => lines.push(...exportBlockLines(block, options)));
+    const blocksHtml = (topic.content || []).map((block: any) => exportBlockHtml(block, options)).filter(Boolean).join("");
+    const quizHtml = topic.quiz?.length ? `<section class="block quiz"><h4>Quiz</h4>${topic.quiz.map((q: any, qi: number) => `
+      <div class="quiz-item">
+        <p><strong>${qi + 1}. ${htmlEscape(q.q || q.question)}</strong></p>
+        <ol type="A">${(q.options || []).map((opt: string, oi: number) => `<li${oi === q.answer ? " class=\"correct\"" : ""}>${htmlEscape(opt)}${oi === q.answer ? " [correct]" : ""}</li>`).join("")}</ol>
+      </div>`).join("")}</section>` : "";
+    topicSections.push(`
+      <section class="lesson">
+        <h2>Unit ${htmlEscape(topic.unit)} - Lesson ${htmlEscape(topic.order_index)}</h2>
+        <h3>${htmlEscape(topic.title)}</h3>
+        ${topic.summary ? `<p class="summary">${htmlEscape(topic.summary)}</p>` : ""}
+        ${blocksHtml || "<p class=\"muted\">No lesson blocks match the selected export options.</p>"}
+        ${quizHtml}
+      </section>
+    `);
     if (topic.quiz?.length) {
       lines.push("Quiz");
       topic.quiz.forEach((q: any, qi: number) => {
@@ -1236,7 +1312,6 @@ async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], l
   });
   if (pyqs.length) {
     const topicTitleById = new Map(topics.map((topic: any) => [topic.id, topic.title]));
-    const pyqTopicMap = new Map<string, string[]>();
     links.forEach((link: any) => {
       const arr = pyqTopicMap.get(link.pyq_id) || [];
       const title = topicTitleById.get(link.topic_id);
@@ -1254,12 +1329,43 @@ async function buildLocalCourseExport(course: any, topics: any[], pyqs: any[], l
     });
   }
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${exportCleanText(course?.title || "Course")}</title></head><body>${lines.map((line) => {
-    const safe = exportCleanText(line).replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[char]!));
-    if (!safe) return "<br>";
-    if (/^(Unit \\d+|Previous Year Questions|Quiz)$/.test(safe)) return `<h2>${safe}</h2>`;
-    return `<p>${safe}</p>`;
-  }).join("")}</body></html>`;
+  const pyqHtml = pyqs.length ? `<section class="lesson"><h2>Previous Year Questions</h2>${pyqs.map((pyq: any, index: number) => {
+    const tagged = (pyqTopicMap.get(pyq.id) || []).join(", ");
+    return `<article class="block">
+      <p class="meta">${htmlEscape([pyq.year, pyq.marks ? `${pyq.marks} marks` : "", tagged ? `Lessons: ${tagged}` : ""].filter(Boolean).join(" | "))}</p>
+      <p><strong>${index + 1}. ${htmlEscape(pyq.question)}</strong></p>
+      ${pyq.answer ? `<p>${htmlEscape(pyq.answer)}</p>` : ""}
+    </article>`;
+  }).join("")}</section>` : "";
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${htmlEscape(course?.title || "Course")}</title><style>
+    @page{size:A4;margin:.55in}
+    body{font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.55;background:#fff}
+    h1{font-size:30px;margin:0 0 8px;color:#0f172a}
+    h2{font-size:19px;margin:28px 0 6px;color:#0f766e;border-bottom:1px solid #cbd5e1;padding-bottom:4px}
+    h3{font-size:24px;margin:6px 0 8px;color:#111827}
+    h4{font-size:15px;margin:0 0 8px;color:#1e40af}
+    .cover{border:1px solid #cbd5e1;background:#f8fafc;padding:22px;margin-bottom:18px}
+    .summary,.muted,.meta,figcaption{color:#64748b}
+    .lesson{page-break-inside:auto;margin-bottom:22px}
+    .block{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:10px 0;page-break-inside:avoid}
+    .highlight{background:#ecfeff;border-color:#67e8f9}
+    .math-block pre{font-size:16px;text-align:center;background:#f8fafc}
+    pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:6px;font-family:Consolas,'Courier New',monospace;font-size:12px;line-height:1.45}
+    table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12px}
+    th,td{border:1px solid #cbd5e1;padding:7px;text-align:left;vertical-align:top}
+    th{background:#f1f5f9;color:#0f172a}
+    ul,ol{margin-top:6px}
+    img{max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:6px}
+    .correct{font-weight:bold;color:#047857}
+  </style></head><body>
+    <section class="cover">
+      <h1>${htmlEscape(course?.title || "Course")}</h1>
+      ${course?.description ? `<p>${htmlEscape(course.description)}</p>` : ""}
+    </section>
+    ${topicSections.join("")}
+    ${pyqHtml}
+  </body></html>`;
 
   const pdfLib = await import("pdf-lib");
   const pdf = await pdfLib.PDFDocument.create();
