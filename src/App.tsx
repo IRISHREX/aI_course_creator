@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { TopNav } from "@/components/TopNav";
 import ThreeBackground from "@/components/ThreeBackground";
+import { SphericalLoader } from "@/components/SphericalLoader";
 
 const AdminLayout = lazy(() => import("@/components/AdminLayout").then((module) => ({ default: module.AdminLayout })));
 const Index = lazy(() => import("./pages/Index"));
@@ -35,7 +36,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 const PageFallback = () => (
-  <div className="container py-20 text-sm text-muted-foreground">Loading...</div>
+  <SphericalLoader className="container py-20" />
 );
 
 const Content = () => {

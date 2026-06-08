@@ -10,6 +10,7 @@ import { useTopics, type Topic } from "@/hooks/useTopics";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Mindmap } from "@/components/Mindmap";
 import { blockToText } from "@/components/BlockRenderer";
+import { SphericalLoader } from "@/components/SphericalLoader";
 
 type MindmapData = Parameters<typeof Mindmap>[0]["data"];
 type CourseWithMindmap = Course & { mindmap?: MindmapData };
@@ -236,7 +237,7 @@ export default function CourseReader() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [contentOpen, goToSlide, pauseReading, playCurrent, slideIndex, slidesOpen, speechState]);
 
-  if (courseLoading || topicsLoading) return <div className="container py-20 text-muted-foreground">Loading...</div>;
+  if (courseLoading || topicsLoading) return <SphericalLoader className="container py-20" label="Loading reader" />;
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
   return (

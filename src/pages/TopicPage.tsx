@@ -18,6 +18,7 @@ import { Mindmap } from "@/components/Mindmap";
 import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 import ThreePageBackground from "@/components/ThreePageBackground";
+import { SphericalLoader } from "@/components/SphericalLoader";
 import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck, Volume2, VolumeX, MonitorPlay, MonitorOff, Settings2, Languages, MousePointer2, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -183,7 +184,7 @@ export default function TopicPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [goNextPage, goPreviousPage]);
 
-  if (!topic) return <div className="container py-20 text-muted-foreground">Loading…</div>;
+  if (!topic) return <SphericalLoader className="container py-20" label="Loading lesson" />;
   const p = progress[topic.id];
 
   const generateExtraQuiz = async () => {

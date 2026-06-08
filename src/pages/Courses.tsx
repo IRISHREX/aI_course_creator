@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
+import { SphericalLoader } from "@/components/SphericalLoader";
 
 type SortMode = "manual" | "newest" | "oldest" | "updated" | "az" | "za";
 type DateMode = "all" | "today" | "7d" | "30d" | "year" | "custom";
@@ -230,7 +231,7 @@ export default function Courses() {
       </div>
 
       {loading ? (
-        <div className="text-muted-foreground">Loading...</div>
+        <SphericalLoader className="py-16" label="Loading courses" />
       ) : filteredCourses.length === 0 ? (
         <div className="glass rounded-2xl p-10 text-center">
           <BookOpen className="h-10 w-10 mx-auto text-muted-foreground mb-3" />

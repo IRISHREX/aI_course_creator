@@ -15,6 +15,7 @@ import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, 
 import { backendApi } from "@/integrations/api/client";
 import { BlockRenderer } from "@/components/BlockRenderer";
 import { Mindmap } from "@/components/Mindmap";
+import { SphericalLoader } from "@/components/SphericalLoader";
 import { toast } from "sonner";
 import { type ComponentProps, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,7 +79,7 @@ export default function CourseDetail() {
     setLessonMindmapSelectionReady(true);
   }, [lessonMindmapSelectionReady, topics]);
 
-  if (cLoad || loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
+  if (cLoad || loading) return <SphericalLoader className="container py-20" label="Loading course" />;
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
   const generateMindmap = async () => {

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { ArrowLeft, CheckCircle2, CheckSquare, Download, Edit3, FileJson, FileText, GripVertical, Languages, Layers3, Loader2, Lock, Plus, RefreshCw, Save, SearchCheck, Settings, Sparkles, Square, Tag, Trash2, Upload, X, Zap } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
 import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
+import { SphericalLoader } from "@/components/SphericalLoader";
 
 type BulkLessonInput = { unit: number; title: string; summary: string };
 type ExportOptions = {
@@ -120,7 +121,7 @@ export default function CourseEdit() {
     }
   }, [course]);
 
-  if (aLoad || cLoad) return <div className="container py-20 text-muted-foreground">Loading…</div>;
+  if (aLoad || cLoad) return <SphericalLoader className="container py-20" label="Loading editor" />;
   if (!isAdmin) return (
     <div className="container max-w-md py-20 text-center">
       <Lock className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
