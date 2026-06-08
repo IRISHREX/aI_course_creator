@@ -20,6 +20,14 @@ class ApiError extends Error {
   requestId?: string | null;
 }
 
+class AiKeyPromptCancelledError extends Error {
+  code = "AI_KEY_PROMPT_CANCELLED";
+
+  constructor() {
+    super("AI generation cancelled. Add a Gemini API key before generating again.");
+  }
+}
+
 const keyMap: Record<string, string> = {
   course_id: "courseId",
   cover_emoji: "coverEmoji",
@@ -675,12 +683,17 @@ async function saveAiKey(apiKey: string, alias = "") {
 
 async function requestReplacementAiKey(message: string) {
   const apiKey = window.prompt(`${message}\n\nPaste a new Gemini API key to continue:`);
-  if (!apiKey?.trim()) throw new Error("AI generation paused. Add a new API key to continue remaining pending lessons.");
+  if (!apiKey?.trim()) throw new AiKeyPromptCancelledError();
   await saveAiKey(apiKey.trim());
 }
 
 function isAiKeyRecoverable(error: any) {
   return error?.code === "AI_KEY_REQUIRED" || error?.code === "AI_KEY_LIMIT";
+}
+
+function isAiKeyPromptCancelled(error: unknown) {
+  return error instanceof AiKeyPromptCancelledError
+    || (typeof error === "object" && error !== null && "code" in error && error.code === "AI_KEY_PROMPT_CANCELLED");
 }
 
 function aiErrorMessage(error: any, fallback: string) {
@@ -1707,6 +1720,7 @@ Make the root label the course title and organize branches by course concepts.`;
               if (!body.topicId && courseId) await patchCourse(courseId, { mindmap });
               return { data: { ok: true, mindmap, retried: attempt > 1 }, error: null };
             } catch (error) {
+              if (isAiKeyPromptCancelled(error)) throw error;
               lastError = errorMessage(error, lastError);
             }
           }
