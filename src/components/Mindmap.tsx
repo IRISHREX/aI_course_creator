@@ -159,7 +159,7 @@ type PositionedNode = {
   angle: number;
 };
 
-const CANVAS = { width: 980, height: 660, cx: 490, cy: 330 };
+const CANVAS = { width: 1160, height: 780, cx: 580, cy: 390 };
 type SavedPositions = Record<string, { x: number; y: number }>;
 type DragState = { key: string; startClientX: number; startClientY: number; startX: number; startY: number } | null;
 
@@ -170,6 +170,70 @@ function polarPoint(angle: number, radius: number, wave = 0) {
   };
 }
 
+function getNodeBounds(item: PositionedNode, padding = 24) {
+  const info = cleanInfo(item.node);
+  const { width, height } = nodeSize(item.depth, Boolean(info));
+  return {
+    width,
+    height,
+    left: item.x - width / 2 - padding,
+    right: item.x + width / 2 + padding,
+    top: item.y - height / 2 - padding,
+    bottom: item.y + height / 2 + padding,
+  };
+}
+
+function resolveNodeOverlaps(nodes: PositionedNode[]) {
+  const resolved = nodes.map((item) => ({ ...item }));
+
+  for (let pass = 0; pass < 90; pass += 1) {
+    let moved = false;
+
+    for (let i = 0; i < resolved.length; i += 1) {
+      for (let j = i + 1; j < resolved.length; j += 1) {
+        const a = resolved[i];
+        const b = resolved[j];
+        const aBounds = getNodeBounds(a);
+        const bBounds = getNodeBounds(b);
+        const overlapX = Math.min(aBounds.right, bBounds.right) - Math.max(aBounds.left, bBounds.left);
+        const overlapY = Math.min(aBounds.bottom, bBounds.bottom) - Math.max(aBounds.top, bBounds.top);
+        if (overlapX <= 0 || overlapY <= 0) continue;
+
+        const dx = b.x - a.x || Math.cos((i + j + 1) * 1.7);
+        const dy = b.y - a.y || Math.sin((i + j + 1) * 1.7);
+        const length = Math.hypot(dx, dy) || 1;
+        const push = Math.min(34, Math.max(6, Math.min(overlapX, overlapY) / 2 + 4));
+        const pushX = (dx / length) * push;
+        const pushY = (dy / length) * push;
+
+        const aFixed = a.depth === 0;
+        const bFixed = b.depth === 0;
+        if (!aFixed) {
+          a.x -= bFixed ? pushX * 1.5 : pushX;
+          a.y -= bFixed ? pushY * 1.5 : pushY;
+        }
+        if (!bFixed) {
+          b.x += aFixed ? pushX * 1.5 : pushX;
+          b.y += aFixed ? pushY * 1.5 : pushY;
+        }
+
+        [a, b].forEach((item) => {
+          const info = cleanInfo(item.node);
+          const { width, height } = nodeSize(item.depth, Boolean(info));
+          const clamped = clampNodePosition(item.x, item.y, width, height);
+          item.x = clamped.x;
+          item.y = clamped.y;
+        });
+        moved = true;
+      }
+    }
+
+    if (!moved) break;
+  }
+
+  return resolved;
+}
+
 function layoutMindmap(root: Node) {
   const positioned: PositionedNode[] = [];
   const branches = root.children || [];
@@ -178,8 +242,8 @@ function layoutMindmap(root: Node) {
   const addChildren = (node: Node, parent: PositionedNode, depth: number, branchIndex: number, baseAngle: number) => {
     const children = (node.children || []).slice(0, depth === 1 ? 5 : 4);
     if (!children.length || depth > 3) return;
-    const spread = depth === 1 ? 0.78 : 0.46;
-    const radius = depth === 1 ? 305 : 415;
+    const spread = depth === 1 ? 1.08 : 0.68;
+    const radius = depth === 1 ? 355 : 505;
     children.forEach((child, childIndex) => {
       const offset = children.length === 1 ? 0 : (childIndex / (children.length - 1) - 0.5) * spread;
       const angle = baseAngle + offset;
@@ -193,14 +257,14 @@ function layoutMindmap(root: Node) {
 
   branches.forEach((branch, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(branches.length, 1);
-    const point = polarPoint(angle, 175, 16);
+    const point = polarPoint(angle, 215, 18);
     const key = `root-${branch.id || branch.label}-${index}`;
     const current = { node: branch, depth: 1, branchIndex: index, x: point.x, y: point.y, parentKey: "root", key, angle };
     positioned.push(current);
     addChildren(branch, current, 1, index, angle);
   });
 
-  return positioned;
+  return resolveNodeOverlaps(positioned);
 }
 
 function storageKeyForMindmap(root: Node | null | undefined) {
@@ -389,7 +453,7 @@ export function Mindmap({ data, exportMode = false, fitView = false }: { data: N
               </Button>
             )}
             <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${CANVAS.width} ${CANVAS.height}`} aria-hidden="true">
-              {[105, 190, 300, 415].map((radius) => (
+              {[130, 235, 370, 505].map((radius) => (
                 <circle
                   key={radius}
                   cx={CANVAS.cx}
@@ -403,7 +467,7 @@ export function Mindmap({ data, exportMode = false, fitView = false }: { data: N
               ))}
               {branches.map((_branch, index) => {
                 const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(branches.length, 1);
-                const end = polarPoint(angle, 440);
+                const end = polarPoint(angle, 535);
                 return <line key={index} x1={CANVAS.cx} y1={CANVAS.cy} x2={end.x} y2={end.y} stroke="hsl(var(--border))" strokeOpacity="0.28" />;
               })}
               {positioned.filter((item) => item.parentKey).map((item) => {
