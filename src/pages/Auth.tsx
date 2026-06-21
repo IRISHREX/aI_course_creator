@@ -37,6 +37,7 @@ export default function Auth() {
         const { error } = await backendApi.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");
+        nav("/", { replace: true });
       }
     } catch (err: any) {
       toast.error(err.message || "Auth failed");
