@@ -120,25 +120,8 @@ function decodeBase64Url(value: string) {
   return atob(padded);
 }
 
-function sessionFromAuthResponse(data: any) {
-  if (!data?.token || !data?.user) return null;
-  return {
-    access_token: data.token,
-    refresh_token: "",
-    expires_in: 0,
-    expires_at: undefined,
-    token_type: "bearer" as const,
-    user: {
-      id: data.user.id,
-      email: data.user.email,
-      user_metadata: { display_name: data.user.displayName },
-      app_metadata: { roles: [] },
-    },
-  };
-}
-
-function emitAuth(event: "SIGNED_IN" | "SIGNED_OUT", session: any) {
-  window.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: { event, session } }));
+function emitAuth() {
+  window.dispatchEvent(new Event(AUTH_EVENT));
 }
 
 async function makeSession() {
@@ -1735,14 +1718,7 @@ export const backendApi = {
   apiUrl: API_URL,
   auth: {
     onAuthStateChange(callback: (_event: string, session: any) => void) {
-      const listener = async (event: Event) => {
-        const detail = (event as CustomEvent<{ event?: string; session?: any }>).detail;
-        if (detail && "session" in detail) {
-          callback(detail.event || "SIGNED_IN", detail.session);
-          return;
-        }
-        callback("SIGNED_IN", await makeSession());
-      };
+      const listener = async () => callback("SIGNED_IN", await makeSession());
       window.addEventListener(AUTH_EVENT, listener);
       return { data: { subscription: { unsubscribe: () => window.removeEventListener(AUTH_EVENT, listener) } } };
     },
@@ -1753,7 +1729,7 @@ export const backendApi = {
       try {
         const data = await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
         localStorage.setItem(TOKEN_KEY, data.token);
-        emitAuth("SIGNED_IN", sessionFromAuthResponse(data));
+        emitAuth();
         return { data, error: null };
       } catch (error) {
         return { data: null, error };
@@ -1766,7 +1742,7 @@ export const backendApi = {
           body: JSON.stringify({ email, password, displayName: options?.data?.display_name }),
         });
         localStorage.setItem(TOKEN_KEY, data.token);
-        emitAuth("SIGNED_IN", sessionFromAuthResponse(data));
+        emitAuth();
         return { data, error: null };
       } catch (error) {
         return { data: null, error };
@@ -1774,7 +1750,7 @@ export const backendApi = {
     },
     async signOut() {
       localStorage.removeItem(TOKEN_KEY);
-      emitAuth("SIGNED_OUT", null);
+      emitAuth();
       return { error: null };
     },
     async getUser() {
