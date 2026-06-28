@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,7 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { TopNav } from "@/components/TopNav";
-import ThreeBackground from "@/components/ThreeBackground";
 import { SphericalLoader } from "@/components/SphericalLoader";
 
 const AdminLayout = lazy(() => import("@/components/AdminLayout").then((module) => ({ default: module.AdminLayout })));
@@ -40,13 +39,9 @@ const PageFallback = () => (
 );
 
 const Content = () => {
-  const location = useLocation();
-
-  const showThreeBackground = location.pathname !== "/" && !location.pathname.startsWith("/course/");
   return (
     <ThemeProvider>
-      {showThreeBackground && <ThreeBackground />}
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col bg-background">
         <TopNav />
         <main className="flex-1">
           <Suspense fallback={<PageFallback />}>

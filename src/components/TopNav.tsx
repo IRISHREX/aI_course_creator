@@ -18,12 +18,11 @@ export const TopNav = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-40 glass border-b border-border/60">
-      <div className="container flex h-16 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur-xl">
+      <div className="container flex h-16 min-w-0 items-center justify-between gap-3 px-4 sm:px-6">
         <Link to="/" className="flex min-w-0 items-center gap-2 group">
-          <div className="relative grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-gradient-primary shadow-glow sm:h-9 sm:w-9">
+          <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary sm:h-10 sm:w-10">
             <Radio className="h-4 w-4 text-primary-foreground sm:h-5 sm:w-5" strokeWidth={2.5} />
-            <span className="absolute inset-0 rounded-xl border border-primary/40 animate-pulse-glow" />
           </div>
           <div className="min-w-0">
             <div className="font-display text-base font-bold leading-none sm:text-lg">Signal</div>
@@ -31,7 +30,7 @@ export const TopNav = () => {
           </div>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-1">
+        <nav className="hidden items-center gap-1 md:flex">
           {navItems.map((it) => (
             <Tooltip key={it.to}>
               <TooltipTrigger asChild>
@@ -39,13 +38,13 @@ export const TopNav = () => {
                   to={it.to}
                   aria-label={it.label}
                   className={({ isActive }) =>
-                    `grid h-10 w-10 place-items-center rounded-full transition-all ${
-                      isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    `flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors ${
+                      isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`
                   }
                 >
                   <it.icon className="h-4 w-4" />
-                  <span className="sr-only">{it.label}</span>
+                  <span>{it.label}</span>
                 </NavLink>
               </TooltipTrigger>
               <TooltipContent side="bottom">{it.label}</TooltipContent>
@@ -84,11 +83,11 @@ export const TopNav = () => {
           )}
         </div>
       </div>
-      <nav className="flex justify-center gap-6 border-t border-border/60 px-3 py-2 md:hidden">
+      <nav className="flex justify-around border-t border-border/60 px-2 py-2 md:hidden">
         {navItems.map((it) => (
           <NavLink key={it.to} to={it.to}
             className={({ isActive }) =>
-              `flex min-w-14 flex-col items-center text-[10px] gap-0.5 px-2 ${isActive ? "text-primary" : "text-muted-foreground"}`}>
+              `flex min-h-11 min-w-16 flex-col items-center justify-center gap-1 rounded-md px-2 text-[11px] font-medium ${isActive ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
             <it.icon className="h-4 w-4" />
             {it.label}
           </NavLink>

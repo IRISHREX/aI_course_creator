@@ -246,13 +246,13 @@ export default function Courses() {
             (() => {
               const playReady = Boolean(c.playback_ready);
               return (
-            <motion.div key={c.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-              <Link to={`/course/${c.slug}`} className="block group">
-                <div className="glass rounded-2xl p-6 h-full hover:shadow-glow transition-all border border-border/60 hover:border-primary/60 relative overflow-hidden">
+            <motion.div className="h-full" key={c.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+              <Link to={`/course/${c.slug}`} className="block h-full group">
+                <div className="glass relative flex h-full min-h-72 flex-col overflow-hidden rounded-lg border border-border/60 p-5 transition-colors hover:border-primary/60">
                   <div className="absolute -right-6 -top-6 text-7xl opacity-10 group-hover:opacity-30 transition">{c.cover_emoji || "📡"}</div>
                   <div className="text-4xl mb-4">{c.cover_emoji || "📡"}</div>
-                  <h3 className="font-display text-xl font-bold mb-2 group-hover:text-gradient">{c.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-3">{c.description}</p>
+                  <h3 className="mb-2 line-clamp-3 break-words font-display text-lg font-bold leading-snug group-hover:text-primary">{c.title}</h3>
+                  <p className="line-clamp-3 break-words text-sm leading-relaxed text-muted-foreground">{c.description}</p>
                   {c.tags && c.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-3">
                       {c.tags.slice(0, 4).map(t => (
@@ -271,8 +271,8 @@ export default function Courses() {
                       {c.tags.length > 4 && <span className="text-[10px] text-muted-foreground">+{c.tags.length - 4}</span>}
                     </div>
                   )}
-                  <div className="mt-5 flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-primary inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> Open course -&gt;</span>
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-5">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary"><Sparkles className="h-3 w-3" /> Open course</span>
                     {playReady && (
                       <button
                         onClick={(event) => { event.preventDefault(); navigate(`/course/${c.slug}/read`); }}
