@@ -243,6 +243,9 @@ export default function Courses() {
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredCourses.map((c, i) => (
+            (() => {
+              const playReady = Boolean(c.playback_ready);
+              return (
             <motion.div key={c.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
               <Link to={`/course/${c.slug}`} className="block group">
                 <div className="glass rounded-2xl p-6 h-full hover:shadow-glow transition-all border border-border/60 hover:border-primary/60 relative overflow-hidden">
@@ -270,15 +273,17 @@ export default function Courses() {
                   )}
                   <div className="mt-5 flex items-center justify-between gap-2">
                     <span className="text-xs font-mono text-primary inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> Open course -&gt;</span>
-                    <button
-                      onClick={(e) => { e.preventDefault(); navigate(`/course/${c.slug}/read`); }}
-                      className="inline-flex h-8 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 text-xs font-medium text-primary transition hover:bg-primary/20"
-                      title="Play course slides"
-                      aria-label={`Play ${c.title} slides`}
-                    >
-                      <PlayCircle className="h-3.5 w-3.5" />
-                      Play
-                    </button>
+                    {playReady && (
+                      <button
+                        onClick={(event) => { event.preventDefault(); navigate(`/course/${c.slug}/read`); }}
+                        className="inline-flex h-8 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 text-xs font-medium text-primary transition hover:bg-primary/20"
+                        title="Play course slides"
+                        aria-label={`Play ${c.title} slides`}
+                      >
+                        <PlayCircle className="h-3.5 w-3.5" />
+                        Play
+                      </button>
+                    )}
                     {isAdmin && (
                       <button onClick={(e) => { e.preventDefault(); remove(c.id, c.title); }}
                         className="text-muted-foreground hover:text-destructive p-1">
@@ -289,6 +294,8 @@ export default function Courses() {
                 </div>
               </Link>
             </motion.div>
+              );
+            })()
           ))}
         </div>
       )}

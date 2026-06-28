@@ -11,6 +11,7 @@ export interface Course {
   tags?: string[] | null;
   created_at?: string | null;
   updated_at?: string | null;
+  playback_ready?: boolean;
 }
 
 export const useCourses = () => {

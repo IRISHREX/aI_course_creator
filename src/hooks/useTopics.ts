@@ -14,6 +14,7 @@ export interface Topic {
   content: unknown[];
   translations?: unknown[];
   mindmap?: unknown;
+  presentation?: { version: number; generatedAt?: string; slides: import("@/lib/lessonPresentation").PresentationSlide[] } | null;
   visualization: string | null;
   quiz: QuizQ[];
 }

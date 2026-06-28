@@ -11,12 +11,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown, Download, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown, Download, Trash2, MonitorPlay } from "lucide-react";
 import { backendApi } from "@/integrations/api/client";
 import { Mindmap } from "@/components/Mindmap";
 import { SphericalLoader } from "@/components/SphericalLoader";
 import { toast } from "sonner";
 import { type ComponentProps, useEffect, useState } from "react";
+import { hasPresentation } from "@/lib/lessonPresentation";
 
 type MindmapData = ComponentProps<typeof Mindmap>["data"];
 type CourseWithMindmap = NonNullable<ReturnType<typeof useCourseBySlug>["course"]> & {
@@ -52,6 +53,8 @@ export default function CourseDetail() {
   const [lessonMindmapSelectionReady, setLessonMindmapSelectionReady] = useState(false);
   const [bulkGeneratingMindmaps, setBulkGeneratingMindmaps] = useState(false);
   const [bulkMindmapProgress, setBulkMindmapProgress] = useState("");
+  const [generatingPresentations, setGeneratingPresentations] = useState(false);
+  const [presentationProgress, setPresentationProgress] = useState("");
   const [pyqCount, setPyqCount] = useState(0);
   const [tocOpen, setTocOpen] = useState(false);
 
@@ -98,6 +101,8 @@ export default function CourseDetail() {
   const selectedLessonMindmapCount = selectedLessonMindmaps.length;
   const selectedGeneratedLessonMindmaps = topics.filter((topic) => selectedLessonMindmaps.includes(topic.id) && topic.mindmap);
   const selectedGeneratedLessonMindmapCount = selectedGeneratedLessonMindmaps.length;
+  const playReady = topics.some((topic) => hasPresentation(topic.presentation) || Boolean(topic.mindmap));
+  const presentationCount = topics.filter((topic) => hasPresentation(topic.presentation)).length;
 
   const setExportOption = (key: keyof ExportOptions, value: boolean) => {
     setExportOptions((current) => ({ ...current, [key]: value }));
@@ -143,6 +148,33 @@ export default function CourseDetail() {
     } finally {
       setBulkGeneratingMindmaps(false);
       setBulkMindmapProgress("");
+    }
+  };
+
+  const generateMissingPresentations = async () => {
+    const missing = topics.filter((topic) => !hasPresentation(topic.presentation));
+    if (!missing.length) {
+      toast.info("Every lesson already has an AI presentation");
+      return;
+    }
+    setGeneratingPresentations(true);
+    let generated = 0;
+    try {
+      for (const [index, topic] of missing.entries()) {
+        setPresentationProgress(`${index + 1}/${missing.length}`);
+        const { data, error } = await backendApi.functions.invoke("generate-presentation", { body: { topicId: topic.id } });
+        if (error) throw error;
+        if (!data?.presentation) throw new Error("AI presentation was not returned");
+        setTopics((current) => current.map((item) =>
+          item.id === topic.id ? { ...item, presentation: data.presentation } : item));
+        generated += 1;
+      }
+      toast.success(`Generated ${generated} lesson presentation${generated === 1 ? "" : "s"}`);
+    } catch (error) {
+      toast.error(errorMessage(error, generated ? `Stopped after ${generated} presentations` : "Presentation generation failed"));
+    } finally {
+      setGeneratingPresentations(false);
+      setPresentationProgress("");
     }
   };
 
@@ -275,6 +307,11 @@ export default function CourseDetail() {
             {exporting === "mindmaps" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
             Mind maps PDF
           </Button>
+          {playReady && (
+            <Button asChild variant="hero">
+              <Link to={`/course/${course.slug}/read`}><MonitorPlay className="h-4 w-4 mr-1" /> Play course</Link>
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="neon" disabled={Boolean(exporting)} className="gap-1">
@@ -310,6 +347,15 @@ export default function CourseDetail() {
           </DropdownMenu>
           {isAdmin && (
             <>
+              <Button
+                variant="neon"
+                onClick={generateMissingPresentations}
+                disabled={generatingPresentations || presentationCount === topics.length}
+                className="col-span-2 sm:col-span-1"
+              >
+                {generatingPresentations ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <MonitorPlay className="h-4 w-4 mr-1" />}
+                {generatingPresentations ? `Generating ${presentationProgress}` : `Generate PPTs (${presentationCount}/${topics.length})`}
+              </Button>
               <Button asChild variant="hero" className="col-span-2 sm:col-span-1">
                 <Link to={`/course/${course.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Manage</Link>
               </Button>

@@ -562,6 +562,48 @@ function normalizeLessonContent(content: unknown) {
   return blocks.slice(0, 15);
 }
 
+const PRESENTATION_LAYOUTS = new Set(["title", "bullets", "process", "comparison", "timeline", "visual"]);
+
+function normalizePresentation(value: unknown, topic: any) {
+  const source = value && typeof value === "object" ? value as Record<string, any> : {};
+  const rawSlides = Array.isArray(source.slides) ? source.slides : [];
+  const slides = rawSlides.map((raw: any, index: number) => {
+    const layout = PRESENTATION_LAYOUTS.has(raw?.layout) ? raw.layout : "bullets";
+    const title = cleanString(raw?.title);
+    const bullets = Array.isArray(raw?.bullets)
+      ? raw.bullets.map(cleanString).filter(Boolean).slice(0, 6)
+      : [];
+    const steps = Array.isArray(raw?.steps)
+      ? raw.steps.map(cleanString).filter(Boolean).slice(0, 6)
+      : [];
+    const headers = Array.isArray(raw?.headers)
+      ? raw.headers.map(cleanString).filter(Boolean).slice(0, 4)
+      : [];
+    const rows = Array.isArray(raw?.rows)
+      ? raw.rows.filter(Array.isArray).slice(0, 6).map((row: unknown[]) => row.map(cleanString).slice(0, headers.length || 4))
+      : [];
+    const diagramCode = normalizeMermaidFlowchart(raw?.diagramCode || raw?.diagram_code);
+    const narration = cleanString(raw?.narration) || [title, ...bullets, ...steps, ...rows.flat()].filter(Boolean).join(". ");
+    const hasContent = bullets.length || steps.length || (headers.length && rows.length) || diagramCode;
+    if (!title || !narration || (!hasContent && layout !== "title")) return null;
+    return compact({
+      id: `${topic.id}-presentation-${index + 1}`,
+      topicId: topic.id,
+      topicSlug: topic.slug,
+      eyebrow: `Unit ${topic.unit} / Lesson ${(topic.order_index ?? 0) + 1}`,
+      title,
+      layout,
+      bullets,
+      steps,
+      headers,
+      rows,
+      diagramCode,
+      narration,
+    });
+  }).filter(Boolean).slice(0, 12);
+  return slides.length >= 2 ? { version: 1, generatedAt: new Date().toISOString(), slides } : null;
+}
+
 const EXPLAINED_BLOCK_TYPES = new Set(["flowchart", "chart", "math", "code"]);
 
 function ensureExplanatoryHighlights(blocks: any[]) {
@@ -1833,6 +1875,25 @@ Make the root label the course title and organize branches by course concepts.`;
           if (body.topicId) await patchTopic(body.topicId, { mindmap: null });
           if (!body.topicId && courseId) await patchCourse(courseId, { mindmap: null });
           return { data: { ok: false, mindmap: null, removed: true, error: `${lastError}. Bad mind map was discarded.` }, error: null };
+        }
+        if (name === "generate-presentation") {
+          const topic = await getTopic(body.topicId);
+          const result = await aiJson(
+            `Return only valid JSON in this shape:
+{"slides":[{"title":"","layout":"title|bullets|process|comparison|timeline|visual","bullets":[],"steps":[],"headers":[],"rows":[],"diagramCode":"","narration":""}]}.
+Create a professional educational presentation from one lesson. Identify major topics and subtopics, group related ideas, and summarize instead of copying paragraphs. Each slide must focus on one concept. Use 2-8 slides based on lesson complexity. Use concise bullets, process steps, comparisons, timelines, or a small Mermaid flowchart when they genuinely improve understanding. Narration must naturally explain only that slide. Do not include markdown or code fences.`,
+            `Lesson title: ${topic.title}
+Lesson summary: ${topic.summary || ""}
+Lesson content:
+${JSON.stringify(topic.content || []).slice(0, 12000)}
+
+Build the deck in teaching order. For an algorithm such as KNN, prefer a definition/key-idea slide, a working-steps/example slide, and an advantages/disadvantages/use-cases slide. Never dump lesson paragraphs onto slides.`,
+            { slides: [] },
+          );
+          const presentation = normalizePresentation(result, topic);
+          if (!presentation) throw new Error("AI did not return a valid presentation deck");
+          await patchTopic(topic.id, { presentation });
+          return { data: { ok: true, presentation, slideCount: presentation.slides.length }, error: null };
         }
         if (name === "generate-pyq-answer") {
           const pyq = await findPyq(body.pyqId);
