@@ -185,7 +185,7 @@ const ThreeBackground: React.FC = () => {
         left: positionStyle.left,
         width: '100%',
         height: '100%',
-        zIndex: -1,
+        zIndex: 0,
         background: 'linear-gradient(to bottom, #11e8bb 0%, #8200c9 100%)',
         opacity: threeD.opacity,
         pointerEvents: 'none',

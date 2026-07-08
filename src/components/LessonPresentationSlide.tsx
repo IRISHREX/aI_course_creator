@@ -57,7 +57,7 @@ export function LessonPresentationSlide({ slide, activeItem, sequence }: Props) 
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: -36, scale: 0.985 }}
       transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-      className="relative flex aspect-video w-full min-h-[560px] overflow-hidden rounded-lg border border-white/10 bg-[#0b1018]/95 text-white shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:min-h-[500px]"
+      className="relative flex h-full w-full overflow-hidden rounded-lg border border-white/10 bg-[#0b1018]/92 text-white shadow-[0_30px_100px_rgba(0,0,0,0.65)]"
     >
       <motion.div
         className="absolute inset-x-0 top-0 h-1 bg-cyan-400"
@@ -67,7 +67,7 @@ export function LessonPresentationSlide({ slide, activeItem, sequence }: Props) 
       />
       <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full border-[42px] border-cyan-300/10" />
       <div className="absolute bottom-14 left-0 h-px w-1/3 bg-cyan-300/20" />
-      <div className="relative z-10 flex w-full flex-col p-6 sm:p-10 lg:p-14">
+      <div className="relative z-10 flex min-h-0 w-full flex-col p-5 sm:p-8 lg:p-12">
         <header className="mb-4 flex items-center justify-between gap-5 sm:mb-8">
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-cyan-300">{slide.eyebrow}</p>
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-cyan-300/30 bg-cyan-300/10 text-cyan-200 shadow-[0_0_30px_rgba(34,211,238,0.18)]">
@@ -165,7 +165,7 @@ export function LessonPresentationSlide({ slide, activeItem, sequence }: Props) 
         )}
 
         {slide.layout === "visual" && slide.mindmap && (
-          <div className="mt-8 min-h-0 flex-1 overflow-auto rounded-md border border-white/10 bg-white/[0.04] p-3">
+          <div className="mt-6 min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-white/[0.04] p-3">
             <Mindmap data={slide.mindmap as Parameters<typeof Mindmap>[0]["data"]} fitView />
           </div>
         )}

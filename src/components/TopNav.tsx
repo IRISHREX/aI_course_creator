@@ -18,11 +18,12 @@ export const TopNav = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
       <div className="container flex h-16 min-w-0 items-center justify-between gap-3 px-4 sm:px-6">
         <Link to="/" className="flex min-w-0 items-center gap-2 group">
-          <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary sm:h-10 sm:w-10">
+          <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-primary shadow-glow sm:h-10 sm:w-10">
             <Radio className="h-4 w-4 text-primary-foreground sm:h-5 sm:w-5" strokeWidth={2.5} />
+            <span className="absolute inset-0 rounded-xl border border-primary/40 animate-pulse-glow" />
           </div>
           <div className="min-w-0">
             <div className="font-display text-base font-bold leading-none sm:text-lg">Signal</div>
@@ -38,13 +39,13 @@ export const TopNav = () => {
                   to={it.to}
                   aria-label={it.label}
                   className={({ isActive }) =>
-                    `flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors ${
-                      isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    `grid h-10 w-10 place-items-center rounded-xl transition-all ${
+                      isActive ? "bg-primary/15 text-primary shadow-[0_0_22px_hsl(var(--primary)/0.16)]" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                     }`
                   }
                 >
                   <it.icon className="h-4 w-4" />
-                  <span>{it.label}</span>
+                  <span className="sr-only">{it.label}</span>
                 </NavLink>
               </TooltipTrigger>
               <TooltipContent side="bottom">{it.label}</TooltipContent>
@@ -83,7 +84,7 @@ export const TopNav = () => {
           )}
         </div>
       </div>
-      <nav className="flex justify-around border-t border-border/60 px-2 py-2 md:hidden">
+      <nav className="flex justify-around border-t border-border/60 bg-background/40 px-2 py-2 md:hidden">
         {navItems.map((it) => (
           <NavLink key={it.to} to={it.to}
             className={({ isActive }) =>

@@ -17,6 +17,7 @@ import { SphericalLoader } from "@/components/SphericalLoader";
 import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 import ThreePageBackground from "@/components/ThreePageBackground";
+import ThreeBackground from "@/components/ThreeBackground";
 import { useCourseSettings, type LessonVisualStyle } from "@/lib/appSettings";
 import { hasPresentation, type PresentationSlide } from "@/lib/lessonPresentation";
 
@@ -116,9 +117,12 @@ export default function CourseReader() {
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
   const selectedVoice = useMemo(() => voices.find((voice) => voice.voiceURI === voiceURI) || null, [voiceURI, voices]);
   const readerBackground = courseSettings.lessonGraphicsEnabled ? (
-    courseSettings.lessonVisualStyle === "particles" ? <ThreeParticleBackground className="fixed opacity-40" /> :
-    courseSettings.lessonVisualStyle === "orbit" ? <ThreePageBackground className="fixed opacity-55" /> :
-    <LessonTerrainBackground className="fixed opacity-35" />
+    <>
+      <ThreeBackground />
+      {courseSettings.lessonVisualStyle === "particles" ? <ThreeParticleBackground className="fixed opacity-40" /> :
+      courseSettings.lessonVisualStyle === "orbit" ? <ThreePageBackground className="fixed opacity-55" /> :
+      <LessonTerrainBackground className="fixed opacity-35" />}
+    </>
   ) : null;
 
   useEffect(() => {
@@ -134,6 +138,34 @@ export default function CourseReader() {
     try { localStorage.setItem(READER_VOICE_KEY, nextVoiceURI); }
     catch { /* ignore private-mode storage errors */ }
   };
+
+  const previewVoice = useCallback(() => {
+    if (!supported) return;
+    readTokenRef.current += 1;
+    const utter = new SpeechSynthesisUtterance("This is the selected narration voice for Play Mode.");
+    if (selectedVoice) {
+      utter.voice = selectedVoice;
+      utter.lang = selectedVoice.lang;
+    }
+    utter.rate = speed;
+    window.speechSynthesis.cancel();
+    utterRef.current = utter;
+    setActiveItem(-1);
+    window.speechSynthesis.speak(utter);
+    setSpeechState("playing");
+    utter.onend = () => {
+      if (utterRef.current === utter) {
+        utterRef.current = null;
+        setSpeechState("idle");
+      }
+    };
+    utter.onerror = () => {
+      if (utterRef.current === utter) {
+        utterRef.current = null;
+        setSpeechState("idle");
+      }
+    };
+  }, [selectedVoice, speed, supported]);
 
   const updateVisualStyle = (lessonVisualStyle: LessonVisualStyle) => {
     setCourseSettingsValue({ ...courseSettings, lessonGraphicsEnabled: true, lessonVisualStyle });
@@ -280,7 +312,7 @@ export default function CourseReader() {
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
   return (
-    <div ref={rootRef} className="fixed inset-0 z-[100] overflow-hidden bg-[#05070a] text-white">
+    <div ref={rootRef} className="fixed inset-0 z-[100] isolate overflow-hidden bg-[#05070a] text-white">
       {readerBackground}
       <div className="pointer-events-none absolute inset-0 bg-black/45" />
       <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:48px_48px]" />
@@ -324,7 +356,14 @@ export default function CourseReader() {
               <div className="space-y-4">
                 <div>
                   <Label className="text-xs">Narration voice</Label>
-                  <Select value={voiceURI || "system"} onValueChange={(value) => updateVoice(value === "system" ? "" : value)} disabled={!supported}>
+                  <Select
+                    value={voiceURI || "system"}
+                    onValueChange={(value) => {
+                      updateVoice(value === "system" ? "" : value);
+                      if (speechState === "playing" && current) setPendingRead(true);
+                    }}
+                    disabled={!supported}
+                  >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="System default" />
                     </SelectTrigger>
@@ -338,6 +377,10 @@ export default function CourseReader() {
                     </SelectContent>
                   </Select>
                 </div>
+                <Button type="button" variant="neon" size="sm" onClick={previewVoice} disabled={!supported}>
+                  <Volume2 className="h-4 w-4" />
+                  Preview voice
+                </Button>
                 <div>
                   <Label className="flex justify-between text-xs">
                     <span>Speed</span>
@@ -392,9 +435,9 @@ export default function CourseReader() {
         </div>
       </header>
 
-      <main className="absolute inset-x-0 bottom-24 top-16 z-10 flex items-center justify-center overflow-auto p-2 sm:p-5 lg:p-7">
+      <main className="absolute inset-x-0 bottom-24 top-16 z-10 flex items-center justify-center overflow-hidden p-2 sm:p-4 lg:p-5">
         {current ? (
-          <div className="w-full max-w-[1320px]" style={{ maxWidth: "min(1320px, calc((100vh - 180px) * 1.7778))" }}>
+          <div className="h-full w-full max-w-[min(1500px,calc((100vh-156px)*1.7778))]">
             <LessonPresentationSlide slide={current} activeItem={activeItem} sequence={slideSequence} />
           </div>
         ) : (
@@ -438,7 +481,7 @@ export default function CourseReader() {
               ) : (
                 <Button size="icon" onClick={playCurrent} className="h-12 w-12 rounded-full bg-cyan-300 text-slate-950 shadow-[0_0_28px_rgba(34,211,238,0.38)] hover:bg-cyan-200" title={speechState === "paused" ? "Resume reading" : "Read slide"} aria-label={speechState === "paused" ? "Resume reading" : "Read slide"}><Play className="ml-0.5 h-5 w-5" /></Button>
               )}
-              <Button variant="ghost" size="icon" className="text-white/50 hover:bg-white/10 hover:text-white" onClick={stopReading} title="Stop reading" aria-label="Stop reading"><Square className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="text-white/50 hover:bg-white/10 hover:text-white" onClick={() => current && goToSlide(slideIndex, true)} title="Restart narration" aria-label="Restart narration"><Square className="h-4 w-4" /></Button>
               <Button variant="ghost" size="icon" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={() => goToSlide(slideIndex + 1, true)} disabled={slideIndex >= slides.length - 1} title="Next slide" aria-label="Next slide">
                 <SkipForward className="h-5 w-5" />
               </Button>

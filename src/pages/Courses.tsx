@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { useCourses } from "@/hooks/useCourses";
+import { useTopics } from "@/hooks/useTopics";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
 import { SphericalLoader } from "@/components/SphericalLoader";
+import { hasPresentation } from "@/lib/lessonPresentation";
 
 type SortMode = "manual" | "newest" | "oldest" | "updated" | "az" | "za";
 type DateMode = "all" | "today" | "7d" | "30d" | "year" | "custom";
@@ -37,6 +39,7 @@ function dateInputTime(value: string, endOfDay = false) {
 
 export default function Courses() {
   const { courses, loading, refresh } = useCourses();
+  const { topics, loading: topicsLoading } = useTopics();
   const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const [activeTags, setActiveTags] = useState<string[]>([]);
@@ -79,6 +82,16 @@ export default function Courses() {
       return (a.order_index ?? 0) - (b.order_index ?? 0);
     });
   }, [courses, activeTags, dateRange, sortMode]);
+
+  const playableCourses = useMemo(() => {
+    const map = new Map<string, number>();
+    topics.forEach((topic) => {
+      if (hasPresentation(topic.presentation) || Boolean(topic.mindmap)) {
+        map.set(topic.course_id, (map.get(topic.course_id) || 0) + 1);
+      }
+    });
+    return map;
+  }, [topics]);
 
   const toggleTag = (t: string) => {
     setActiveTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
@@ -244,7 +257,8 @@ export default function Courses() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredCourses.map((c, i) => (
             (() => {
-              const playReady = Boolean(c.playback_ready);
+              const playableLessonCount = playableCourses.get(c.id) || 0;
+              const playReady = playableLessonCount > 0 || (topicsLoading && Boolean(c.playback_ready));
               return (
             <motion.div className="h-full" key={c.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
               <Link to={`/course/${c.slug}`} className="block h-full group">
@@ -277,7 +291,7 @@ export default function Courses() {
                       <button
                         onClick={(event) => { event.preventDefault(); navigate(`/course/${c.slug}/read`); }}
                         className="inline-flex h-8 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 text-xs font-medium text-primary transition hover:bg-primary/20"
-                        title="Play course slides"
+                        title={`Play ${playableLessonCount || "ready"} lesson${playableLessonCount === 1 ? "" : "s"}`}
                         aria-label={`Play ${c.title} slides`}
                       >
                         <PlayCircle className="h-3.5 w-3.5" />
