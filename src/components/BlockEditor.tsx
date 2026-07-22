@@ -126,10 +126,9 @@ function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: 
     try {
       const ext = file.name.split(".").pop() || "png";
       const path = `${topicId || "misc"}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("lesson-images").upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data: pub } = supabase.storage.from("lesson-images").getPublicUrl(path);
-      update({ ...block, url: pub.publicUrl });
+      const { data, error } = await supabase.storage.from("lesson-images").upload(path, file, { upsert: true, contentType: file.type });
+      if (error || !data) throw error || new Error("Upload failed");
+      update({ ...block, url: data.publicUrl });
       toast.success("Image uploaded");
     } catch (e: any) { toast.error(e.message || "Upload failed"); }
     finally { setBusy(null); }

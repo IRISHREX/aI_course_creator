@@ -35,6 +35,12 @@ export default function QuizPage() {
       <Button asChild variant="hero"><Link to="/auth">Sign in</Link></Button>
     </div>
   );
+  if (!topic.quiz?.length) return (
+    <div className="container py-20 text-center">
+      <p className="text-muted-foreground mb-4">This lesson doesn't have a quiz yet.</p>
+      <Button asChild variant="hero"><Link to={linkPrefix}>Back to course</Link></Button>
+    </div>
+  );
 
   const q = topic.quiz[i];
   const total = topic.quiz.length;

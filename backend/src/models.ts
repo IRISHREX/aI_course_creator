@@ -142,4 +142,16 @@ const CoursePyqSchema = new Schema(
 );
 export const CoursePyq = model("CoursePyq", CoursePyqSchema);
 
+// ----- Upload (binary assets, e.g. lesson images) -----
+const UploadSchema = new Schema(
+  {
+    contentType: { type: String, required: true },
+    data: { type: Buffer, required: true },
+    filename: { type: String, default: null },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+  },
+  opts,
+);
+export const Upload = model("Upload", UploadSchema);
+
 export { Types };
