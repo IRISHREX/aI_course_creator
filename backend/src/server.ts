@@ -12,6 +12,7 @@ import { adminRouter } from "./routes/admin.js";
 import { aiRouter } from "./routes/ai.js";
 import { aiKeysRouter } from "./routes/aiKeys.js";
 import { progressRouter } from "./routes/progress.js";
+import { uploadsRouter } from "./routes/uploads.js";
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -50,6 +51,7 @@ app.use("/admin", adminRouter);
 app.use("/ai", aiRouter);
 app.use("/ai-keys", aiKeysRouter);
 app.use("/progress", progressRouter);
+app.use("/uploads", uploadsRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);

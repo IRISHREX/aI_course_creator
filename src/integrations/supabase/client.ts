@@ -180,7 +180,7 @@ class BackendQuery {
     return this;
   }
 
-  upsert(payload: any) {
+  upsert(payload: any, _options?: { onConflict?: string }) {
     this.op = "upsert";
     this.payload = payload;
     return this;
@@ -1195,10 +1195,24 @@ Also write exactly 4 MCQs (4 options, 1 correct).`;
     },
   },
   storage: {
-    from() {
+    from(_bucket: string) {
       return {
-        async upload() {
-          return { error: new Error("Storage uploads are not configured on the backend API yet") };
+        async upload(path: string, file: File | Blob, _options?: { upsert?: boolean; contentType?: string }) {
+          try {
+            const form = new FormData();
+            const filename = path.split("/").pop() || "upload";
+            form.append("file", file, filename);
+            const res = await fetch(`${API_URL}/uploads`, {
+              method: "POST",
+              headers: { ...authHeaders() },
+              body: form,
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) return { data: null, error: new Error(data?.error || `Upload failed (${res.status})`) };
+            return { data: { path: data.url, publicUrl: data.url }, error: null };
+          } catch (error) {
+            return { data: null, error };
+          }
         },
         getPublicUrl(path: string) {
           return { data: { publicUrl: path } };

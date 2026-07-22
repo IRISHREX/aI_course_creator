@@ -32,13 +32,6 @@ export default function TopicPage() {
   const [genMindmap, setGenMindmap] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
 
-  // Resume from URL hash: #p=2&w=14
-  useEffect(() => {
-    const h = window.location.hash;
-    const m = h.match(/p=(\d+)/);
-    if (m) setPageIdx(Math.max(0, parseInt(m[1], 10) - 1));
-  }, [slug]);
-
   useEffect(() => {
     if (!slug || !course?.id) return;
     (async () => {
@@ -48,7 +41,9 @@ export default function TopicPage() {
       if (idx >= 0) {
         setTopic(list[idx]);
         setNeighbors({ prev: list[idx - 1], next: list[idx + 1] });
-        setPageIdx(0);
+        // Resume from URL hash (#p=2&w=14) if present, else start at page 1.
+        const pageMatch = window.location.hash.match(/p=(\d+)/);
+        setPageIdx(pageMatch ? Math.max(0, parseInt(pageMatch[1], 10) - 1) : 0);
       }
     })();
   }, [slug, course?.id]);
@@ -61,6 +56,14 @@ export default function TopicPage() {
 
   // Reset active word on page change
   useEffect(() => { setActiveWord(null); }, [pageIdx]);
+
+  // Resume the highlighted word from the URL hash (#w=) once the topic loads.
+  useEffect(() => {
+    if (!topic) return;
+    const wordMatch = window.location.hash.match(/w=(\d+)/);
+    if (wordMatch) setActiveWord(parseInt(wordMatch[1], 10));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic?.id]);
 
   if (!topic) return <div className="container py-20 text-muted-foreground">Loading…</div>;
   const p = progress[topic.id];
