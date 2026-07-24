@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useProgress, type Topic } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
+import { useCourseSettings } from "@/lib/appSettings";
 import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
