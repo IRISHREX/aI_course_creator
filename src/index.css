@@ -169,11 +169,30 @@
   * { @apply border-border; }
   html, body, #root { @apply h-full; max-width: 100%; overflow-x: hidden; }
   body {
-    @apply bg-background text-foreground font-sans;
-    min-width: 320px;
-    letter-spacing: 0;
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image: var(--gradient-hero);
+    background-attachment: fixed;
+    font-feature-settings: "ss01", "cv11";
+    letter-spacing: -0.01em;
+  }
+  h1, h2, h3, h4, h5, h6, .font-display {
+    letter-spacing: -0.03em;
+    font-feature-settings: "ss01", "ss02";
+  }
+  button, [role="button"], a, input, select, textarea {
+    transition: color 200ms var(--transition-smooth),
+                background-color 200ms var(--transition-smooth),
+                border-color 200ms var(--transition-smooth),
+                box-shadow 250ms var(--transition-smooth),
+                transform 200ms var(--transition-smooth),
+                opacity 200ms var(--transition-smooth);
   }
   ::selection { background: hsl(var(--primary) / 0.4); color: hsl(var(--foreground)); }
+  /* Slim scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.5); background-clip: content-box; border: 2px solid transparent; }
 }
 
 @layer components {
@@ -194,6 +213,26 @@
       linear-gradient(hsl(var(--primary) / 0.08) 1px, transparent 1px),
       linear-gradient(90deg, hsl(var(--primary) / 0.08) 1px, transparent 1px);
     background-size: 40px 40px;
+  }
+  /* Compact glass pill toolbar — used across reader, nav, player */
+  .toolbar-pill {
+    @apply inline-flex items-center gap-1 rounded-full px-1.5 py-1;
+    background: hsl(var(--card) / 0.55);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid hsl(var(--border) / 0.7);
+    box-shadow: 0 4px 24px -8px hsl(var(--background) / 0.6),
+                inset 0 1px 0 hsl(var(--foreground) / 0.04);
+  }
+  .toolbar-pill button, .toolbar-pill a {
+    @apply rounded-full;
+  }
+  .cinema-vignette {
+    background:
+      radial-gradient(ellipse at center, transparent 40%, hsl(0 0% 0% / 0.6) 100%),
+      radial-gradient(ellipse at 20% 15%, hsl(var(--primary) / 0.14), transparent 45%),
+      radial-gradient(ellipse at 80% 85%, hsl(var(--secondary) / 0.14), transparent 45%),
+      hsl(232 45% 4%);
   }
 }
 
