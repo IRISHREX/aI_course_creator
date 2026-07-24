@@ -292,14 +292,39 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Render current page with karaoke offsets */}
-      <div style={{ fontSize: `${readerZoom}%` }}>
+      {/* Render current page with karaoke offsets + swipe gestures */}
+      <div
+        style={{ fontSize: `${readerZoom}%` }}
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          (window as any).__lessonSwipe = { x: t.clientX, y: t.clientY, t: Date.now() };
+        }}
+        onTouchEnd={(e) => {
+          const s = (window as any).__lessonSwipe;
+          if (!s) return;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - s.x;
+          const dy = t.clientY - s.y;
+          (window as any).__lessonSwipe = null;
+          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6 && Date.now() - s.t < 600) {
+            if (dx < 0 && pageIdx < pages.length - 1) {
+              setPageTurnDirection("next");
+              setPageIdx((p) => p + 1);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            } else if (dx > 0 && pageIdx > 0) {
+              setPageTurnDirection("prev");
+              setPageIdx((p) => p - 1);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          }
+        }}
+      >
         <motion.div
           key={pageIdx}
           initial={{ opacity: 0, x: pageTurnDirection === "next" ? 30 : -30, rotateY: pageTurnDirection === "next" ? -10 : 10 }}
           animate={{ opacity: 1, x: 0, rotateY: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
-          className="space-y-5"
+          className="space-y-5 pb-24 sm:pb-0"
         >
           {currentPage && (() => {
             let off = 0;
@@ -320,12 +345,16 @@ export default function TopicPage() {
         </motion.div>
       </div>
 
-      {/* Pagination footer */}
+      {/* Pagination footer — sticky thumb-safe on mobile, inline on desktop */}
       {pages.length > 1 && (
-        <div className="mt-8 flex justify-center">
-          <div className="flex flex-wrap items-center gap-3 rounded-full border border-white/15 bg-white/5 px-4 py-3 shadow-2xl shadow-black/10 backdrop-blur-xl">
+        <div
+          className="fixed inset-x-0 z-30 flex justify-center pointer-events-none sm:static sm:mt-8"
+          style={{ bottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+        >
+          <div className="pointer-events-auto toolbar-pill px-2 py-1.5 gap-1">
             <Button
               variant="ghost"
+              size="icon"
               disabled={pageIdx === 0}
               onClick={() => {
                 if (pageIdx === 0) return;
@@ -333,17 +362,20 @@ export default function TopicPage() {
                 setPageIdx((p) => p - 1);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
+              className="h-11 w-11 sm:h-9 sm:w-auto sm:px-3"
+              aria-label="Previous page"
             >
-              <ArrowLeft className="h-4 w-4 mr-1" /> Previous page
+              <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1" />
+              <span className="hidden sm:inline text-sm">Prev</span>
             </Button>
 
-            <span className="text-xs font-mono text-muted-foreground px-2">
+            <span className="px-2 text-xs font-mono text-muted-foreground tabular-nums">
               {pageIdx + 1} / {pages.length}
             </span>
 
             <Button
               variant="ghost"
+              size="icon"
               disabled={pageIdx === pages.length - 1}
               onClick={() => {
                 if (pageIdx === pages.length - 1) return;
@@ -351,9 +383,11 @@ export default function TopicPage() {
                 setPageIdx((p) => p + 1);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              className="bg-white/10 border border-white/10 text-white/90 hover:bg-white/15 backdrop-blur-xl transition-all duration-300"
+              className="h-11 w-11 sm:h-9 sm:w-auto sm:px-3"
+              aria-label="Next page"
             >
-              Next page <ArrowRight className="h-4 w-4 ml-1" />
+              <span className="hidden sm:inline text-sm">Next</span>
+              <ArrowRight className="h-5 w-5 sm:h-4 sm:w-4 sm:ml-1" />
             </Button>
           </div>
         </div>
