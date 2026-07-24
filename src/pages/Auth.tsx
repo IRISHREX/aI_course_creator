@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ export default function Auth() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { error } = await backendApi.auth.signUp({
           email, password,
           options: {
             emailRedirectTo: window.location.origin + "/",
@@ -34,7 +34,7 @@ export default function Auth() {
         if (error) throw error;
         toast.success("Account created. You're in!");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await backendApi.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");
       }
@@ -44,10 +44,10 @@ export default function Auth() {
   };
 
   return (
-    <div className="container max-w-md py-20">
-      <div className="glass rounded-3xl p-8 shadow-elevated">
+    <div className="container flex min-h-[calc(100vh-4rem)] max-w-md items-center py-10">
+      <div className="glass w-full rounded-lg p-6 shadow-lg sm:p-8">
         <div className="flex items-center gap-3 mb-6">
-          <div className="h-12 w-12 rounded-xl bg-gradient-primary grid place-items-center shadow-glow">
+          <div className="grid h-11 w-11 place-items-center rounded-lg bg-primary">
             <Radio className="h-6 w-6 text-primary-foreground" />
           </div>
           <div>
@@ -71,7 +71,7 @@ export default function Auth() {
             <Input id="pw" type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           <Button type="submit" variant="hero" size="lg" className="w-full" disabled={busy}>
-            {busy ? "..." : (mode === "signin" ? "Sign in" : "Create account")}
+            {busy ? "Please wait..." : (mode === "signin" ? "Sign in" : "Create account")}
           </Button>
         </form>
         <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")}

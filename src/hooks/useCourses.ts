@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useCallback, useEffect, useState } from "react";
+import { backendApi } from "@/integrations/api/client";
 
 export interface Course {
   id: string;
@@ -9,17 +9,20 @@ export interface Course {
   cover_emoji: string | null;
   order_index: number;
   tags?: string[] | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  playback_ready?: boolean;
 }
 
 export const useCourses = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const refresh = async () => {
-    const { data } = await supabase.from("courses").select("*").order("order_index");
-    setCourses((data as any as Course[]) ?? []);
+  const refresh = useCallback(async () => {
+    const { data } = await backendApi.from("courses").select("*").order("order_index");
+    setCourses((data as unknown as Course[]) ?? []);
     setLoading(false);
-  };
-  useEffect(() => { refresh(); }, []);
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
   return { courses, loading, refresh };
 };
 
@@ -27,9 +30,16 @@ export const useCourseBySlug = (slug: string | undefined) => {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    if (!slug) return;
-    supabase.from("courses").select("*").eq("slug", slug).maybeSingle()
-      .then(({ data }) => { setCourse(data as any as Course); setLoading(false); });
+    let active = true;
+    if (!slug) { setCourse(null); setLoading(false); return; }
+    setLoading(true);
+    backendApi.from("courses").select("*").eq("slug", slug).maybeSingle()
+      .then(({ data }) => {
+        if (!active) return;
+        setCourse(data as unknown as Course);
+        setLoading(false);
+      });
+    return () => { active = false; };
   }, [slug]);
   return { course, loading };
 };

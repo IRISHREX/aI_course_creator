@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
 import {
   Type, Lightbulb, List as ListIcon, GitBranch, Plus, Trash2, ChevronUp, ChevronDown, X,
   Table as TableIcon, Workflow, BarChart3, Image as ImageIcon, Upload, Sparkles, Loader2,
-  Sigma, Code2,
+  Sigma, Code2, Settings2,
 } from "lucide-react";
 
 export type Block =
@@ -52,9 +53,46 @@ const TYPE_META: { id: Block["type"]; label: string; icon: any }[] = [
 ];
 
 const TYPE_META_BY_ID = new Map(TYPE_META.map((meta) => [meta.id, meta]));
+const EXPLAINABLE_TYPES = new Set<Block["type"]>(["flowchart", "chart", "math", "code"]);
+const DEFAULT_EXPLANATION_PROMPT = "Explain this in simple, human language for a learner. Focus on what each part means, why it matters, and the key takeaway. Keep it concise but clear.";
+const EXPLANATION_PROMPT_KEY = "lesson_block_explanation_prompt";
 
 const asString = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
 const asStringArray = (value: unknown) => Array.isArray(value) ? value.map((item) => asString(item)) : [""];
+
+function normalizeMathValue(value: unknown, caption: unknown = "") {
+  const raw = asString(value).trim();
+  const rawCaption = asString(caption).trim();
+  if (!raw) return { value: "", caption: rawCaption };
+
+  const patterns = [
+    /\$\$([\s\S]+?)\$\$/,
+    /\$([^$\n]+?)\$/,
+    /\\\[([\s\S]+?)\\\]/,
+    /\\\(([\s\S]+?)\\\)/,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+    const equation = match[1].trim();
+    const prose = raw.replace(match[0], " ").replace(/\s+/g, " ").trim();
+    return { value: equation, caption: [prose, rawCaption].filter(Boolean).join(" ") };
+  }
+
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const score = (line: string) => (line.match(/[\\^_=+\-*/]|\\begin|\\frac|\\sum|\\int|\\sqrt/g) || []).length;
+    const equationIndex = lines.reduce((best, line, index) => score(line) > score(lines[best]) ? index : best, 0);
+    if (score(lines[equationIndex]) > 0) {
+      return {
+        value: lines[equationIndex].replace(/^\$\$?|\$\$?$/g, "").trim(),
+        caption: [...lines.slice(0, equationIndex), ...lines.slice(equationIndex + 1), rawCaption].filter(Boolean).join(" "),
+      };
+    }
+  }
+
+  return { value: raw.replace(/^\$\$?|\$\$?$/g, "").trim(), caption: rawCaption };
+}
 
 function blockToEditableBlock(block: unknown): Block {
   if (!block || typeof block !== "object") {
@@ -104,8 +142,10 @@ function blockToEditableBlock(block: unknown): Block {
       };
     case "image":
       return { type: "image", url: asString(maybeBlock.url), caption: asString(maybeBlock.caption) };
-    case "math":
-      return { type: "math", value: asString(maybeBlock.value), display: maybeBlock.display !== false, caption: asString(maybeBlock.caption) };
+    case "math": {
+      const math = normalizeMathValue(maybeBlock.value, maybeBlock.caption);
+      return { type: "math", value: math.value, display: maybeBlock.display !== false, caption: math.caption };
+    }
     case "code":
       return { type: "code", language: asString(maybeBlock.language, "plaintext"), value: asString(maybeBlock.value), caption: asString(maybeBlock.caption) };
   }
@@ -126,9 +166,9 @@ function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: 
     try {
       const ext = file.name.split(".").pop() || "png";
       const path = `${topicId || "misc"}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("lesson-images").upload(path, file, { upsert: true, contentType: file.type });
+      const { error } = await backendApi.storage.from("lesson-images").upload(path, file, { upsert: true, contentType: file.type });
       if (error) throw error;
-      const { data: pub } = supabase.storage.from("lesson-images").getPublicUrl(path);
+      const { data: pub } = backendApi.storage.from("lesson-images").getPublicUrl(path);
       update({ ...block, url: pub.publicUrl });
       toast.success("Image uploaded");
     } catch (e: any) { toast.error(e.message || "Upload failed"); }
@@ -139,7 +179,7 @@ function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: 
     if (!prompt.trim()) { toast.error("Describe the image"); return; }
     setBusy("ai");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-image", { body: { prompt, topicId } });
+      const { data, error } = await backendApi.functions.invoke("generate-image", { body: { prompt, topicId } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       update({ ...block, url: data.url, caption: block.caption || prompt });
@@ -169,8 +209,18 @@ function ImageBlockEditor({ block, update, topicId }: { block: any; update: (b: 
   );
 }
 
+function blockToExplainableText(block: Block) {
+  if (block.type === "flowchart") return [block.title, block.code].filter(Boolean).join("\n");
+  if (block.type === "chart") return [block.title, block.variant, JSON.stringify(block.data)].filter(Boolean).join("\n");
+  if (block.type === "math") return [block.caption, block.value].filter(Boolean).join("\n");
+  if (block.type === "code") return [block.caption, block.language, block.value].filter(Boolean).join("\n");
+  return "";
+}
+
 export function BlockEditor({ blocks, onChange, topicId }: Props) {
   const safeBlocks = Array.isArray(blocks) ? blocks.map(blockToEditableBlock) : [];
+  const [explainingIndex, setExplainingIndex] = useState<number | null>(null);
+  const [explanationPrompt, setExplanationPrompt] = useState(() => localStorage.getItem(EXPLANATION_PROMPT_KEY) || DEFAULT_EXPLANATION_PROMPT);
   const update = (i: number, b: Block) => { const next = [...safeBlocks]; next[i] = b; onChange(next); };
   const remove = (i: number) => onChange(safeBlocks.filter((_, j) => j !== i));
   const move = (i: number, dir: -1 | 1) => {
@@ -179,6 +229,46 @@ export function BlockEditor({ blocks, onChange, topicId }: Props) {
     const next = [...safeBlocks]; [next[i], next[j]] = [next[j], next[i]]; onChange(next);
   };
   const add = (type: Block["type"]) => onChange([...safeBlocks, blank[type]()]);
+  const saveExplanationPrompt = (value: string) => {
+    setExplanationPrompt(value);
+    localStorage.setItem(EXPLANATION_PROMPT_KEY, value);
+  };
+
+  const explainBlock = async (index: number, block: Block) => {
+    if (!EXPLAINABLE_TYPES.has(block.type)) return;
+    const source = blockToExplainableText(block);
+    if (!source.trim()) {
+      toast.error("Add content to this block first");
+      return;
+    }
+
+    setExplainingIndex(index);
+    try {
+      const { data, error } = await backendApi.functions.invoke("explain-lesson-block", {
+        body: {
+          topicId,
+          blockType: block.type,
+          block,
+          prompt: explanationPrompt,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const explanation = String(data?.explanation || "").trim();
+      if (!explanation) throw new Error("AI returned an empty explanation");
+
+      const next = [...safeBlocks];
+      const explanationBlock: Block = { type: "highlight", value: explanation };
+      if (next[index + 1]?.type === "highlight") next[index + 1] = explanationBlock;
+      else next.splice(index + 1, 0, explanationBlock);
+      onChange(next);
+      toast.success("Explanation added next to the block");
+    } catch (e: any) {
+      toast.error(e.message || "Explanation failed");
+    } finally {
+      setExplainingIndex(null);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -196,6 +286,40 @@ export function BlockEditor({ blocks, onChange, topicId }: Props) {
                 <Icon className="h-3.5 w-3.5" /> {meta.label} <span className="text-muted-foreground">#{i + 1}</span>
               </div>
               <div className="flex items-center gap-1">
+                {EXPLAINABLE_TYPES.has(b.type) && (
+                  <>
+                    <Button
+                      variant="neon"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() => explainBlock(i, b)}
+                      disabled={explainingIndex !== null}
+                    >
+                      {explainingIndex === i ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      <span className="ml-1 hidden sm:inline">Explain</span>
+                    </Button>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Explanation prompt settings">
+                          <Settings2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-80">
+                        <div className="mb-2 text-sm font-semibold">AI explanation prompt</div>
+                        <Textarea
+                          rows={5}
+                          value={explanationPrompt}
+                          onChange={(e) => saveExplanationPrompt(e.target.value)}
+                          className="text-xs"
+                        />
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <p className="text-[10px] text-muted-foreground">Used by every math, code, graph, and flowchart explain button.</p>
+                          <Button variant="ghost" size="sm" onClick={() => saveExplanationPrompt(DEFAULT_EXPLANATION_PROMPT)}>Reset</Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </>
+                )}
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(i, -1)} disabled={i === 0}><ChevronUp className="h-3.5 w-3.5" /></Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(i, 1)} disabled={i === safeBlocks.length - 1}><ChevronDown className="h-3.5 w-3.5" /></Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => remove(i)}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -304,7 +428,17 @@ export function BlockEditor({ blocks, onChange, topicId }: Props) {
 
               {b.type === "math" && (
                 <div className="space-y-2">
-                  <Textarea rows={3} className="font-mono text-xs" placeholder="LaTeX e.g. \\frac{a}{b} or E = mc^2" value={b.value} onChange={e => update(i, { ...b, value: e.target.value })} />
+                  <Textarea
+                    rows={3}
+                    className="font-mono text-xs"
+                    placeholder="LaTeX e.g. \\frac{a}{b} or E = mc^2"
+                    value={b.value}
+                    onChange={e => update(i, { ...b, value: e.target.value })}
+                    onBlur={() => {
+                      const math = normalizeMathValue(b.value, b.caption);
+                      update(i, { ...b, value: math.value, caption: math.caption });
+                    }}
+                  />
                   <div className="flex items-center gap-3 text-xs">
                     <label className="flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" checked={b.display !== false} onChange={e => update(i, { ...b, display: e.target.checked })} />

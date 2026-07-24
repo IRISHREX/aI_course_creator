@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Bookmark,
   BookOpen,
+  DatabaseBackup,
   FileQuestion,
   KeyRound,
   RotateCw,
@@ -37,6 +38,8 @@ export default function AdminDashboard() {
   const [aiKey, setAiKey] = useState<AiKeyState>(null);
   const [aiKeys, setAiKeys] = useState<AiKeyState[]>([]);
   const [apiKey, setApiKey] = useState("");
+  const [keyAlias, setKeyAlias] = useState("");
+  const [showKeyForm, setShowKeyForm] = useState(false);
   const [keyBusy, setKeyBusy] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -47,17 +50,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     (async () => {
       const [u, c, t, p] = await Promise.all([
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("courses").select("id", { count: "exact", head: true }),
-        supabase.from("topics").select("id", { count: "exact", head: true }),
-        supabase.from("course_pyq").select("id", { count: "exact", head: true }),
+        backendApi.from("profiles").select("id", { count: "exact", head: true }),
+        backendApi.from("courses").select("id", { count: "exact", head: true }),
+        backendApi.from("topics").select("id", { count: "exact", head: true }),
+        backendApi.from("course_pyq").select("id", { count: "exact", head: true }),
       ]);
       setStats({ users: u.count || 0, courses: c.count || 0, topics: t.count || 0, pyqs: p.count || 0 });
     })();
   }, []);
 
   const refreshAiKey = async () => {
-    const data = await supabase.aiKeys.get();
+    const data = await backendApi.aiKeys.get();
     setAiKey(data.key);
     setAiKeys(data.keys || (data.key ? [data.key] : []));
   };
@@ -70,7 +73,7 @@ export default function AdminDashboard() {
   const checkKey = async () => {
     setChecking(true);
     try {
-      const data = await supabase.aiKeys.check();
+      const data = await backendApi.aiKeys.check();
       await refreshAiKey();
       if (data.check?.ok) toast.success("Gemini key is active");
       else toast.error(data.check?.message || "Gemini key check failed");
@@ -88,10 +91,12 @@ export default function AdminDashboard() {
     }
     setKeyBusy(true);
     try {
-      const data = await supabase.aiKeys.save(apiKey.trim());
+      const data = await backendApi.aiKeys.save(apiKey.trim(), keyAlias.trim());
       setAiKey(data.key);
       setApiKey("");
+      setKeyAlias("");
       await refreshAiKey();
+      setShowKeyForm(false);
       toast.success("Gemini API key added");
       await checkKey();
     } catch (e: any) {
@@ -104,9 +109,10 @@ export default function AdminDashboard() {
   const deleteKey = async (id?: string) => {
     setKeyBusy(true);
     try {
-      await supabase.aiKeys.remove(id);
+      await backendApi.aiKeys.remove(id);
       await refreshAiKey();
       setApiKey("");
+      setKeyAlias("");
       toast.success(id ? "Gemini API key deleted" : "All Gemini API keys deleted");
     } catch (e: any) {
       toast.error(e.message || "Could not delete API key");
@@ -129,6 +135,7 @@ export default function AdminDashboard() {
     { label: "Upload course material", desc: "Generate courses from PDFs, docs, or text", icon: Upload, to: "/admin/upload" },
     { label: "Generate PYQs", desc: "Extract and tag questions to lessons", icon: FileQuestion, to: "/admin/pyq-upload" },
     { label: "Manage courses", desc: "Edit lessons, tags, and content blocks", icon: BookOpen, to: "/courses" },
+    { label: "Data backups", desc: "Export SQL, JSON, dictionary, PDF, or docs files", icon: DatabaseBackup, to: "/admin/backup" },
     { label: "My bookmarks", desc: "Resume saved reading positions", icon: Bookmark, to: "/bookmarks" },
     ...(isSuperAdmin ? [{ label: "User management", desc: "Promote or demote admins", icon: Users, to: "/admin/users" }] : []),
   ];
@@ -138,7 +145,7 @@ export default function AdminDashboard() {
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/70 bg-card/60 p-5">
             <div>
               <h1 className="font-display text-3xl font-bold">Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Manage content, users, PYQs, and generation keys from one workspace.</p>
+              <p className="text-sm text-muted-foreground"></p>
             </div>
             <Badge variant={isSuperAdmin ? "default" : "outline"}>{isSuperAdmin ? "Full control" : "Content access"}</Badge>
           </div>
@@ -189,23 +196,49 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
-              <div>
-                <Label htmlFor="gemini-key">Add key</Label>
-                <Input
-                  id="gemini-key"
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Paste Gemini API key"
-                  autoComplete="off"
-                  className="mt-2"
-                />
+            {showKeyForm ? (
+              <div className="mb-3 grid gap-3 md:grid-cols-[minmax(0,0.8fr)_1fr_auto_auto] md:items-end">
+                <div>
+                  <Label htmlFor="gemini-key-alias">Alias</Label>
+                  <Input
+                    id="gemini-key-alias"
+                    value={keyAlias}
+                    onChange={(e) => setKeyAlias(e.target.value)}
+                    placeholder={`token${aiKeys.length + 1} ${new Date().toISOString().slice(0, 10)}`}
+                    autoComplete="off"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="gemini-key">Token</Label>
+                  <Input
+                    id="gemini-key"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Paste Gemini API key"
+                    autoComplete="off"
+                    className="mt-2"
+                  />
+                </div>
+                <Button onClick={saveKey} disabled={keyBusy || checking}>
+                  {keyBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save
+                </Button>
+                <Button variant="ghost" onClick={() => { setShowKeyForm(false); setApiKey(""); setKeyAlias(""); }} disabled={keyBusy || checking}>
+                  Cancel
+                </Button>
               </div>
-              <Button onClick={saveKey} disabled={keyBusy || checking}>
-                {keyBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Add
-              </Button>
+            ) : (
+              <div className="mb-3">
+                <Button variant="outline" onClick={() => setShowKeyForm(true)} disabled={keyBusy || checking}>
+                  <KeyRound className="h-4 w-4" />
+                  Add token
+                </Button>
+              </div>
+            )}
+
+            <div className="grid gap-3 md:grid-cols-[auto_auto] md:justify-end">
               <Button onClick={checkKey} variant="outline" disabled={!aiKeys.length || keyBusy || checking}>
                 {checking ? <RotateCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
                 Check all

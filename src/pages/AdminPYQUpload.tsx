@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,13 @@ type ManualPyq = {
 
 const NONE = "__none__";
 
+const cleanPyqText = (value: unknown) => String(value ?? "")
+  .replace(/\r/g, "\n")
+  .replace(/[ \t]+/g, " ")
+  .replace(/\n{3,}/g, "\n\n")
+  .replace(/^\s*(?:q(?:uestion)?\.?\s*)?\d+[\).:-]\s*/i, "")
+  .trim();
+
 export default function AdminPYQUpload() {
   const { isAdmin, loading } = useIsAdmin();
   const nav = useNavigate();
@@ -45,14 +52,14 @@ export default function AdminPYQUpload() {
 
   useEffect(() => { if (!loading && !isAdmin) nav("/"); }, [isAdmin, loading, nav]);
   useEffect(() => {
-    supabase.from("courses").select("id,title,slug").order("title").then(({ data }) => setCourses((data as CourseOption[]) || []));
+    backendApi.from("courses").select("id,title,slug").order("title").then(({ data }) => setCourses((data as CourseOption[]) || []));
   }, []);
   useEffect(() => {
     if (!courseId) {
       setTopics([]);
       return;
     }
-    supabase.from("topics").select("id,title").eq("course_id", courseId).order("unit").order("order_index").then(({ data }) => {
+    backendApi.from("topics").select("id,title").eq("course_id", courseId).order("unit").order("order_index").then(({ data }) => {
       setTopics((data as TopicOption[]) || []);
     });
   }, [courseId]);
@@ -73,14 +80,14 @@ export default function AdminPYQUpload() {
     const cleaned = items
       .map((item) => ({
         ...item,
-        question: String(item.question || "").trim(),
-        answer: String(item.answer || "").trim(),
+        question: cleanPyqText(item.question),
+        answer: cleanPyqText(item.answer),
       }))
       .filter((item) => item.question);
 
     if (!cleaned.length) throw new Error("Add at least one question");
 
-    const { count } = await supabase.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", courseId);
+    const { count } = await backendApi.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", courseId);
     const topicTitleLookup = new Map(topics.map(topic => [topic.title.trim().toLowerCase(), topic.id]));
 
     let inserted = 0;
@@ -92,7 +99,7 @@ export default function AdminPYQUpload() {
       if (titleKey && topicTitleLookup.has(titleKey)) topicIds.add(topicTitleLookup.get(titleKey)!);
       if (fallback.topicId && fallback.topicId !== NONE) topicIds.add(fallback.topicId);
 
-      const { data, error } = await supabase.from("course_pyq").insert({
+      const { data, error } = await backendApi.from("course_pyq").insert({
         course_id: courseId,
         question: item.question,
         answer: item.answer || "",
@@ -108,7 +115,7 @@ export default function AdminPYQUpload() {
 
       if (data?.id && topicIds.size) {
         const rows = Array.from(topicIds).map((topicId) => ({ pyq_id: data.id, topic_id: topicId }));
-        const { error: linkError } = await supabase.from("pyq_topics").insert(rows as any);
+        const { error: linkError } = await backendApi.from("pyq_topics").insert(rows as any);
         if (linkError) throw linkError;
         tagged += rows.length;
       }
@@ -124,7 +131,7 @@ export default function AdminPYQUpload() {
       const buf = await file.arrayBuffer();
       const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
       const isImage = file.type.startsWith("image/");
-      const { data, error } = await supabase.functions.invoke("ingest-pyq", {
+      const { data, error } = await backendApi.functions.invoke("ingest-pyq", {
         body: {
           courseId,
           year: year ? Number(year) : null,

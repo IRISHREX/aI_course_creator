@@ -4,65 +4,276 @@ import { useTopics, useProgress } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Sparkles, Download, Edit3, ArrowLeft, BookOpen, Brain, FileQuestion, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CheckCircle2, Circle, Sparkles, Edit3, ArrowLeft, Brain, FileQuestion, Info, Loader2, Settings2, FileText, FileJson, ChevronDown, Download, Trash2, MonitorPlay } from "lucide-react";
+import { backendApi } from "@/integrations/api/client";
 import { Mindmap } from "@/components/Mindmap";
+import { SphericalLoader } from "@/components/SphericalLoader";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { type ComponentProps, useEffect, useState } from "react";
+import { hasPresentation } from "@/lib/lessonPresentation";
+
+type MindmapData = ComponentProps<typeof Mindmap>["data"];
+type CourseWithMindmap = NonNullable<ReturnType<typeof useCourseBySlug>["course"]> & {
+  mindmap?: MindmapData;
+};
+type ExportFormat = "docs" | "pdf";
+type DownloadFormat = ExportFormat | "mindmaps" | "selectedMindmaps";
+type ExportOptions = {
+  includeImages: boolean;
+  includeGraphs: boolean;
+  includeCode: boolean;
+};
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function CourseDetail() {
   const { courseSlug } = useParams();
   const { course, loading: cLoad } = useCourseBySlug(courseSlug);
-  const { topics, loading } = useTopics(course?.id);
+  const { topics, loading, setTopics } = useTopics(course?.id);
   const { progress } = useProgress();
   const { isAdmin } = useIsAdmin();
-  const [downloading, setDownloading] = useState(false);
+  const [exporting, setExporting] = useState<DownloadFormat | null>(null);
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    includeImages: true,
+    includeGraphs: true,
+    includeCode: true,
+  });
   const [genMM, setGenMM] = useState(false);
-  const [mindmap, setMindmap] = useState<any>(null);
+  const [mindmap, setMindmap] = useState<MindmapData>(null);
+  const [selectedLessonMindmaps, setSelectedLessonMindmaps] = useState<string[]>([]);
+  const [lessonMindmapSelectionReady, setLessonMindmapSelectionReady] = useState(false);
+  const [bulkGeneratingMindmaps, setBulkGeneratingMindmaps] = useState(false);
+  const [bulkMindmapProgress, setBulkMindmapProgress] = useState("");
+  const [generatingPresentations, setGeneratingPresentations] = useState(false);
+  const [presentationProgress, setPresentationProgress] = useState("");
   const [pyqCount, setPyqCount] = useState(0);
+  const [tocOpen, setTocOpen] = useState(false);
 
   useEffect(() => {
     if (!course?.id) return;
-    setMindmap((course as any).mindmap || null);
-    supabase.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", course.id)
+    setMindmap((course as CourseWithMindmap).mindmap || null);
+    backendApi.from("course_pyq").select("id", { count: "exact", head: true }).eq("course_id", course.id)
       .then(({ count }) => setPyqCount(count || 0));
+  }, [course]);
+
+  useEffect(() => {
+    setLessonMindmapSelectionReady(false);
+    setSelectedLessonMindmaps([]);
   }, [course?.id]);
 
-  if (cLoad || loading) return <div className="container py-20 text-muted-foreground">Loading…</div>;
+  useEffect(() => {
+    if (!topics.length || lessonMindmapSelectionReady) return;
+    setSelectedLessonMindmaps(topics.filter((topic) => !topic.mindmap).map((topic) => topic.id));
+    setLessonMindmapSelectionReady(true);
+  }, [lessonMindmapSelectionReady, topics]);
+
+  if (cLoad || loading) return <SphericalLoader className="container py-20" label="Loading course" />;
   if (!course) return <div className="container py-20 text-muted-foreground">Course not found.</div>;
 
   const generateMindmap = async () => {
     setGenMM(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-mindmap", { body: { courseId: course.id } });
+      const { data, error } = await backendApi.functions.invoke("generate-mindmap", { body: { courseId: course.id } });
       if (error) throw error;
+      if (data?.removed) {
+        setMindmap(null);
+        throw new Error(data.error || "Invalid mind map was discarded");
+      }
       if (data?.error) throw new Error(data.error);
       setMindmap(data.mindmap);
       toast.success("Course mind map generated");
-    } catch (e: any) { toast.error(e.message || "Failed"); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "Failed")); }
     finally { setGenMM(false); }
   };
 
   const byUnit: Record<number, typeof topics> = {};
   topics.forEach(t => { (byUnit[t.unit] ||= []).push(t); });
+  const lessonMindmapsGenerated = topics.filter((topic) => topic.mindmap).length;
+  const selectedLessonMindmapCount = selectedLessonMindmaps.length;
+  const selectedGeneratedLessonMindmaps = topics.filter((topic) => selectedLessonMindmaps.includes(topic.id) && topic.mindmap);
+  const selectedGeneratedLessonMindmapCount = selectedGeneratedLessonMindmaps.length;
+  const playReady = topics.some((topic) => hasPresentation(topic.presentation) || Boolean(topic.mindmap));
+  const presentationCount = topics.filter((topic) => hasPresentation(topic.presentation)).length;
 
-  const downloadDocx = async () => {
-    setDownloading(true);
+  const setExportOption = (key: keyof ExportOptions, value: boolean) => {
+    setExportOptions((current) => ({ ...current, [key]: value }));
+  };
+
+  const setLessonMindmapSelected = (topicId: string, selected: boolean) => {
+    setSelectedLessonMindmaps((current) => selected
+      ? Array.from(new Set([...current, topicId]))
+      : current.filter((id) => id !== topicId));
+  };
+
+  const generateSelectedLessonMindmaps = async () => {
+    if (!isAdmin) return;
+    const selectedTopics = topics.filter((topic) => selectedLessonMindmaps.includes(topic.id));
+    if (!selectedTopics.length) {
+      toast.info("Select at least one lesson");
+      return;
+    }
+    setBulkGeneratingMindmaps(true);
+    let generated = 0;
+    let removed = 0;
     try {
-      const { data, error } = await supabase.functions.invoke("export-course", {
-        body: { courseId: course.id },
+      for (const [index, topic] of selectedTopics.entries()) {
+        setBulkMindmapProgress(`${index + 1}/${selectedTopics.length}`);
+        const { data, error } = await backendApi.functions.invoke("generate-mindmap", {
+          body: { topicId: topic.id, courseId: course.id },
+        });
+        if (error) throw error;
+        if (data?.removed) {
+          setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, mindmap: null } : item));
+          removed += 1;
+          continue;
+        }
+        if (data?.error) throw new Error(data.error);
+        setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, mindmap: data.mindmap } : item));
+        generated += 1;
+      }
+      setSelectedLessonMindmaps([]);
+      if (generated) toast.success(`Generated ${generated} lesson mind map${generated === 1 ? "" : "s"}`);
+      if (removed) toast.error(`Removed ${removed} invalid mind map${removed === 1 ? "" : "s"}`);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, generated ? `Stopped after ${generated} generated` : "Lesson mind map generation failed"));
+    } finally {
+      setBulkGeneratingMindmaps(false);
+      setBulkMindmapProgress("");
+    }
+  };
+
+  const generateMissingPresentations = async () => {
+    const missing = topics.filter((topic) => !hasPresentation(topic.presentation));
+    if (!missing.length) {
+      toast.info("Every lesson already has an AI presentation");
+      return;
+    }
+    setGeneratingPresentations(true);
+    let generated = 0;
+    try {
+      for (const [index, topic] of missing.entries()) {
+        setPresentationProgress(`${index + 1}/${missing.length}`);
+        const { data, error } = await backendApi.functions.invoke("generate-presentation", { body: { topicId: topic.id } });
+        if (error) throw error;
+        if (!data?.presentation) throw new Error("AI presentation was not returned");
+        setTopics((current) => current.map((item) =>
+          item.id === topic.id ? { ...item, presentation: data.presentation } : item));
+        generated += 1;
+      }
+      toast.success(`Generated ${generated} lesson presentation${generated === 1 ? "" : "s"}`);
+    } catch (error) {
+      toast.error(errorMessage(error, generated ? `Stopped after ${generated} presentations` : "Presentation generation failed"));
+    } finally {
+      setGeneratingPresentations(false);
+      setPresentationProgress("");
+    }
+  };
+
+  const downloadBase64 = (base64: string, mime: string, filename: string) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCourse = async (format: ExportFormat) => {
+    setExporting(format);
+    try {
+      const { data, error } = await backendApi.functions.invoke("export-course", { body: { courseId: course.id, options: exportOptions } });
+      if (error) throw error;
+      const baseName = data?.filename || course.slug || "course";
+      if (format === "docs") {
+        if (!data?.docx) throw new Error("Docs export was not returned");
+        downloadBase64(
+          data.docx,
+          data.docMime || "application/msword",
+          `${baseName}.${data.docExtension || "doc"}`,
+        );
+        toast.success("Downloaded fast template docs backup");
+      } else {
+        if (!data?.pdf) throw new Error("PDF export was not returned");
+        downloadBase64(data.pdf, "application/pdf", `${baseName}.pdf`);
+        toast.success("Downloaded fast template PDF backup");
+      }
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Download failed"));
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const exportCourseMindmaps = async (options?: { topicIds?: string[]; includeCourse?: boolean }) => {
+    const selectedOnly = Boolean(options?.topicIds?.length);
+    setExporting(selectedOnly ? "selectedMindmaps" : "mindmaps");
+    try {
+      const { data, error } = await backendApi.functions.invoke("export-course-mindmaps", {
+        body: { courseId: course.id, topicIds: options?.topicIds, includeCourse: options?.includeCourse },
       });
       if (error) throw error;
-      // Function returns base64 docx
-      const bytes = Uint8Array.from(atob(data.docx), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `${course.slug}.docx`; a.click();
-      URL.revokeObjectURL(url);
-    } catch (e: any) {
-      toast.error(e.message || "Download failed");
-    } finally { setDownloading(false); }
+      if (!data?.pdf) throw new Error("Mind map PDF was not returned");
+      downloadBase64(data.pdf, "application/pdf", `${data.filename || `${course.slug || course.title || "course"}-${selectedOnly ? "selected-mindmaps" : "mindmaps"}`}.pdf`);
+      const count = Number(data.count) || 0;
+      toast.success(count > 0 ? `Downloaded ${count} fast mind map page${count === 1 ? "" : "s"}` : "Downloaded mind map PDF");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Mind map download failed"));
+    } finally { setExporting(null); }
+  };
+
+  const exportSelectedLessonMindmaps = async () => {
+    const topicIds = selectedGeneratedLessonMindmaps.map((topic) => topic.id);
+    if (!topicIds.length) {
+      toast.info("Select at least one generated lesson mind map");
+      return;
+    }
+    await exportCourseMindmaps({ topicIds, includeCourse: false });
+  };
+
+  const deleteCourseMindmap = async () => {
+    if (!isAdmin || !mindmap) return;
+    if (!window.confirm("Delete the overall course mind map?")) return;
+    try {
+      const { error } = await backendApi.from("courses").update({ mindmap: null }).eq("id", course.id);
+      if (error) throw error;
+      setMindmap(null);
+      toast.success("Course mind map deleted");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to delete course mind map"));
+    }
+  };
+
+  const deleteSelectedLessonMindmaps = async () => {
+    if (!isAdmin) return;
+    const topicIds = selectedGeneratedLessonMindmaps.map((topic) => topic.id);
+    if (!topicIds.length) {
+      toast.info("Select at least one generated lesson mind map");
+      return;
+    }
+    if (!window.confirm(`Delete ${topicIds.length} selected lesson mind map${topicIds.length === 1 ? "" : "s"}?`)) return;
+    try {
+      for (const topicId of topicIds) {
+        const { error } = await backendApi.from("topics").update({ mindmap: null }).eq("id", topicId);
+        if (error) throw error;
+      }
+      setTopics((current) => current.map((topic) => topicIds.includes(topic.id) ? { ...topic, mindmap: null } : topic));
+      setSelectedLessonMindmaps((current) => current.filter((topicId) => !topicIds.includes(topicId)));
+      toast.success(`Deleted ${topicIds.length} lesson mind map${topicIds.length === 1 ? "" : "s"}`);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to delete selected mind maps"));
+    }
   };
 
   return (
@@ -84,13 +295,74 @@ export default function CourseDetail() {
           <Button asChild variant="neon" size="sm">
             <Link to={`/course/${course.slug}/quiz`}><Brain className="h-4 w-4 mr-1" /> Full course MCQ</Link>
           </Button>
-          <Button onClick={downloadDocx} variant="neon" disabled={downloading}>
-            <Download className="h-4 w-4 mr-1" /> {downloading ? "Building…" : "Download .docx"}
+          <Button onClick={() => exportCourse("docs")} variant="neon" disabled={Boolean(exporting)}>
+            {exporting === "docs" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
+            Google Docs
           </Button>
-          {isAdmin && (
-            <Button asChild variant="hero" className="col-span-2 sm:col-span-1">
-              <Link to={`/course/${course.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Manage</Link>
+          <Button onClick={() => exportCourse("pdf")} variant="neon" disabled={Boolean(exporting)}>
+            {exporting === "pdf" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileJson className="h-4 w-4 mr-1" />}
+            PDF
+          </Button>
+          <Button onClick={() => exportCourseMindmaps()} variant="neon" disabled={Boolean(exporting)}>
+            {exporting === "mindmaps" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+            Mind maps PDF
+          </Button>
+          {playReady && (
+            <Button asChild variant="hero">
+              <Link to={`/course/${course.slug}/read`}><MonitorPlay className="h-4 w-4 mr-1" /> Play course</Link>
             </Button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="neon" disabled={Boolean(exporting)} className="gap-1">
+                <Settings2 className="h-4 w-4" />
+                Export options
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Include content</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={exportOptions.includeImages}
+                onCheckedChange={(checked) => setExportOption("includeImages", Boolean(checked))}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Images
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={exportOptions.includeGraphs}
+                onCheckedChange={(checked) => setExportOption("includeGraphs", Boolean(checked))}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Graphs and charts
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={exportOptions.includeCode}
+                onCheckedChange={(checked) => setExportOption("includeCode", Boolean(checked))}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Code blocks
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isAdmin && (
+            <>
+              <Button
+                variant="neon"
+                onClick={generateMissingPresentations}
+                disabled={generatingPresentations || presentationCount === topics.length}
+                className="col-span-2 sm:col-span-1"
+              >
+                {generatingPresentations ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <MonitorPlay className="h-4 w-4 mr-1" />}
+                {generatingPresentations ? `Generating ${presentationProgress}` : `Generate PPTs (${presentationCount}/${topics.length})`}
+              </Button>
+              <Button asChild variant="hero" className="col-span-2 sm:col-span-1">
+                <Link to={`/course/${course.slug}/edit`}><Edit3 className="h-4 w-4 mr-1" /> Manage</Link>
+              </Button>
+              <Button asChild variant="neon" className="col-span-2 sm:col-span-1">
+                <Link to={`/course/${course.slug}/settings`}><Settings2 className="h-4 w-4 mr-1" /> Settings</Link>
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -98,19 +370,27 @@ export default function CourseDetail() {
       {/* Auto Table of Contents */}
       {topics.length > 0 && (
         <div className="glass mb-8 rounded-xl p-4 sm:rounded-2xl sm:p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-primary" />
-            <h2 className="font-display text-base font-bold sm:text-lg">Table of Contents</h2>
+          <button
+            type="button"
+            onClick={() => setTocOpen((open) => !open)}
+            aria-expanded={tocOpen}
+            aria-controls="course-table-of-content"
+            className="flex w-full items-center gap-2 rounded-lg text-left transition hover:text-primary"
+          >
+            <Info className="h-5 w-5 shrink-0 text-primary" />
+            <span className="font-display text-base font-bold sm:text-lg">Table of content</span>
             <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">{topics.length} lessons</span>
-          </div>
-          <ol className="grid gap-x-10 gap-y-1 text-sm sm:grid-cols-2 xl:grid-cols-3">
-            {topics.map((t, i) => (
-              <li key={t.id} className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-2">
-                <span className="font-mono text-xs text-muted-foreground">{t.unit}.{t.order_index}</span>
-                <Link to={`/course/${course.slug}/topic/${t.slug}`} className="min-w-0 break-words leading-6 hover:text-primary sm:truncate">{t.title}</Link>
-              </li>
-            ))}
-          </ol>
+          </button>
+          {tocOpen && (
+            <ol id="course-table-of-content" className="mt-4 grid gap-x-10 gap-y-1 border-t border-border/60 pt-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
+              {topics.map((t) => (
+                <li key={t.id} className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-2">
+                  <span className="font-mono text-xs text-muted-foreground">{t.unit}.{t.order_index}</span>
+                  <Link to={`/course/${course.slug}/topic/${t.slug}`} className="min-w-0 break-words leading-6 hover:text-primary sm:truncate">{t.title}</Link>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       )}
 
@@ -168,10 +448,93 @@ export default function CourseDetail() {
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="font-display font-bold text-xl flex items-center gap-2"><Brain className="h-5 w-5 text-primary" /> Course Mind Map</div>
             {isAdmin && (
-              <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMM}>
-                {genMM ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                {mindmap ? "Regenerate" : "Generate"} mind map
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="neon" size="sm" disabled={bulkGeneratingMindmaps} className="gap-1">
+                      <Brain className="h-4 w-4" />
+                      Lesson mind maps
+                      <span className="font-mono text-xs">({selectedLessonMindmapCount})</span>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-96 w-80 overflow-auto">
+                    <DropdownMenuLabel>{lessonMindmapsGenerated}/{topics.length} generated</DropdownMenuLabel>
+                    <div className="grid grid-cols-4 gap-1 px-2 pb-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps(topics.filter((topic) => !topic.mindmap).map((topic) => topic.id))}
+                      >
+                        Missing
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps(topics.filter((topic) => topic.mindmap).map((topic) => topic.id))}
+                      >
+                        Generated
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps(topics.map((topic) => topic.id))}
+                      >
+                        All
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setSelectedLessonMindmaps([])}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                    {topics.map((topic) => (
+                      <DropdownMenuCheckboxItem
+                        key={topic.id}
+                        checked={selectedLessonMindmaps.includes(topic.id)}
+                        onCheckedChange={(checked) => setLessonMindmapSelected(topic.id, Boolean(checked))}
+                        onSelect={(event) => event.preventDefault()}
+                        className="items-start gap-2"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate">{topic.unit}.{topic.order_index} {topic.title}</span>
+                          <span className="block text-[10px] text-muted-foreground">{topic.mindmap ? "Generated" : "Not generated"}</span>
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="neon" size="sm" onClick={generateSelectedLessonMindmaps} disabled={bulkGeneratingMindmaps || !selectedLessonMindmapCount}>
+                  {bulkGeneratingMindmaps ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                  {bulkGeneratingMindmaps ? `Generating ${bulkMindmapProgress}` : "Generate selected"}
+                </Button>
+                <Button variant="neon" size="sm" onClick={exportSelectedLessonMindmaps} disabled={Boolean(exporting) || bulkGeneratingMindmaps || !selectedGeneratedLessonMindmapCount}>
+                  {exporting === "selectedMindmaps" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  Download selected
+                </Button>
+                <Button variant="destructive" size="sm" onClick={deleteSelectedLessonMindmaps} disabled={bulkGeneratingMindmaps || !selectedGeneratedLessonMindmapCount}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete selected
+                </Button>
+                <Button variant="neon" size="sm" onClick={generateMindmap} disabled={genMM}>
+                  {genMM ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                  {mindmap ? "Regenerate" : "Generate"} mind map
+                </Button>
+                <Button variant="destructive" size="sm" onClick={deleteCourseMindmap} disabled={genMM || !mindmap}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete course map
+                </Button>
+              </div>
             )}
           </div>
           {mindmap ? <Mindmap data={mindmap} /> : (

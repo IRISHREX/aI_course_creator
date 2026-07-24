@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useCallback, useEffect, useState } from "react";
+import { backendApi } from "@/integrations/api/client";
 import { useAuth } from "./useAuth";
 
 export interface QuizQ { q: string; options: string[]; answer: number }
@@ -11,7 +11,10 @@ export interface Topic {
   order_index: number;
   title: string;
   summary: string;
-  content: any[];
+  content: unknown[];
+  translations?: unknown[];
+  mindmap?: unknown;
+  presentation?: { version: number; generatedAt?: string; slides: import("@/lib/lessonPresentation").PresentationSlide[] } | null;
   visualization: string | null;
   quiz: QuizQ[];
 }
@@ -29,7 +32,7 @@ export const useTopics = (courseId?: string) => {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    let q = supabase.from("topics").select("*").order("unit").order("order_index");
+    let q = backendApi.from("topics").select("*").order("unit").order("order_index");
     if (courseId) q = q.eq("course_id", courseId);
     q.then(({ data }) => {
       if (active) { setTopics(((data as unknown) as Topic[]) ?? []); setLoading(false); }
@@ -44,16 +47,17 @@ export const useProgress = () => {
   const [progress, setProgress] = useState<Record<string, Progress>>({});
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!user) { setProgress({}); setLoading(false); return; }
-    const { data } = await supabase.from("topic_progress").select("*").eq("user_id", user.id);
+    setLoading(true);
+    const { data } = await backendApi.from("topic_progress").select("*").eq("user_id", user.id);
     const map: Record<string, Progress> = {};
-    (data ?? []).forEach((p: any) => { map[p.topic_id] = p; });
+    ((data ?? []) as Progress[]).forEach((p) => { map[p.topic_id] = p; });
     setProgress(map);
     setLoading(false);
-  };
+  }, [user]);
 
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [user?.id]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const markViewed = async (topicId: string) => {
     if (!user) return;
@@ -61,8 +65,8 @@ export const useProgress = () => {
     const next = { user_id: user.id, topic_id: topicId, viewed: true,
       best_quiz_score: existing?.best_quiz_score ?? 0, passed: existing?.passed ?? false,
       attempts: existing?.attempts ?? 0 };
-    await supabase.from("topic_progress").upsert(next, { onConflict: "user_id,topic_id" });
-    refresh();
+    await backendApi.from("topic_progress").upsert(next, { onConflict: "user_id,topic_id" });
+    void refresh();
   };
 
   const recordQuiz = async (topicId: string, score: number, total: number) => {
@@ -71,12 +75,12 @@ export const useProgress = () => {
     const existing = progress[topicId];
     const best = Math.max(existing?.best_quiz_score ?? 0, pct);
     const passed = best >= 70;
-    await supabase.from("topic_progress").upsert({
+    await backendApi.from("topic_progress").upsert({
       user_id: user.id, topic_id: topicId, viewed: true,
       best_quiz_score: best, passed,
       attempts: (existing?.attempts ?? 0) + 1,
     }, { onConflict: "user_id,topic_id" });
-    refresh();
+    void refresh();
     return { pct, passed };
   };
 

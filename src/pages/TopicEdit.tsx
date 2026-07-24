@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import type { Topic } from "@/hooks/useTopics";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlockEditor, type Block } from "@/components/BlockEditor";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, FileText, History, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Wand2, Zap } from "lucide-react";
+import { ArrowLeft, FileText, History, Languages, Lightbulb, List, Loader2, Lock, Maximize2, Minimize2, RotateCcw, Save, Sparkles, Trash2, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
+import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
 
 type TransformAction = "simplify" | "expand" | "bullets" | "analogy" | "bigger" | "smaller" | "level";
 
@@ -29,11 +31,13 @@ export default function TopicEdit() {
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(5);
   const [customInstruction, setCustomInstruction] = useState("");
+  const [translationLanguage, setTranslationLanguage] = useState("bn");
+  const [translationInstruction, setTranslationInstruction] = useState("");
   const [versions, setVersions] = useState<any[]>([]);
   const [vLoading, setVLoading] = useState(false);
 
   const reload = async () => {
-    const { data } = await supabase.from("topics").select("*").eq("slug", slug!).maybeSingle();
+    const { data } = await backendApi.from("topics").select("*").eq("slug", slug!).maybeSingle();
     const t = data as any as Topic;
     setTopic(t);
     setContentJson(JSON.stringify(t?.content ?? [], null, 2));
@@ -61,7 +65,7 @@ export default function TopicEdit() {
       const parsedQuiz = JSON.parse(quizJson);
       const quiz = (Array.isArray(parsedQuiz) ? parsedQuiz : []).slice(0, 10);
       // Snapshot previous state to history before update
-      await supabase.from("topic_versions").insert({
+      await backendApi.from("topic_versions").insert({
         topic_id: topic.id,
         title: topic.title,
         summary: topic.summary,
@@ -71,7 +75,7 @@ export default function TopicEdit() {
         mindmap: (topic as any).mindmap ?? null,
         note: "auto-save",
       });
-      const { error } = await supabase.from("topics").update({
+      const { error } = await backendApi.from("topics").update({
         title: topic.title, summary: topic.summary, content, quiz, difficulty_level: level,
       }).eq("id", topic.id);
       if (error) throw error;
@@ -84,20 +88,20 @@ export default function TopicEdit() {
 
   const loadVersions = async () => {
     setVLoading(true);
-    const { data } = await supabase.from("topic_versions").select("*").eq("topic_id", topic.id).order("created_at", { ascending: false }).limit(50);
+    const { data } = await backendApi.from("topic_versions").select("*").eq("topic_id", topic.id).order("created_at", { ascending: false }).limit(50);
     setVersions(data || []);
     setVLoading(false);
   };
 
   const restoreVersion = async (v: any) => {
     if (!confirm(`Restore version from ${new Date(v.created_at).toLocaleString()}? Current state will also be snapshotted.`)) return;
-    await supabase.from("topic_versions").insert({
+    await backendApi.from("topic_versions").insert({
       topic_id: topic.id, title: topic.title, summary: topic.summary,
       content: topic.content as any, quiz: topic.quiz as any,
       visualization: topic.visualization, mindmap: (topic as any).mindmap ?? null,
       note: "before-restore",
     });
-    const { error } = await supabase.from("topics").update({
+    const { error } = await backendApi.from("topics").update({
       title: v.title, summary: v.summary, content: v.content, quiz: v.quiz,
       visualization: v.visualization, mindmap: v.mindmap,
     }).eq("id", topic.id);
@@ -111,7 +115,7 @@ export default function TopicEdit() {
     if (!docsUrl.trim()) { toast.error("Paste a Google Docs share URL"); return; }
     setImporting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("import-doc", { body: { url: docsUrl } });
+      const { data, error } = await backendApi.functions.invoke("import-doc", { body: { url: docsUrl } });
       if (error) throw error;
       if (data?.content) {
         setContentJson(JSON.stringify(data.content, null, 2));
@@ -126,7 +130,7 @@ export default function TopicEdit() {
   const generateFresh = async () => {
     setAiBusy("generate");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-lesson", { body: { topicId: topic.id, level } });
+      const { data, error } = await backendApi.functions.invoke("generate-lesson", { body: { topicId: topic.id, level } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("Fresh lesson generated");
@@ -142,7 +146,7 @@ export default function TopicEdit() {
       const body: any = { topicId: topic.id, action };
       if (action === "level") body.level = customLevel ?? level;
       if (customInstruction.trim()) body.customInstruction = customInstruction.trim();
-      const { data, error } = await supabase.functions.invoke("transform-content", { body });
+      const { data, error } = await backendApi.functions.invoke("transform-content", { body });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.content) setContentJson(JSON.stringify(data.content, null, 2));
@@ -151,6 +155,46 @@ export default function TopicEdit() {
     } catch (e: any) {
       toast.error(e.message || "Transform failed");
     } finally { setAiBusy(null); }
+  };
+
+  const generateTranslation = async () => {
+    if (!topic || translationLanguage === "en") return;
+    const language = languageByCode(translationLanguage);
+    setAiBusy(`translate-${language.code}`);
+    try {
+      const { data, error } = await backendApi.functions.invoke("translate-lesson", {
+        body: {
+          topicId: topic.id,
+          languageCode: language.code,
+          languageName: language.label,
+          dir: language.dir || "ltr",
+          customInstruction: translationInstruction.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setTopic({ ...topic, translations: data.translations || [] } as any);
+      setTranslationInstruction("");
+      toast.success(`${language.label} version generated`);
+    } catch (e: any) {
+      toast.error(e.message || "Translation failed");
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const deleteTranslation = async (languageCode: string) => {
+    if (!topic) return;
+    const language = languageByCode(languageCode);
+    if (!confirm(`Delete ${language.label} version?`)) return;
+    const translations = normalizeTranslations((topic as any).translations).filter((item) => item.languageCode !== languageCode);
+    const { error } = await backendApi.from("topics").update({ translations } as any).eq("id", topic.id);
+    if (error) {
+      toast.error(error.message || "Delete failed");
+      return;
+    }
+    setTopic({ ...topic, translations } as any);
+    toast.success(`${language.label} version deleted`);
   };
 
   const ToolBtn = ({ id, icon: Icon, label }: { id: TransformAction; icon: any; label: string }) => (
@@ -249,6 +293,52 @@ export default function TopicEdit() {
             <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateFresh}>
               {aiBusy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" /> Regenerate from source</>}
             </Button>
+          </div>
+        </div>
+
+        <div className="glass rounded-2xl p-5 border border-primary/20">
+          <div className="flex items-center gap-2 mb-3">
+            <Languages className="h-5 w-5 text-primary" />
+            <div className="font-display font-bold text-lg">Multi-language versions</div>
+            <span className="text-xs text-muted-foreground ml-auto">Stored separately from the original lesson</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[220px_1fr_auto] sm:items-end">
+            <div>
+              <Label className="text-xs">Target language</Label>
+              <Select value={translationLanguage} onValueChange={setTranslationLanguage}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Language" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LESSON_LANGUAGES.filter((language) => language.code !== "en").map((language) => (
+                    <SelectItem key={language.code} value={language.code}>{language.label} · {language.nativeLabel}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Translation prompt override (optional)</Label>
+              <Input
+                className="mt-1"
+                value={translationInstruction}
+                onChange={e => setTranslationInstruction(e.target.value)}
+                placeholder="e.g. Keep technical terms in English with translated explanation"
+              />
+            </div>
+            <Button variant="hero" size="sm" disabled={!!aiBusy} onClick={generateTranslation}>
+              {aiBusy?.startsWith("translate-") ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+              Generate version
+            </Button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {normalizeTranslations((topic as any).translations).length ? normalizeTranslations((topic as any).translations).map((translation) => (
+              <div key={translation.languageCode} className="flex items-center gap-2 rounded-full border border-border/70 bg-background/40 px-3 py-1 text-xs">
+                <span>{translation.languageName}</span>
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteTranslation(translation.languageCode)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )) : <div className="text-xs text-muted-foreground">No translated versions yet.</div>}
           </div>
         </div>
 

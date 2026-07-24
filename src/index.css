@@ -197,18 +197,16 @@
 
 @layer components {
   .glass {
-    background: var(--gradient-card);
-    backdrop-filter: blur(14px);
-    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card) / 0.94);
+    backdrop-filter: blur(10px);
+    border: 1px solid hsl(var(--border) / 0.8);
+    box-shadow: 0 1px 2px hsl(220 30% 5% / 0.08);
   }
   .neon-border {
     box-shadow: 0 0 0 1px hsl(var(--primary) / 0.4), var(--shadow-glow);
   }
   .text-gradient {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: hsl(var(--primary));
   }
   .grid-bg {
     background-image:
@@ -312,6 +310,20 @@
 }
 
 .animate-fade-in { animation: fade-in 0.5s ease-out; }
+
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 @media (max-width: 1023px) {
   .three-home-canvas {

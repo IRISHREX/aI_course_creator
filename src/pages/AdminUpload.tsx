@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/integrations/supabase/client";
+import { backendApi } from "@/integrations/api/client";
 import { toast } from "sonner";
 import { ArrowLeft, FileText, Sparkles, Upload, Lock } from "lucide-react";
 import { extractTextFromFile } from "@/lib/extractText";
@@ -310,7 +310,7 @@ export default function AdminUpload() {
     if (!docsUrl.trim() && !rawText.trim()) { toast.error("Provide a Google Docs URL, paste text, or upload a file"); return; }
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-course-from-doc", {
+      const { data, error } = await backendApi.functions.invoke("create-course-from-doc", {
         body: { title, emoji, docsUrl: docsUrl.trim() || undefined, rawText: rawText.trim() || undefined },
       });
       if (error) throw error;
