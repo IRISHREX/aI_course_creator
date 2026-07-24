@@ -134,31 +134,59 @@ export function PlayMode({ open, onClose, title, subtitle, blocks, startPage = 0
   const page = pages[idx];
   const pageText = page ? pageReadable(page.blocks) : "";
 
+  // Touch swipe gestures
+  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const s = touchRef.current;
+    if (!s) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    const dt = Date.now() - s.t;
+    touchRef.current = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4 && dt < 700) {
+      if (dx < 0) setIdx((i) => Math.min(pages.length - 1, i + 1));
+      else setIdx((i) => Math.max(0, i - 1));
+    } else if (dy < -80 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+      // swipe up to exit
+      onClose();
+    }
+  };
+
   return createPortal(
-    <div className="fixed inset-0 z-[100] cinema-vignette">
+    <div
+      className="fixed inset-0 z-[100] cinema-vignette overflow-hidden"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       {/* Ambient 3D layer */}
-      <div ref={bgRef} className="absolute inset-0 overflow-hidden opacity-70" />
+      <div ref={bgRef} className="absolute inset-0 overflow-hidden opacity-60 sm:opacity-70" />
 
       {/* Top bar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+      <div className="absolute top-3 sm:top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 max-w-[calc(100vw-1rem)]">
         <div className="toolbar-pill">
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-8 px-3 rounded-full">
-            <X className="h-4 w-4 mr-1" /> Exit
+          <Button variant="ghost" size="sm" onClick={onClose} className="h-9 sm:h-8 px-3 rounded-full" aria-label="Exit play mode">
+            <X className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Exit</span>
           </Button>
-          <div className="h-4 w-px bg-border/60 mx-1" />
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAutoplay((a) => !a)} title="Toggle autoplay (P)">
+          <div className="h-4 w-px bg-border/60 mx-0.5" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8" onClick={() => setAutoplay((a) => !a)} title="Toggle autoplay (P)" aria-label="Toggle autoplay">
             {autoplay ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </Button>
           <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} />
-          <div className="h-4 w-px bg-border/60 mx-1" />
-          <span className="px-2 text-[11px] font-mono text-muted-foreground tabular-nums">
+          <div className="hidden sm:block h-4 w-px bg-border/60 mx-0.5" />
+          <span className="hidden sm:inline-block px-2 text-[11px] font-mono text-muted-foreground tabular-nums">
             {idx + 1} / {pages.length}
           </span>
         </div>
       </div>
 
       {/* Slide */}
-      <div className="absolute inset-0 flex items-center justify-center px-6 py-24">
+      <div className="absolute inset-0 flex items-center justify-center overflow-y-auto px-3 sm:px-6 pt-20 pb-28 sm:pt-24 sm:pb-24">
         <AnimatePresence mode="wait">
           <motion.div
             key={idx}
@@ -166,16 +194,16 @@ export function PlayMode({ open, onClose, title, subtitle, blocks, startPage = 0
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.985 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-4xl"
+            className="relative w-full max-w-4xl my-auto"
           >
             {idx === 0 && (
-              <div className="mb-8 text-center">
-                <div className="text-[11px] tracking-[0.3em] font-mono text-primary/80 uppercase mb-3">Presenting</div>
-                <h1 className="font-display text-3xl md:text-5xl font-bold leading-tight text-gradient">{title}</h1>
-                {subtitle && <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">{subtitle}</p>}
+              <div className="mb-6 sm:mb-8 text-center px-2">
+                <div className="text-[10px] sm:text-[11px] tracking-[0.3em] font-mono text-primary/80 uppercase mb-2 sm:mb-3">Presenting</div>
+                <h1 className="font-display text-xl sm:text-3xl md:text-5xl font-bold leading-tight text-gradient">{title}</h1>
+                {subtitle && <p className="mt-3 sm:mt-4 text-xs sm:text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">{subtitle}</p>}
               </div>
             )}
-            <div className="glass rounded-2xl border-white/10 p-8 md:p-12 shadow-2xl shadow-black/50 space-y-6 backdrop-blur-2xl">
+            <div className="glass rounded-2xl border-white/10 p-4 sm:p-8 md:p-12 shadow-2xl shadow-black/50 space-y-4 sm:space-y-6 backdrop-blur-2xl">
               {page && (() => {
                 let off = 0;
                 return page.blocks.map((b: any, i: number) => {
@@ -193,43 +221,85 @@ export function PlayMode({ open, onClose, title, subtitle, blocks, startPage = 0
                 });
               })()}
             </div>
+            {/* Mobile-only swipe hint on first slide */}
+            {idx === 0 && (
+              <div className="sm:hidden mt-4 text-center text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
+                Swipe ← → to navigate · swipe ↑ to exit
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* Bottom nav */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10">
+      {/* Bottom nav — thumb-safe */}
+      <div className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 z-10 max-w-[calc(100vw-1rem)]">
         <div className="toolbar-pill">
-          <Button variant="ghost" size="icon" className="h-9 w-9" disabled={idx === 0} onClick={() => setIdx((i) => Math.max(0, i - 1))}>
-            <ChevronLeft className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 sm:h-9 sm:w-9"
+            disabled={idx === 0}
+            onClick={() => setIdx((i) => Math.max(0, i - 1))}
+            aria-label="Previous slide"
+          >
+            <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
           </Button>
-          <div className="flex items-center gap-1 px-2">
-            {pages.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setIdx(i)}
-                aria-label={`Go to slide ${i + 1}`}
-                className={`h-1.5 rounded-full transition-all duration-300 ${i === idx ? "w-8 bg-primary shadow-[0_0_10px_hsl(var(--primary))]" : "w-2 bg-muted hover:bg-primary/40"}`}
-              />
-            ))}
+          <div className="flex items-center gap-1 px-2 max-w-[45vw] overflow-hidden">
+            {/* Compact dots: on mobile, cap total dots shown with a windowed range */}
+            {(() => {
+              const total = pages.length;
+              const maxDots = 9;
+              if (total <= maxDots) {
+                return pages.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setIdx(i)}
+                    aria-label={`Go to slide ${i + 1}`}
+                    className={`h-2 rounded-full transition-all duration-300 ${i === idx ? "w-6 sm:w-8 bg-primary shadow-[0_0_10px_hsl(var(--primary))]" : "w-2 bg-muted hover:bg-primary/40"}`}
+                  />
+                ));
+              }
+              const start = Math.max(0, Math.min(idx - Math.floor(maxDots / 2), total - maxDots));
+              return Array.from({ length: maxDots }, (_, k) => {
+                const i = start + k;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setIdx(i)}
+                    aria-label={`Go to slide ${i + 1}`}
+                    className={`h-2 rounded-full transition-all duration-300 ${i === idx ? "w-6 sm:w-8 bg-primary shadow-[0_0_10px_hsl(var(--primary))]" : "w-2 bg-muted hover:bg-primary/40"}`}
+                  />
+                );
+              });
+            })()}
           </div>
-          <Button variant="ghost" size="icon" className="h-9 w-9" disabled={idx === pages.length - 1} onClick={() => setIdx((i) => Math.min(pages.length - 1, i + 1))}>
-            <ChevronRight className="h-4 w-4" />
+          <span className="sm:hidden px-1.5 text-[10px] font-mono text-muted-foreground tabular-nums">
+            {idx + 1}/{pages.length}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 sm:h-9 sm:w-9"
+            disabled={idx === pages.length - 1}
+            onClick={() => setIdx((i) => Math.min(pages.length - 1, i + 1))}
+            aria-label="Next slide"
+          >
+            <ChevronRight className="h-5 w-5 sm:h-4 sm:w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Edge tap zones for click-nav */}
+      {/* Edge tap zones — desktop only (mobile uses swipe) */}
       <button
         aria-label="Previous slide"
-        className="absolute left-0 top-0 h-full w-[10%] cursor-w-resize opacity-0 hover:opacity-100 transition-opacity flex items-center justify-start pl-4"
+        className="hidden sm:flex absolute left-0 top-0 h-full w-[10%] cursor-w-resize opacity-0 hover:opacity-100 transition-opacity items-center justify-start pl-4"
         onClick={() => setIdx((i) => Math.max(0, i - 1))}
       >
         <ArrowLeft className="h-8 w-8 text-primary/70" />
       </button>
       <button
         aria-label="Next slide"
-        className="absolute right-0 top-0 h-full w-[10%] cursor-e-resize opacity-0 hover:opacity-100 transition-opacity flex items-center justify-end pr-4"
+        className="hidden sm:flex absolute right-0 top-0 h-full w-[10%] cursor-e-resize opacity-0 hover:opacity-100 transition-opacity items-center justify-end pr-4"
         onClick={() => setIdx((i) => Math.min(pages.length - 1, i + 1))}
       >
         <ArrowRight className="h-8 w-8 text-primary/70" />
