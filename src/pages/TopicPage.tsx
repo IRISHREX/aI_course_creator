@@ -34,6 +34,7 @@ export default function TopicPage() {
   const [genMindmap, setGenMindmap] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
   const [readerZoom, setReaderZoom] = useState(100);
+  const [playOpen, setPlayOpen] = useState(false);
   const terrainContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
