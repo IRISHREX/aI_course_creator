@@ -13,9 +13,10 @@ import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, Play } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { PlayMode } from "@/components/PlayMode";
 
 export default function TopicPage() {
   const { courseSlug, slug } = useParams();
@@ -33,6 +34,7 @@ export default function TopicPage() {
   const [genMindmap, setGenMindmap] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
   const [readerZoom, setReaderZoom] = useState(100);
+  const [playOpen, setPlayOpen] = useState(false);
   const terrainContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -218,25 +220,45 @@ export default function TopicPage() {
     <div className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10">
       <div ref={terrainContainerRef} className="fixed inset-0 -z-20 overflow-hidden pointer-events-none" />
       <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 md:flex-row md:items-center md:justify-between">
-        <Button asChild variant="ghost" size="sm" className="max-w-full justify-start px-2">
+        <Button asChild variant="ghost" size="sm" className="max-w-full justify-start px-2 rounded-full">
           <Link to={linkPrefix} className="min-w-0">
             <ArrowLeft className="h-4 w-4 shrink-0 mr-1" />
             <span className="truncate">{course?.title || "Course"}</span>
           </Link>
         </Button>
-        <div className="grid grid-cols-5 gap-1.5 sm:flex sm:items-center sm:gap-2">
+        <div className="toolbar-pill self-start md:self-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPlayOpen(true)}
+            className="h-8 rounded-full px-3 text-primary hover:bg-primary/10"
+            title="Enter cinema play mode"
+          >
+            <Play className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Play</span>
+          </Button>
+          <div className="h-4 w-px bg-border/60 mx-0.5" />
           <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} />
           {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
-          <Button variant="ghost" size="icon" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
             {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
           </Button>
           {isAdmin && (
-            <Button asChild variant="neon" size="icon" aria-label="Edit lesson">
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" aria-label="Edit lesson">
               <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4" /></Link>
             </Button>
           )}
         </div>
       </div>
+
+      <PlayMode
+        open={playOpen}
+        onClose={() => setPlayOpen(false)}
+        title={topic.title}
+        subtitle={topic.summary}
+        blocks={topic.content || []}
+        startPage={pageIdx}
+      />
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="text-xs font-mono text-primary tracking-widest mb-2">UNIT {topic.unit} · LESSON {topic.order_index}</div>
