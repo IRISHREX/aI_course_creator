@@ -475,11 +475,11 @@ export default function TopicPage() {
           {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
             {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
-          </ToolButton>
+          </Button>
           {isAdmin && (
             <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" aria-label="Edit lesson">
               <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4" /></Link>
-            </ToolButton>
+            </Button>
           )}
           {selectedLanguage !== "en" && !activeTranslation && isAdmin && (
             <ToolButton label={`Generate ${languageByCode(selectedLanguage).label} version`} variant="neon" size="icon" onClick={generateLanguageVersion} disabled={generatingLanguage}>
@@ -490,8 +490,7 @@ export default function TopicPage() {
         {selectedLanguage !== "en" && !activeTranslation && (
           <div className="mt-2 text-xs text-muted-foreground">{languageByCode(selectedLanguage).label} version is not generated yet.</div>
         )}
-        </div>
-      )}
+      </div>
 
       <div className="mb-5 grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl sm:grid-cols-2">
         {neighbors.prev ? (
