@@ -169,11 +169,30 @@
   * { @apply border-border; }
   html, body, #root { @apply h-full; max-width: 100%; overflow-x: hidden; }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans antialiased;
     background-image: var(--gradient-hero);
     background-attachment: fixed;
+    font-feature-settings: "ss01", "cv11";
+    letter-spacing: -0.01em;
+  }
+  h1, h2, h3, h4, h5, h6, .font-display {
+    letter-spacing: -0.03em;
+    font-feature-settings: "ss01", "ss02";
+  }
+  button, [role="button"], a, input, select, textarea {
+    transition: color 200ms var(--transition-smooth),
+                background-color 200ms var(--transition-smooth),
+                border-color 200ms var(--transition-smooth),
+                box-shadow 250ms var(--transition-smooth),
+                transform 200ms var(--transition-smooth),
+                opacity 200ms var(--transition-smooth);
   }
   ::selection { background: hsl(var(--primary) / 0.4); color: hsl(var(--foreground)); }
+  /* Slim scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.5); background-clip: content-box; border: 2px solid transparent; }
 }
 
 @layer components {
