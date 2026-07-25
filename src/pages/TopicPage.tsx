@@ -692,6 +692,9 @@ export default function TopicPage() {
             </Button>
           </div>
         </div>
+      )}
+
+
 
       <PlayMode
         open={playOpen}
