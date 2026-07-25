@@ -1,0 +1,531 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
+  public: {
+    Tables: {
+      bookmarks: {
+        Row: {
+          course_id: string
+          created_at: string
+          id: string
+          label: string | null
+          page_index: number
+          topic_id: string
+          user_id: string
+          word_index: number
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          page_index?: number
+          topic_id: string
+          user_id: string
+          word_index?: number
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          page_index?: number
+          topic_id?: string
+          user_id?: string
+          word_index?: number
+        }
+        Relationships: []
+      }
+      course_pyq: {
+        Row: {
+          answer: string
+          course_id: string
+          created_at: string
+          id: string
+          ingestion_source: string | null
+          marks: number | null
+          order_index: number
+          question: string
+          source: string | null
+          topic_id: string | null
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          answer?: string
+          course_id: string
+          created_at?: string
+          id?: string
+          ingestion_source?: string | null
+          marks?: number | null
+          order_index?: number
+          question: string
+          source?: string | null
+          topic_id?: string | null
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          answer?: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          ingestion_source?: string | null
+          marks?: number | null
+          order_index?: number
+          question?: string
+          source?: string | null
+          topic_id?: string | null
+          updated_at?: string
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_pyq_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_pyq_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      courses: {
+        Row: {
+          cover_emoji: string | null
+          created_at: string
+          description: string
+          generation_status: string
+          id: string
+          mindmap: Json | null
+          order_index: number
+          slug: string
+          source_text: string | null
+          tags: string[]
+          title: string
+          toc: Json | null
+          updated_at: string
+        }
+        Insert: {
+          cover_emoji?: string | null
+          created_at?: string
+          description?: string
+          generation_status?: string
+          id?: string
+          mindmap?: Json | null
+          order_index?: number
+          slug: string
+          source_text?: string | null
+          tags?: string[]
+          title: string
+          toc?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          cover_emoji?: string | null
+          created_at?: string
+          description?: string
+          generation_status?: string
+          id?: string
+          mindmap?: Json | null
+          order_index?: number
+          slug?: string
+          source_text?: string | null
+          tags?: string[]
+          title?: string
+          toc?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      pyq_topics: {
+        Row: {
+          created_at: string
+          id: string
+          pyq_id: string
+          topic_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pyq_id: string
+          topic_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pyq_id?: string
+          topic_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pyq_topics_pyq_id_fkey"
+            columns: ["pyq_id"]
+            isOneToOne: false
+            referencedRelation: "course_pyq"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pyq_topics_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topic_progress: {
+        Row: {
+          attempts: number
+          best_quiz_score: number
+          id: string
+          passed: boolean
+          topic_id: string
+          updated_at: string
+          user_id: string
+          viewed: boolean
+        }
+        Insert: {
+          attempts?: number
+          best_quiz_score?: number
+          id?: string
+          passed?: boolean
+          topic_id: string
+          updated_at?: string
+          user_id: string
+          viewed?: boolean
+        }
+        Update: {
+          attempts?: number
+          best_quiz_score?: number
+          id?: string
+          passed?: boolean
+          topic_id?: string
+          updated_at?: string
+          user_id?: string
+          viewed?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_progress_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topic_versions: {
+        Row: {
+          content: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          mindmap: Json | null
+          note: string | null
+          quiz: Json
+          summary: string
+          title: string
+          topic_id: string
+          visualization: string | null
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          mindmap?: Json | null
+          note?: string | null
+          quiz?: Json
+          summary?: string
+          title: string
+          topic_id: string
+          visualization?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          mindmap?: Json | null
+          note?: string | null
+          quiz?: Json
+          summary?: string
+          title?: string
+          topic_id?: string
+          visualization?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_versions_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topics: {
+        Row: {
+          content: Json
+          course_id: string
+          created_at: string
+          difficulty_level: number
+          generation_status: string
+          id: string
+          mindmap: Json | null
+          order_index: number
+          quiz: Json
+          slug: string
+          summary: string
+          title: string
+          unit: number
+          updated_at: string
+          visualization: string | null
+        }
+        Insert: {
+          content?: Json
+          course_id: string
+          created_at?: string
+          difficulty_level?: number
+          generation_status?: string
+          id?: string
+          mindmap?: Json | null
+          order_index: number
+          quiz?: Json
+          slug: string
+          summary: string
+          title: string
+          unit: number
+          updated_at?: string
+          visualization?: string | null
+        }
+        Update: {
+          content?: Json
+          course_id?: string
+          created_at?: string
+          difficulty_level?: number
+          generation_status?: string
+          id?: string
+          mindmap?: Json | null
+          order_index?: number
+          quiz?: Json
+          slug?: string
+          summary?: string
+          title?: string
+          unit?: number
+          updated_at?: string
+          visualization?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topics_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+    }
+    Enums: {
+      app_role: "admin" | "user" | "super_admin"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      app_role: ["admin", "user", "super_admin"],
+    },
+  },
+} as const
