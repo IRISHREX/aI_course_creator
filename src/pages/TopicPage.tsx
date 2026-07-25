@@ -701,7 +701,7 @@ export default function TopicPage() {
         onClose={() => setPlayOpen(false)}
         title={displayTopic.title}
         subtitle={displayTopic.summary}
-        slides={pages.map((p: any[]) => ({ blocks: p }))}
+        slides={pages.map((p: any) => ({ blocks: p?.blocks ?? p }))}
         lang={selectedLanguage}
         initialIndex={pageIdx}
       />
