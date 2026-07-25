@@ -5,7 +5,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useProgress, type Topic } from "@/hooks/useTopics";
 import { useCourseBySlug } from "@/hooks/useCourses";
-import { useCourseSettings } from "@/lib/appSettings";
 import { Visualization } from "@/components/Visualization";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,10 +15,38 @@ import { LessonPYQButton } from "@/components/LessonPYQButton";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import { paginate, pageBalanceStats, pageReadable } from "@/lib/lessonPaging";
 import { Mindmap } from "@/components/Mindmap";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, Play } from "lucide-react";
+import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
+import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
+import ThreePageBackground from "@/components/ThreePageBackground";
+import { SphericalLoader } from "@/components/SphericalLoader";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck, Volume2, VolumeX, MonitorPlay, MonitorOff, Settings2, Languages, MousePointer2, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { PlayMode } from "@/components/PlayMode";
+import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
+import { useCourseSettings } from "@/lib/appSettings";
+import { playLessonSound } from "@/lib/lessonExperience";
+
+type MindmapData = ComponentProps<typeof Mindmap>["data"];
+type TopicWithMindmap = Topic & { mindmap?: MindmapData };
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function ToolButton({
+  label,
+  children,
+  ...props
+}: ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button aria-label={label} title={label} {...props}>{children}</Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function TopicPage() {
   const { courseSlug, slug } = useParams();
@@ -40,101 +67,11 @@ export default function TopicPage() {
   const [generatingLanguage, setGeneratingLanguage] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
   const [readerZoom, setReaderZoom] = useState(100);
-  const [playOpen, setPlayOpen] = useState(false);
-  const terrainContainerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    let animationId: number | null = null;
-    let renderer: THREE.WebGLRenderer | null = null;
-    let cleanupResize: (() => void) | null = null;
-    let mounted = true;
-
-    const container = terrainContainerRef.current;
-    if (!container) return;
-
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.domElement.style.position = "absolute";
-    renderer.domElement.style.inset = "0";
-    renderer.domElement.style.width = "100%";
-    renderer.domElement.style.height = "100%";
-    renderer.domElement.style.zIndex = "-1";
-    renderer.domElement.style.pointerEvents = "none";
-    container.appendChild(renderer.domElement);
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 0.01, 1000);
-    camera.position.set(0, 2, 15);
-    scene.fog = new THREE.Fog(0x000000, 0, 45);
-
-    const ambientLight = new THREE.AmbientLight(0x202020);
-    scene.add(ambientLight);
-    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 5);
-    directionalLight1.position.set(0.5, 0.0, 2);
-    scene.add(directionalLight1);
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 1.5);
-    directionalLight2.position.set(-0.5, -0.5, -2);
-    scene.add(directionalLight2);
-
-    const width = 40;
-    const height = 40;
-    const segments = 120;
-    const geometry = new THREE.PlaneGeometry(width, height, segments, segments);
-    const positions = geometry.attributes.position;
-
-    const noise = (x: number, y: number) => {
-      const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-      return n - Math.floor(n);
-    };
-
-    for (let i = 0; i < positions.count; i += 1) {
-      const x = positions.getX(i);
-      const y = positions.getY(i);
-      const value = noise(x * 0.3, y * 0.3) * 2.5;
-      positions.setZ(i, value);
-    }
-    positions.needsUpdate = true;
-    geometry.computeVertexNormals();
-
-    const material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = -2;
-    scene.add(mesh);
-
-    const onRenderFcts: Array<(delta: number) => void> = [];
-    onRenderFcts.push((delta) => { mesh.rotation.z += 0.2 * delta; });
-    onRenderFcts.push(() => { if (renderer) renderer.render(scene, camera); });
-
-    cleanupResize = () => {
-      if (!renderer) return;
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-    };
-    window.addEventListener("resize", cleanupResize);
-
-    const animate = (nowMsec: number) => {
-      if (!mounted) return;
-      animationId = requestAnimationFrame(animate);
-      const lastTimeMsec = (animate as any).lastTimeMsec || (nowMsec - 1000 / 60);
-      const deltaMsec = Math.min(200, nowMsec - lastTimeMsec);
-      (animate as any).lastTimeMsec = nowMsec;
-      onRenderFcts.forEach((fn) => fn(deltaMsec / 1000));
-    };
-    animationId = requestAnimationFrame(animate);
-
-    return () => {
-      mounted = false;
-      if (animationId) cancelAnimationFrame(animationId);
-      window.removeEventListener("resize", cleanupResize!);
-      if (renderer?.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
-      geometry.dispose();
-      material.dispose();
-      renderer?.dispose();
-    };
-  }, [slug]);
+  const [autoAdvanceRead, setAutoAdvanceRead] = useState(false);
+  const [autoScrollRead, setAutoScrollRead] = useState(true);
+  const [toolbarOpen, setToolbarOpen] = useState(true);
+  const readerRef = useRef<KaraokeReadModeHandle | null>(null);
+  const mouseStrokeRef = useRef({ x: 0, y: 0, count: 0, lastAt: 0, dragging: false });
 
   // Resume from URL hash: #p=2&w=14
   useEffect(() => {
@@ -451,36 +388,87 @@ export default function TopicPage() {
     <LessonTerrainBackground className="opacity-35" />;
 
   return (
-    <div className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10">
-      <div ref={terrainContainerRef} className="fixed inset-0 -z-20 overflow-hidden pointer-events-none" />
-      <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 md:flex-row md:items-center md:justify-between">
-        <Button asChild variant="ghost" size="sm" className="max-w-full justify-start px-2 rounded-full">
+    <div
+      className="container relative max-w-5xl overflow-hidden px-3 py-6 sm:px-4 sm:py-10"
+      onDoubleClick={handleReaderDoubleClick}
+      onMouseDown={handleReaderMouseDown}
+      onMouseMove={handleReaderMouseMove}
+      onMouseUp={handleReaderMouseUp}
+      onMouseLeave={handleReaderMouseUp}
+    >
+      {lessonBackground}
+      <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+        <Button asChild variant="ghost" size="sm" className="max-w-full justify-start px-2">
           <Link to={linkPrefix} className="min-w-0">
             <ArrowLeft className="h-4 w-4 shrink-0 mr-1" />
             <span className="truncate">{course?.title || "Course"}</span>
           </Link>
         </Button>
-        <div className="toolbar-pill self-start md:self-auto">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setPlayOpen(true)}
-            className="h-8 rounded-full px-3 text-primary hover:bg-primary/10"
-            title="Enter cinema play mode"
+        <ToolButton label={toolbarOpen ? "Hide lesson toolbar" : "Show lesson toolbar"} variant={toolbarOpen ? "neon" : "ghost"} size="icon" onClick={() => setToolbarOpen((value) => !value)}>
+          <Settings2 className="h-4 w-4" />
+        </ToolButton>
+      </div>
+
+      {toolbarOpen && (
+        <div className="mb-5 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger className="h-9 w-[170px]" aria-label="Lesson language" title="Lesson language">
+              <Languages className="mr-2 h-4 w-4 text-primary" />
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              {LESSON_LANGUAGES.map((language) => {
+                const ready = language.code === "en" || translations.some((translation) => translation.languageCode === language.code);
+                return (
+                  <SelectItem key={language.code} value={language.code}>
+                    {language.label} - {language.nativeLabel}{ready ? "" : " - AI"}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          <KaraokeReadMode ref={readerRef} text={pageText} lang={selectedLanguage} onWordIndex={setActiveWord} autoScroll={autoScrollRead} onDone={autoAdvanceRead ? goNextPage : undefined} />
+          <ToolButton
+            label="Auto next after read mode"
+            variant={autoAdvanceRead ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => setAutoAdvanceRead((value) => !value)}
           >
-            <Play className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Play</span>
-          </Button>
-          <div className="h-4 w-px bg-border/60 mx-0.5" />
-          <KaraokeReadMode text={pageText} onWordIndex={setActiveWord} />
+            <ChevronsRight className="h-4 w-4" />
+          </ToolButton>
+          <ToolButton
+            label="Lesson graphics on/off"
+            variant={lessonGraphicsOn ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => updateCourseExperience({ lessonGraphicsEnabled: !courseSettings.lessonGraphicsEnabled })}
+          >
+            {lessonGraphicsOn ? <MonitorPlay className="h-4 w-4" /> : <MonitorOff className="h-4 w-4" />}
+          </ToolButton>
+          <ToolButton
+            label="Sounds on/off"
+            variant={courseSettings.lessonSoundsEnabled ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => updateCourseExperience({ lessonSoundsEnabled: !courseSettings.lessonSoundsEnabled })}
+          >
+            {courseSettings.lessonSoundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </ToolButton>
+          <ToolButton
+            label="Auto scroll on/off (Ctrl+O). Read on/off uses Ctrl+I"
+            variant={autoScrollRead ? "neon" : "ghost"}
+            size="icon"
+            onClick={() => setAutoScrollRead((value) => !value)}
+          >
+            <MousePointer2 className="h-4 w-4" />
+          </ToolButton>
           {course && <LessonPYQButton topicId={topic.id} courseId={course.id} />}
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={addBookmark} disabled={bookmarking} title="Bookmark this page" aria-label="Bookmark this page">
+          <ToolButton label="Bookmark this page" variant="ghost" size="icon" onClick={addBookmark} disabled={bookmarking}>
             {bookmarking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
-          </Button>
+          </ToolButton>
           {isAdmin && (
-            <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" aria-label="Edit lesson">
+            <ToolButton label="Edit lesson" asChild variant="neon" size="icon">
               <Link to={`${linkPrefix}/topic/${topic.slug}/edit`}><Edit3 className="h-4 w-4" /></Link>
-            </Button>
+            </ToolButton>
           )}
           {selectedLanguage !== "en" && !activeTranslation && isAdmin && (
             <ToolButton label={`Generate ${languageByCode(selectedLanguage).label} version`} variant="neon" size="icon" onClick={generateLanguageVersion} disabled={generatingLanguage}>
@@ -491,7 +479,8 @@ export default function TopicPage() {
         {selectedLanguage !== "en" && !activeTranslation && (
           <div className="mt-2 text-xs text-muted-foreground">{languageByCode(selectedLanguage).label} version is not generated yet.</div>
         )}
-      </div>
+        </div>
+      )}
 
       <div className="mb-5 grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-xl shadow-black/10 backdrop-blur-xl sm:grid-cols-2">
         {neighbors.prev ? (
@@ -523,16 +512,36 @@ export default function TopicPage() {
         )}
       </div>
 
-      <PlayMode
-        open={playOpen}
-        onClose={() => setPlayOpen(false)}
-        title={topic.title}
-        subtitle={topic.summary}
-        blocks={topic.content || []}
-        startPage={pageIdx}
-      />
+      <div className="hidden">
+        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+          <SelectTrigger className="w-full sm:w-56" aria-label="Lesson language">
+            <SelectValue placeholder="Lesson language" />
+          </SelectTrigger>
+          <SelectContent>
+            {LESSON_LANGUAGES.map((language) => {
+              const ready = language.code === "en" || translations.some((translation) => translation.languageCode === language.code);
+              return (
+                <SelectItem key={language.code} value={language.code}>
+                  {language.label} · {language.nativeLabel}{ready ? "" : " · AI"}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        {selectedLanguage !== "en" && !activeTranslation && (
+          <div className="flex flex-1 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{languageByCode(selectedLanguage).label} version is not generated yet.</span>
+            {isAdmin && (
+              <Button variant="neon" size="sm" onClick={generateLanguageVersion} disabled={generatingLanguage}>
+                {generatingLanguage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                Generate version
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} dir={displayTopic.dir}>
         <div className="text-xs font-mono text-primary tracking-widest mb-2">UNIT {topic.unit} · LESSON {topic.order_index}</div>
         <div className="flex max-w-5xl items-start gap-2">
           <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl md:text-5xl">{displayTopic.title}</h1>
@@ -587,39 +596,39 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Render current page with karaoke offsets + swipe gestures */}
-      <div
-        style={{ fontSize: `${readerZoom}%` }}
-        onTouchStart={(e) => {
-          const t = e.touches[0];
-          (window as any).__lessonSwipe = { x: t.clientX, y: t.clientY, t: Date.now() };
-        }}
-        onTouchEnd={(e) => {
-          const s = (window as any).__lessonSwipe;
-          if (!s) return;
-          const t = e.changedTouches[0];
-          const dx = t.clientX - s.x;
-          const dy = t.clientY - s.y;
-          (window as any).__lessonSwipe = null;
-          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6 && Date.now() - s.t < 600) {
-            if (dx < 0 && pageIdx < pages.length - 1) {
-              setPageTurnDirection("next");
-              setPageIdx((p) => p + 1);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            } else if (dx > 0 && pageIdx > 0) {
-              setPageTurnDirection("prev");
-              setPageIdx((p) => p - 1);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }
-          }
-        }}
-      >
+      {pages.length > 0 && (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!canGoPrevious}
+            onClick={goPreviousPage}
+            aria-label={pageIdx > 0 ? "Previous page" : "Previous lesson"}
+            className="fixed left-1 top-1/2 z-40 h-11 w-11 -translate-y-1/2 rounded-full border border-white/10 bg-background/25 text-white/55 shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-primary/10 hover:text-primary disabled:pointer-events-none disabled:opacity-15 sm:left-5 sm:h-14 sm:w-14 sm:border-white/15 sm:bg-background/70 sm:text-white/90 sm:shadow-2xl sm:shadow-black/20 sm:backdrop-blur-xl"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!canGoNext}
+            onClick={goNextPage}
+            aria-label={pageIdx < pages.length - 1 ? "Next page" : "Next lesson"}
+            className="fixed right-1 top-1/2 z-40 h-11 w-11 -translate-y-1/2 rounded-full border border-white/10 bg-background/25 text-white/55 shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-primary/10 hover:text-primary disabled:pointer-events-none disabled:opacity-15 sm:right-5 sm:h-14 sm:w-14 sm:border-white/15 sm:bg-background/70 sm:text-white/90 sm:shadow-2xl sm:shadow-black/20 sm:backdrop-blur-xl"
+          >
+            <ArrowRight className="h-6 w-6" />
+          </Button>
+        </>
+      )}
+
+      {/* Render current page with karaoke offsets */}
+      <div style={{ fontSize: `${readerZoom}%` }} dir={displayTopic.dir}>
         <motion.div
           key={pageIdx}
           initial={{ opacity: 0, x: pageTurnDirection === "next" ? 30 : -30, rotateY: pageTurnDirection === "next" ? -10 : 10 }}
           animate={{ opacity: 1, x: 0, rotateY: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
-          className="space-y-5 pb-24 sm:pb-0"
+          className="space-y-5"
         >
           {currentPage && (() => {
             let off = 0;
@@ -642,54 +651,6 @@ export default function TopicPage() {
           })()}
         </motion.div>
       </div>
-
-      {/* Pagination footer — sticky thumb-safe on mobile, inline on desktop */}
-      {pages.length > 1 && (
-        <div
-          className="fixed inset-x-0 z-30 flex justify-center pointer-events-none sm:static sm:mt-8"
-          style={{ bottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
-        >
-          <div className="pointer-events-auto toolbar-pill px-2 py-1.5 gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={pageIdx === 0}
-              onClick={() => {
-                if (pageIdx === 0) return;
-                setPageTurnDirection("prev");
-                setPageIdx((p) => p - 1);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="h-11 w-11 sm:h-9 sm:w-auto sm:px-3"
-              aria-label="Previous page"
-            >
-              <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1" />
-              <span className="hidden sm:inline text-sm">Prev</span>
-            </Button>
-
-            <span className="px-2 text-xs font-mono text-muted-foreground tabular-nums">
-              {pageIdx + 1} / {pages.length}
-            </span>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={pageIdx === pages.length - 1}
-              onClick={() => {
-                if (pageIdx === pages.length - 1) return;
-                setPageTurnDirection("next");
-                setPageIdx((p) => p + 1);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="h-11 w-11 sm:h-9 sm:w-auto sm:px-3"
-              aria-label="Next page"
-            >
-              <span className="hidden sm:inline text-sm">Next</span>
-              <ArrowRight className="h-5 w-5 sm:h-4 sm:w-4 sm:ml-1" />
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Mindmap (only on last page) */}
       {pageIdx === pages.length - 1 && (

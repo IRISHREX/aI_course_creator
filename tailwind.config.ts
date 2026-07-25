@@ -62,8 +62,8 @@ export default {
         elevated: "var(--shadow-elevated)",
       },
       fontFamily: {
-        sans: ["'Work Sans'", "system-ui", "sans-serif"],
-        display: ["'JetBrains Mono'", "'Work Sans'", "monospace"],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        display: ["'Space Grotesk'", "Inter", "sans-serif"],
         mono: ["'JetBrains Mono'", "monospace"],
       },
       borderRadius: {
