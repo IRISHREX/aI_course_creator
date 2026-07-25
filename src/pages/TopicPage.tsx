@@ -692,8 +692,16 @@ export default function TopicPage() {
             </Button>
           </div>
         </div>
-      )}
 
+      <PlayMode
+        open={playOpen}
+        onClose={() => setPlayOpen(false)}
+        title={displayTopic.title}
+        subtitle={displayTopic.summary}
+        slides={pages.map((p: any[]) => ({ blocks: p }))}
+        lang={selectedLanguage}
+        initialIndex={pageIdx}
+      />
     </div>
   );
 }
