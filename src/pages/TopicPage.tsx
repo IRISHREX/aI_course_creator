@@ -71,6 +71,7 @@ export default function TopicPage() {
   const [autoAdvanceRead, setAutoAdvanceRead] = useState(false);
   const [autoScrollRead, setAutoScrollRead] = useState(true);
   const [toolbarOpen, setToolbarOpen] = useState(true);
+  const [playOpen, setPlayOpen] = useState(false);
   const readerRef = useRef<KaraokeReadModeHandle | null>(null);
   const mouseStrokeRef = useRef({ x: 0, y: 0, count: 0, lastAt: 0, dragging: false });
 
