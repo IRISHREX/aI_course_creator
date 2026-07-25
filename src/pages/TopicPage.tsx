@@ -19,7 +19,8 @@ import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 import ThreePageBackground from "@/components/ThreePageBackground";
 import { SphericalLoader } from "@/components/SphericalLoader";
-import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck, Volume2, VolumeX, MonitorPlay, MonitorOff, Settings2, Languages, MousePointer2, Info } from "lucide-react";
+import { ArrowLeft, ArrowRight, Edit3, Sparkles, Brain, Loader2, Bookmark, ZoomIn, ZoomOut, ChevronsRight, SearchCheck, Volume2, VolumeX, MonitorPlay, MonitorOff, Settings2, Languages, MousePointer2, Info, Play } from "lucide-react";
+import { PlayMode } from "@/components/PlayMode";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { LESSON_LANGUAGES, languageByCode, normalizeTranslations } from "@/lib/lessonLanguages";
@@ -70,6 +71,7 @@ export default function TopicPage() {
   const [autoAdvanceRead, setAutoAdvanceRead] = useState(false);
   const [autoScrollRead, setAutoScrollRead] = useState(true);
   const [toolbarOpen, setToolbarOpen] = useState(true);
+  const [playOpen, setPlayOpen] = useState(false);
   const readerRef = useRef<KaraokeReadModeHandle | null>(null);
   const mouseStrokeRef = useRef({ x: 0, y: 0, count: 0, lastAt: 0, dragging: false });
 
@@ -429,6 +431,9 @@ export default function TopicPage() {
             </SelectContent>
           </Select>
           <KaraokeReadMode ref={readerRef} text={pageText} lang={selectedLanguage} onWordIndex={setActiveWord} autoScroll={autoScrollRead} onDone={autoAdvanceRead ? goNextPage : undefined} />
+          <ToolButton label="Play mode (cinema)" variant="neon" size="icon" onClick={() => setPlayOpen(true)}>
+            <Play className="h-4 w-4" />
+          </ToolButton>
           <ToolButton
             label="Auto next after read mode"
             variant={autoAdvanceRead ? "neon" : "ghost"}
@@ -689,6 +694,17 @@ export default function TopicPage() {
         </div>
       )}
 
+
+
+      <PlayMode
+        open={playOpen}
+        onClose={() => setPlayOpen(false)}
+        title={displayTopic.title}
+        subtitle={displayTopic.summary}
+        slides={pages.map((p: any) => ({ blocks: p?.blocks ?? p }))}
+        lang={selectedLanguage}
+        initialIndex={pageIdx}
+      />
     </div>
   );
 }
