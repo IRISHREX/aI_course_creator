@@ -431,6 +431,9 @@ export default function TopicPage() {
             </SelectContent>
           </Select>
           <KaraokeReadMode ref={readerRef} text={pageText} lang={selectedLanguage} onWordIndex={setActiveWord} autoScroll={autoScrollRead} onDone={autoAdvanceRead ? goNextPage : undefined} />
+          <ToolButton label="Play mode (cinema)" variant="neon" size="icon" onClick={() => setPlayOpen(true)}>
+            <Play className="h-4 w-4" />
+          </ToolButton>
           <ToolButton
             label="Auto next after read mode"
             variant={autoAdvanceRead ? "neon" : "ghost"}
