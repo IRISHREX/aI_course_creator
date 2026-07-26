@@ -292,9 +292,9 @@ export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", 
           <VoiceSettingsPopover
             side="top"
             align="end"
-            triggerClassName="h-10 w-10 shrink-0 text-white/80 hover:text-white"
-            hint="Space / P = play · ← → = navigate · M = mute · Esc = close"
+            triggerClassName="text-white/80 hover:text-white"
           />
+
 
         </div>
       </div>
