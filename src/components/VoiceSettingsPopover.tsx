@@ -32,9 +32,10 @@ export function VoiceSettingsPopover({
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const filtered = voices.filter((v) => !!v.voiceURI);
     const list = q
-      ? voices.filter((v) => v.name.toLowerCase().includes(q) || v.lang.toLowerCase().includes(q))
-      : voices;
+      ? filtered.filter((v) => v.name.toLowerCase().includes(q) || v.lang.toLowerCase().includes(q))
+      : filtered;
     const byLang = new Map<string, SpeechSynthesisVoice[]>();
     for (const v of list) {
       const key = v.lang || "other";
@@ -43,6 +44,7 @@ export function VoiceSettingsPopover({
     }
     return Array.from(byLang.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [voices, query]);
+
 
   const selectedVoice = voices.find((v) => v.voiceURI === prefs.voiceURI);
 
