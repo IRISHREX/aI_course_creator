@@ -1,10 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Volume2, Pause, Play, Square, Settings2, Headphones } from "lucide-react";
+import { Volume2, Pause, Play, Square, Headphones } from "lucide-react";
+import { VoiceSettingsPopover } from "@/components/VoiceSettingsPopover";
+import { useVoicePrefs, useSpeechVoices, pickVoice as pickBestVoice, speechLangMap } from "@/lib/voicePrefs";
 
 interface Props {
   /** Plain text to read aloud. */
