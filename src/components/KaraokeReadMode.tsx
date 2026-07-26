@@ -195,37 +195,8 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
           <Button variant="ghost" size="icon" onClick={stop}><Square className="h-4 w-4" /></Button>
         </>
       )}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="ghost" size="icon" title="Voice settings"><Settings2 className="h-4 w-4" /></Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-72" align="end">
-          <div className="space-y-4">
-            <div>
-              <Label className="text-xs">Voice</Label>
-              <Select value={prefs.voiceURI || ""} onValueChange={v => setPrefs({ ...prefs, voiceURI: v })}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="System default" /></SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {voices.map(v => (
-                    <SelectItem key={v.voiceURI} value={v.voiceURI}>
-                      {v.name} <span className="text-muted-foreground">({v.lang})</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs flex justify-between"><span>Speed</span><span className="font-mono text-primary">{prefs.rate.toFixed(2)}x</span></Label>
-              <Slider min={0.5} max={2} step={0.05} value={[prefs.rate]} onValueChange={v => setPrefs({ ...prefs, rate: v[0] })} className="mt-2" />
-            </div>
-            <div>
-              <Label className="text-xs flex justify-between"><span>Pitch</span><span className="font-mono text-primary">{prefs.pitch.toFixed(2)}</span></Label>
-              <Slider min={0.5} max={2} step={0.05} value={[prefs.pitch]} onValueChange={v => setPrefs({ ...prefs, pitch: v[0] })} className="mt-2" />
-            </div>
-            <p className="text-[10px] text-muted-foreground">Tip: click any highlighted word to start reading from there.</p>
-          </div>
-        </PopoverContent>
-      </Popover>
+      <VoiceSettingsPopover align="end" compact />
+
     </div>
   );
 });
