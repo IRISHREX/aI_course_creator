@@ -1,10 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Volume2, Pause, Play, Square, Settings2, Headphones } from "lucide-react";
+import { Volume2, Pause, Play, Square, Headphones } from "lucide-react";
+import { VoiceSettingsPopover } from "@/components/VoiceSettingsPopover";
+import { useVoicePrefs, useSpeechVoices, pickVoice as pickBestVoice, speechLangMap } from "@/lib/voicePrefs";
 
 interface Props {
   /** Plain text to read aloud. */
@@ -23,32 +21,6 @@ export interface KaraokeReadModeHandle {
   resume: () => void;
 }
 
-const PREFS_KEY = "signal-tts-prefs";
-interface Prefs { voiceURI?: string; rate: number; pitch: number }
-const loadPrefs = (): Prefs => {
-  try { return { rate: 1, pitch: 1, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") }; }
-  catch { return { rate: 1, pitch: 1 }; }
-};
-
-const speechLangMap: Record<string, string> = {
-  en: "en-US",
-  bn: "bn-BD",
-  hi: "hi-IN",
-  ur: "ur-PK",
-  ar: "ar-SA",
-  zh: "zh-CN",
-  ja: "ja-JP",
-  ko: "ko-KR",
-  fr: "fr-FR",
-  es: "es-ES",
-  de: "de-DE",
-  pt: "pt-PT",
-  ru: "ru-RU",
-  ta: "ta-IN",
-  te: "te-IN",
-  mr: "mr-IN",
-};
-
 /** Tokenise text into [{word, start}] using char offsets in the original string. */
 export function tokenizeWords(text: string): { word: string; start: number; end: number }[] {
   const out: { word: string; start: number; end: number }[] = [];
@@ -59,8 +31,8 @@ export function tokenizeWords(text: string): { word: string; start: number; end:
 }
 
 export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function KaraokeReadMode({ text, lang = "en", onWordIndex, autoScroll = true, onDone }, ref) {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const voices = useSpeechVoices();
+  const [prefs] = useVoicePrefs();
   const [state, setState] = useState<"idle" | "playing" | "paused">("idle");
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const utterIdRef = useRef(0);
@@ -69,18 +41,8 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
 
   const tokens = useMemo(() => tokenizeWords(text), [text]);
   const speechLang = speechLangMap[lang] || lang || "en-US";
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const load = () => setVoices(window.speechSynthesis.getVoices());
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => { window.speechSynthesis.onvoiceschanged = null; window.speechSynthesis.cancel(); };
-  }, []);
-
-  useEffect(() => { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }, [prefs]);
-
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
+
 
   useEffect(() => {
     if (!supported) return;
@@ -92,14 +54,8 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
     onWordIndex?.(null);
   }, [supported, text, onWordIndex]);
 
-  const pickVoice = useCallback(() => {
-    const selected = voices.find(x => x.voiceURI === prefs.voiceURI);
-    if (selected) return selected;
-    const lower = speechLang.toLowerCase();
-    return voices.find((voice) => voice.lang.toLowerCase() === lower)
-      || voices.find((voice) => voice.lang.toLowerCase().startsWith(lower.split("-")[0]))
-      || null;
-  }, [prefs.voiceURI, speechLang, voices]);
+  const pickVoice = useCallback(() => pickBestVoice(voices, prefs, lang), [voices, prefs, lang]);
+
 
   const startFrom = useCallback((charOffset: number) => {
     if (!supported || !text.trim()) return;
@@ -239,37 +195,8 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
           <Button variant="ghost" size="icon" onClick={stop}><Square className="h-4 w-4" /></Button>
         </>
       )}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="ghost" size="icon" title="Voice settings"><Settings2 className="h-4 w-4" /></Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-72" align="end">
-          <div className="space-y-4">
-            <div>
-              <Label className="text-xs">Voice</Label>
-              <Select value={prefs.voiceURI || ""} onValueChange={v => setPrefs({ ...prefs, voiceURI: v })}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="System default" /></SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {voices.map(v => (
-                    <SelectItem key={v.voiceURI} value={v.voiceURI}>
-                      {v.name} <span className="text-muted-foreground">({v.lang})</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs flex justify-between"><span>Speed</span><span className="font-mono text-primary">{prefs.rate.toFixed(2)}x</span></Label>
-              <Slider min={0.5} max={2} step={0.05} value={[prefs.rate]} onValueChange={v => setPrefs({ ...prefs, rate: v[0] })} className="mt-2" />
-            </div>
-            <div>
-              <Label className="text-xs flex justify-between"><span>Pitch</span><span className="font-mono text-primary">{prefs.pitch.toFixed(2)}</span></Label>
-              <Slider min={0.5} max={2} step={0.05} value={[prefs.pitch]} onValueChange={v => setPrefs({ ...prefs, pitch: v[0] })} className="mt-2" />
-            </div>
-            <p className="text-[10px] text-muted-foreground">Tip: click any highlighted word to start reading from there.</p>
-          </div>
-        </PopoverContent>
-      </Popover>
+      <VoiceSettingsPopover align="end" compact />
+
     </div>
   );
 });

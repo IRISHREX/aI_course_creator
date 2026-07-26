@@ -2,16 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Play, Pause, X, ChevronLeft, ChevronRight, Volume2, VolumeX, Settings2, Repeat, Repeat1, Maximize2, Minimize2,
+  Play, Pause, X, ChevronLeft, ChevronRight, Volume2, VolumeX, Repeat, Repeat1, Maximize2, Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import ThreePageBackground from "@/components/ThreePageBackground";
 import { tokenizeWords } from "@/components/KaraokeReadMode";
+import { VoiceSettingsPopover } from "@/components/VoiceSettingsPopover";
+import { useVoicePrefs, useSpeechVoices, pickVoice, speechLangMap } from "@/lib/voicePrefs";
 import { cn } from "@/lib/utils";
 
 interface Slide { blocks: any[] }
@@ -27,26 +25,13 @@ interface Props {
   initialIndex?: number;
 }
 
-const PREFS_KEY = "signal-tts-prefs";
-interface Prefs { voiceURI?: string; rate: number; pitch: number }
-const loadPrefs = (): Prefs => {
-  try { return { rate: 1, pitch: 1, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") }; }
-  catch { return { rate: 1, pitch: 1 }; }
-};
-
-const speechLangMap: Record<string, string> = {
-  en: "en-US", bn: "bn-BD", hi: "hi-IN", ur: "ur-PK", ar: "ar-SA", zh: "zh-CN",
-  ja: "ja-JP", ko: "ko-KR", fr: "fr-FR", es: "es-ES", de: "de-DE", pt: "pt-PT",
-  ru: "ru-RU", ta: "ta-IN", te: "te-IN", mr: "mr-IN",
-};
-
 export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", dir = "ltr", initialIndex = 0 }: Props) {
   const [index, setIndex] = useState(initialIndex);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [loop, setLoop] = useState<"off" | "one" | "all">("off");
-  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [prefs] = useVoicePrefs();
+  const voices = useSpeechVoices();
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [isFullscreen, setFullscreen] = useState(false);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
@@ -60,15 +45,7 @@ export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", 
   const tokens = useMemo(() => tokenizeWords(slideText), [slideText]);
 
   useEffect(() => { if (open) setIndex(Math.min(initialIndex, Math.max(0, total - 1))); }, [open, initialIndex, total]);
-  useEffect(() => { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }, [prefs]);
 
-  useEffect(() => {
-    if (!supported) return;
-    const load = () => setVoices(window.speechSynthesis.getVoices());
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
-  }, [supported]);
 
   const stopSpeech = useCallback(() => {
     if (!supported) return;
@@ -312,43 +289,13 @@ export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", 
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-white/80 hover:text-white" aria-label="Voice settings">
-                <Settings2 className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="end" className="w-80">
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-xs">Voice</Label>
-                  <Select value={prefs.voiceURI || ""} onValueChange={v => setPrefs({ ...prefs, voiceURI: v })}>
-                    <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="System default" /></SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      {voices.map(v => (
-                        <SelectItem key={v.voiceURI} value={v.voiceURI}>
-                          {v.name} <span className="text-muted-foreground">({v.lang})</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs flex justify-between">
-                    <span>Speed</span><span className="font-mono text-primary">{prefs.rate.toFixed(2)}x</span>
-                  </Label>
-                  <Slider min={0.5} max={2} step={0.05} value={[prefs.rate]} onValueChange={v => setPrefs({ ...prefs, rate: v[0] })} className="mt-2" />
-                </div>
-                <div>
-                  <Label className="text-xs flex justify-between">
-                    <span>Pitch</span><span className="font-mono text-primary">{prefs.pitch.toFixed(2)}</span>
-                  </Label>
-                  <Slider min={0.5} max={2} step={0.05} value={[prefs.pitch]} onValueChange={v => setPrefs({ ...prefs, pitch: v[0] })} className="mt-2" />
-                </div>
-                <p className="text-[10px] text-muted-foreground">Space / P = play · ← → = navigate · M = mute · Esc = close</p>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <VoiceSettingsPopover
+            side="top"
+            align="end"
+            triggerClassName="text-white/80 hover:text-white"
+          />
+
+
         </div>
       </div>
     </div>,
