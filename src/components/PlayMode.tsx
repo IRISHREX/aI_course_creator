@@ -289,43 +289,13 @@ export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", 
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-white/80 hover:text-white" aria-label="Voice settings">
-                <Settings2 className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="end" className="w-80">
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-xs">Voice</Label>
-                  <Select value={prefs.voiceURI || ""} onValueChange={v => setPrefs({ ...prefs, voiceURI: v })}>
-                    <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="System default" /></SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      {voices.map(v => (
-                        <SelectItem key={v.voiceURI} value={v.voiceURI}>
-                          {v.name} <span className="text-muted-foreground">({v.lang})</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs flex justify-between">
-                    <span>Speed</span><span className="font-mono text-primary">{prefs.rate.toFixed(2)}x</span>
-                  </Label>
-                  <Slider min={0.5} max={2} step={0.05} value={[prefs.rate]} onValueChange={v => setPrefs({ ...prefs, rate: v[0] })} className="mt-2" />
-                </div>
-                <div>
-                  <Label className="text-xs flex justify-between">
-                    <span>Pitch</span><span className="font-mono text-primary">{prefs.pitch.toFixed(2)}</span>
-                  </Label>
-                  <Slider min={0.5} max={2} step={0.05} value={[prefs.pitch]} onValueChange={v => setPrefs({ ...prefs, pitch: v[0] })} className="mt-2" />
-                </div>
-                <p className="text-[10px] text-muted-foreground">Space / P = play · ← → = navigate · M = mute · Esc = close</p>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <VoiceSettingsPopover
+            side="top"
+            align="end"
+            triggerClassName="h-10 w-10 shrink-0 text-white/80 hover:text-white"
+            hint="Space / P = play · ← → = navigate · M = mute · Esc = close"
+          />
+
         </div>
       </div>
     </div>,
