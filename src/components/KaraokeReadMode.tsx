@@ -21,32 +21,6 @@ export interface KaraokeReadModeHandle {
   resume: () => void;
 }
 
-const PREFS_KEY = "signal-tts-prefs";
-interface Prefs { voiceURI?: string; rate: number; pitch: number }
-const loadPrefs = (): Prefs => {
-  try { return { rate: 1, pitch: 1, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") }; }
-  catch { return { rate: 1, pitch: 1 }; }
-};
-
-const speechLangMap: Record<string, string> = {
-  en: "en-US",
-  bn: "bn-BD",
-  hi: "hi-IN",
-  ur: "ur-PK",
-  ar: "ar-SA",
-  zh: "zh-CN",
-  ja: "ja-JP",
-  ko: "ko-KR",
-  fr: "fr-FR",
-  es: "es-ES",
-  de: "de-DE",
-  pt: "pt-PT",
-  ru: "ru-RU",
-  ta: "ta-IN",
-  te: "te-IN",
-  mr: "mr-IN",
-};
-
 /** Tokenise text into [{word, start}] using char offsets in the original string. */
 export function tokenizeWords(text: string): { word: string; start: number; end: number }[] {
   const out: { word: string; start: number; end: number }[] = [];
@@ -57,8 +31,8 @@ export function tokenizeWords(text: string): { word: string; start: number; end:
 }
 
 export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function KaraokeReadMode({ text, lang = "en", onWordIndex, autoScroll = true, onDone }, ref) {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const voices = useSpeechVoices();
+  const [prefs] = useVoicePrefs();
   const [state, setState] = useState<"idle" | "playing" | "paused">("idle");
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const utterIdRef = useRef(0);
@@ -67,6 +41,7 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
 
   const tokens = useMemo(() => tokenizeWords(text), [text]);
   const speechLang = speechLangMap[lang] || lang || "en-US";
+
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
