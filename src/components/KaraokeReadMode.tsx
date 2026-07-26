@@ -43,15 +43,8 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
   const speechLang = speechLangMap[lang] || lang || "en-US";
 
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const load = () => setVoices(window.speechSynthesis.getVoices());
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => { window.speechSynthesis.onvoiceschanged = null; window.speechSynthesis.cancel(); };
-  }, []);
+  const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
-  useEffect(() => { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }, [prefs]);
 
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
