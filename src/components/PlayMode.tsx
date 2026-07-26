@@ -25,26 +25,13 @@ interface Props {
   initialIndex?: number;
 }
 
-const PREFS_KEY = "signal-tts-prefs";
-interface Prefs { voiceURI?: string; rate: number; pitch: number }
-const loadPrefs = (): Prefs => {
-  try { return { rate: 1, pitch: 1, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") }; }
-  catch { return { rate: 1, pitch: 1 }; }
-};
-
-const speechLangMap: Record<string, string> = {
-  en: "en-US", bn: "bn-BD", hi: "hi-IN", ur: "ur-PK", ar: "ar-SA", zh: "zh-CN",
-  ja: "ja-JP", ko: "ko-KR", fr: "fr-FR", es: "es-ES", de: "de-DE", pt: "pt-PT",
-  ru: "ru-RU", ta: "ta-IN", te: "te-IN", mr: "mr-IN",
-};
-
 export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", dir = "ltr", initialIndex = 0 }: Props) {
   const [index, setIndex] = useState(initialIndex);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [loop, setLoop] = useState<"off" | "one" | "all">("off");
-  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [prefs] = useVoicePrefs();
+  const voices = useSpeechVoices();
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [isFullscreen, setFullscreen] = useState(false);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
@@ -58,15 +45,7 @@ export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", 
   const tokens = useMemo(() => tokenizeWords(slideText), [slideText]);
 
   useEffect(() => { if (open) setIndex(Math.min(initialIndex, Math.max(0, total - 1))); }, [open, initialIndex, total]);
-  useEffect(() => { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }, [prefs]);
 
-  useEffect(() => {
-    if (!supported) return;
-    const load = () => setVoices(window.speechSynthesis.getVoices());
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
-  }, [supported]);
 
   const stopSpeech = useCallback(() => {
     if (!supported) return;
