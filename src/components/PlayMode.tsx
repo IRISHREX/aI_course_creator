@@ -2,16 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Play, Pause, X, ChevronLeft, ChevronRight, Volume2, VolumeX, Settings2, Repeat, Repeat1, Maximize2, Minimize2,
+  Play, Pause, X, ChevronLeft, ChevronRight, Volume2, VolumeX, Repeat, Repeat1, Maximize2, Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BlockRenderer, blockToText, countWords } from "@/components/BlockRenderer";
 import ThreePageBackground from "@/components/ThreePageBackground";
 import { tokenizeWords } from "@/components/KaraokeReadMode";
+import { VoiceSettingsPopover } from "@/components/VoiceSettingsPopover";
+import { useVoicePrefs, useSpeechVoices, pickVoice, speechLangMap } from "@/lib/voicePrefs";
 import { cn } from "@/lib/utils";
 
 interface Slide { blocks: any[] }
