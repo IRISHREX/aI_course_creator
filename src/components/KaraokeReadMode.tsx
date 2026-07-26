@@ -41,12 +41,8 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
 
   const tokens = useMemo(() => tokenizeWords(text), [text]);
   const speechLang = speechLangMap[lang] || lang || "en-US";
-
-
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
-
-  const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
   useEffect(() => {
     if (!supported) return;
