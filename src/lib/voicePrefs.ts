@@ -53,20 +53,27 @@ export function useSpeechVoices(): SpeechSynthesisVoice[] {
   );
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const load = () => setVoices(window.speechSynthesis.getVoices());
+    let cancelled = false;
+    const load = () => {
+      if (cancelled) return;
+      const list = window.speechSynthesis.getVoices();
+      setVoices((prev) => (prev.length === list.length ? prev : list));
+    };
     load();
     window.speechSynthesis.addEventListener?.("voiceschanged", load);
-    // Fallback for browsers without addEventListener support
     window.speechSynthesis.onvoiceschanged = load;
-    // Some browsers need a nudge
-    const t = window.setTimeout(load, 250);
+    // Some browsers (Chrome) populate voices lazily — poll briefly until we get them.
+    const timers: number[] = [];
+    [100, 300, 700, 1500, 3000].forEach((ms) => timers.push(window.setTimeout(load, ms)));
     return () => {
+      cancelled = true;
       window.speechSynthesis.removeEventListener?.("voiceschanged", load);
-      window.clearTimeout(t);
+      timers.forEach((t) => window.clearTimeout(t));
     };
   }, []);
   return voices;
 }
+
 
 export function pickVoice(voices: SpeechSynthesisVoice[], prefs: VoicePrefs, lang: string) {
   const speechLang = speechLangMap[lang] || lang || "en-US";
