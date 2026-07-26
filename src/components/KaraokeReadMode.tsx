@@ -54,14 +54,8 @@ export const KaraokeReadMode = forwardRef<KaraokeReadModeHandle, Props>(function
     onWordIndex?.(null);
   }, [supported, text, onWordIndex]);
 
-  const pickVoice = useCallback(() => {
-    const selected = voices.find(x => x.voiceURI === prefs.voiceURI);
-    if (selected) return selected;
-    const lower = speechLang.toLowerCase();
-    return voices.find((voice) => voice.lang.toLowerCase() === lower)
-      || voices.find((voice) => voice.lang.toLowerCase().startsWith(lower.split("-")[0]))
-      || null;
-  }, [prefs.voiceURI, speechLang, voices]);
+  const pickVoice = useCallback(() => pickBestVoice(voices, prefs, lang), [voices, prefs, lang]);
+
 
   const startFrom = useCallback((charOffset: number) => {
     if (!supported || !text.trim()) return;
