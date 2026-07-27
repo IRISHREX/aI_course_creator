@@ -123,9 +123,8 @@ export default function CourseReader() {
     setCourseSettingsValue({ ...courseSettings, lessonGraphicsEnabled: true, lessonVisualStyle });
   };
 
-  const updateVisualStyle = (lessonVisualStyle: LessonVisualStyle) => {
-    setCourseSettingsValue({ ...courseSettings, lessonGraphicsEnabled: true, lessonVisualStyle });
-  };
+
+
 
   useEffect(() => {
     if (slideIndex > slides.length - 1) setSlideIndex(Math.max(slides.length - 1, 0));
