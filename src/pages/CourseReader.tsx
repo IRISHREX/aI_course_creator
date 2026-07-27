@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, BookOpen, FileText, Gauge, ListTree, Maximize2, Minimize2, MonitorOff, MonitorPlay, Orbit, Pause, Play, Settings2, SkipBack, SkipForward, Sparkles, Square, Volume2 } from "lucide-react";
+import { ArrowLeft, BookOpen, FileText, Gauge, ListTree, Maximize2, Minimize2, MonitorOff, MonitorPlay, Orbit, Pause, Play, Settings2, SkipBack, SkipForward, Sparkles, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -17,6 +16,8 @@ import { SphericalLoader } from "@/components/SphericalLoader";
 import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 import ThreePageBackground from "@/components/ThreePageBackground";
+import { VoiceSettingsPopover } from "@/components/VoiceSettingsPopover";
+import { useVoicePrefs, useSpeechVoices, pickVoice } from "@/lib/voicePrefs";
 import { useCourseSettings, type LessonVisualStyle } from "@/lib/appSettings";
 import { hasPresentation, type PresentationSlide } from "@/lib/lessonPresentation";
 
