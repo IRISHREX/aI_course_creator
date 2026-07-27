@@ -247,13 +247,16 @@ export function PlayMode({ open, onClose, title, subtitle, slides, lang = "en", 
               <div className="mb-3 text-[10px] font-mono uppercase tracking-[0.3em] text-primary/70">
                 Slide {index + 1} / {total}
               </div>
-              <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1 sm:max-h-[68vh]">
-                {slide?.blocks?.map((b, i) => {
-                  let off = 0;
-                  for (let k = 0; k < i; k++) off += countWords(blockToText(slide.blocks[k]));
-                  return <BlockRenderer key={i} block={b} wordOffset={off} activeWordIndex={activeWord} />;
-                })}
-              </div>
+              <FitBox className="h-[62vh] sm:h-[66vh]">
+                <div className="space-y-5">
+                  {slide?.blocks?.map((b, i) => {
+                    let off = 0;
+                    for (let k = 0; k < i; k++) off += countWords(blockToText(slide.blocks[k]));
+                    return <BlockRenderer key={i} block={b} wordOffset={off} activeWordIndex={activeWord} />;
+                  })}
+                </div>
+              </FitBox>
+
             </div>
           </motion.div>
         </AnimatePresence>
