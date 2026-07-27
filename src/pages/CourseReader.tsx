@@ -112,25 +112,15 @@ export default function CourseReader() {
   const customEntry = current ? entries[current.id] || "" : "";
   const readText = current ? [customEntry, current.narration].filter(Boolean).join(". ") : "";
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
-  const selectedVoice = useMemo(() => voices.find((voice) => voice.voiceURI === voiceURI) || null, [voiceURI, voices]);
+  const selectedVoice = useMemo(() => pickVoice(voices, prefs, "en"), [prefs, voices]);
   const readerBackground = courseSettings.lessonGraphicsEnabled ? (
     courseSettings.lessonVisualStyle === "particles" ? <ThreeParticleBackground className="fixed opacity-40" /> :
     courseSettings.lessonVisualStyle === "orbit" ? <ThreePageBackground className="fixed opacity-55" /> :
     <LessonTerrainBackground className="fixed opacity-35" />
   ) : null;
 
-  useEffect(() => {
-    if (!supported) return;
-    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
-  }, [supported]);
-
-  const updateVoice = (nextVoiceURI: string) => {
-    setVoiceURI(nextVoiceURI);
-    try { localStorage.setItem(READER_VOICE_KEY, nextVoiceURI); }
-    catch { /* ignore private-mode storage errors */ }
+  const updateVisualStyle = (lessonVisualStyle: LessonVisualStyle) => {
+    setCourseSettingsValue({ ...courseSettings, lessonGraphicsEnabled: true, lessonVisualStyle });
   };
 
   const updateVisualStyle = (lessonVisualStyle: LessonVisualStyle) => {
