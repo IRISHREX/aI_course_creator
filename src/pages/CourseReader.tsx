@@ -74,11 +74,8 @@ export default function CourseReader() {
   const rootRef = useRef<HTMLDivElement>(null);
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const readTokenRef = useRef(0);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceURI, setVoiceURI] = useState(() => {
-    try { return localStorage.getItem(READER_VOICE_KEY) || ""; }
-    catch { return ""; }
-  });
+  const voices = useSpeechVoices();
+  const [prefs] = useVoicePrefs();
   const [slideIndex, setSlideIndex] = useState(0);
   const [activeItem, setActiveItem] = useState(-1);
   const [slideSequence, setSlideSequence] = useState(0);
