@@ -358,9 +358,9 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
 
   if (b.type === "flowchart") {
     return (
-      <div className="glass mx-auto max-w-3xl rounded-xl p-3 sm:p-4">
+      <div className="glass mx-auto w-full max-w-3xl rounded-xl p-3 sm:p-4">
         {b.title && <div className="font-display font-bold mb-2">{b.title}</div>}
-        <div className="max-h-[360px] overflow-auto">
+        <div className="flex w-full items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto">
           <MermaidDiagram
             code={b.code || "graph TD\nA-->B"}
             isAdmin={isAdmin}
@@ -369,6 +369,7 @@ export function BlockRenderer({ block, wordOffset = 0, activeWordIndex, onWordCl
           />
         </div>
       </div>
+
     );
   }
 
