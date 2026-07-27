@@ -14,6 +14,45 @@ import { cn } from "@/lib/utils";
 
 interface Slide { blocks: any[] }
 
+/** Auto-scales its children to fit within the available height (never scrolls). */
+function FitBox({ children, className }: { children: React.ReactNode; className?: string }) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const outer = outerRef.current;
+    const inner = innerRef.current;
+    if (!outer || !inner) return;
+    const recompute = () => {
+      const availH = outer.clientHeight;
+      const availW = outer.clientWidth;
+      const contentH = inner.scrollHeight;
+      const contentW = inner.scrollWidth;
+      if (!availH || !contentH || !availW || !contentW) return;
+      const s = Math.min(1, availH / contentH, availW / contentW);
+      setScale(s > 0 ? s : 1);
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(outer);
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [children]);
+
+  return (
+    <div ref={outerRef} className={cn("relative flex w-full items-start justify-center overflow-hidden", className)}>
+      <div
+        ref={innerRef}
+        style={{ transform: `scale(${scale})`, transformOrigin: "top center", width: "100%" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+
 interface Props {
   open: boolean;
   onClose: () => void;
