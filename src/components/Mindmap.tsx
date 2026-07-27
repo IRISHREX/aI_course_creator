@@ -592,5 +592,5 @@ export function MermaidDiagram({
     );
   }
 
-  return <div ref={ref} className="w-full overflow-auto" dangerouslySetInnerHTML={svg ? { __html: svg } : undefined} />;
+  return <div ref={ref} className="w-full [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-h-full [&_svg]:max-w-full" dangerouslySetInnerHTML={svg ? { __html: svg } : undefined} />;
 }
