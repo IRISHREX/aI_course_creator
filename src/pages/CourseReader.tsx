@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, BookOpen, FileText, Gauge, ListTree, Maximize2, Minimize2, MonitorOff, MonitorPlay, Orbit, Pause, Play, Settings2, SkipBack, SkipForward, Sparkles, Square, Volume2 } from "lucide-react";
+import { ArrowLeft, BookOpen, FileText, Gauge, ListTree, Maximize2, Minimize2, MonitorOff, MonitorPlay, Orbit, Pause, Play, Settings2, SkipBack, SkipForward, Sparkles, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -17,6 +16,8 @@ import { SphericalLoader } from "@/components/SphericalLoader";
 import { LessonTerrainBackground } from "@/components/LessonTerrainBackground";
 import { ThreeParticleBackground } from "@/components/ThreeParticleBackground";
 import ThreePageBackground from "@/components/ThreePageBackground";
+import { VoiceSettingsPopover } from "@/components/VoiceSettingsPopover";
+import { useVoicePrefs, useSpeechVoices, pickVoice } from "@/lib/voicePrefs";
 import { useCourseSettings, type LessonVisualStyle } from "@/lib/appSettings";
 import { hasPresentation, type PresentationSlide } from "@/lib/lessonPresentation";
 
@@ -73,11 +74,8 @@ export default function CourseReader() {
   const rootRef = useRef<HTMLDivElement>(null);
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
   const readTokenRef = useRef(0);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceURI, setVoiceURI] = useState(() => {
-    try { return localStorage.getItem(READER_VOICE_KEY) || ""; }
-    catch { return ""; }
-  });
+  const voices = useSpeechVoices();
+  const [prefs] = useVoicePrefs();
   const [slideIndex, setSlideIndex] = useState(0);
   const [activeItem, setActiveItem] = useState(-1);
   const [slideSequence, setSlideSequence] = useState(0);
@@ -114,30 +112,19 @@ export default function CourseReader() {
   const customEntry = current ? entries[current.id] || "" : "";
   const readText = current ? [customEntry, current.narration].filter(Boolean).join(". ") : "";
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
-  const selectedVoice = useMemo(() => voices.find((voice) => voice.voiceURI === voiceURI) || null, [voiceURI, voices]);
+  const selectedVoice = useMemo(() => pickVoice(voices, prefs, "en"), [prefs, voices]);
   const readerBackground = courseSettings.lessonGraphicsEnabled ? (
     courseSettings.lessonVisualStyle === "particles" ? <ThreeParticleBackground className="fixed opacity-40" /> :
     courseSettings.lessonVisualStyle === "orbit" ? <ThreePageBackground className="fixed opacity-55" /> :
     <LessonTerrainBackground className="fixed opacity-35" />
   ) : null;
 
-  useEffect(() => {
-    if (!supported) return;
-    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
-  }, [supported]);
-
-  const updateVoice = (nextVoiceURI: string) => {
-    setVoiceURI(nextVoiceURI);
-    try { localStorage.setItem(READER_VOICE_KEY, nextVoiceURI); }
-    catch { /* ignore private-mode storage errors */ }
-  };
-
   const updateVisualStyle = (lessonVisualStyle: LessonVisualStyle) => {
     setCourseSettingsValue({ ...courseSettings, lessonGraphicsEnabled: true, lessonVisualStyle });
   };
+
+
+
 
   useEffect(() => {
     if (slideIndex > slides.length - 1) setSlideIndex(Math.max(slides.length - 1, 0));
@@ -314,41 +301,8 @@ export default function CourseReader() {
               <Link to={`/course/${course.slug}/topic/${current.topicSlug}`}><BookOpen className="h-4 w-4" /></Link>
             </Button>
           )}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white/70 hover:bg-white/10 hover:text-white" title="Narration voice settings" aria-label="Narration voice settings">
-                <Volume2 className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="end">
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-xs">Narration voice</Label>
-                  <Select value={voiceURI || "system"} onValueChange={(value) => updateVoice(value === "system" ? "" : value)} disabled={!supported}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="System default" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      <SelectItem value="system">System default</SelectItem>
-                      {voices.map((voice) => (
-                        <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
-                          {voice.name} ({voice.lang})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="flex justify-between text-xs">
-                    <span>Speed</span>
-                    <span className="font-mono text-primary">{speed.toFixed(2)}x</span>
-                  </Label>
-                  <Slider min={0.6} max={1.8} step={0.05} value={[speed]} onValueChange={(value) => setSpeed(value[0])} className="mt-2" />
-                </div>
-                {!supported && <p className="text-xs text-muted-foreground">Speech synthesis is not supported in this browser.</p>}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <VoiceSettingsPopover triggerClassName="text-white/70 hover:bg-white/10 hover:text-white" />
+
           <Popover>
             <PopoverTrigger asChild>
               <Button
