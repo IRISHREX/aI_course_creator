@@ -669,7 +669,7 @@ export default function TopicPage() {
               </Button>
             )}
           </div>
-          {(topic as TopicWithMindmap).mindmap ? <Mindmap data={(topic as TopicWithMindmap).mindmap} /> : (
+          {(topic as TopicWithMindmap).mindmap ? <Mindmap data={(topic as TopicWithMindmap).mindmap} fitView /> : (
             <p className="text-sm text-muted-foreground">No mind map yet{isAdmin ? " — click generate." : "."}</p>
           )}
         </div>

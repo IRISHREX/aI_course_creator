@@ -537,7 +537,7 @@ export default function CourseDetail() {
               </div>
             )}
           </div>
-          {mindmap ? <Mindmap data={mindmap} /> : (
+          {mindmap ? <Mindmap data={mindmap} fitView /> : (
             <p className="text-sm text-muted-foreground">No course mind map yet{isAdmin ? " — click generate." : "."}</p>
           )}
         </div>
