@@ -301,41 +301,8 @@ export default function CourseReader() {
               <Link to={`/course/${course.slug}/topic/${current.topicSlug}`}><BookOpen className="h-4 w-4" /></Link>
             </Button>
           )}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white/70 hover:bg-white/10 hover:text-white" title="Narration voice settings" aria-label="Narration voice settings">
-                <Volume2 className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="end">
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-xs">Narration voice</Label>
-                  <Select value={voiceURI || "system"} onValueChange={(value) => updateVoice(value === "system" ? "" : value)} disabled={!supported}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="System default" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      <SelectItem value="system">System default</SelectItem>
-                      {voices.map((voice) => (
-                        <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
-                          {voice.name} ({voice.lang})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="flex justify-between text-xs">
-                    <span>Speed</span>
-                    <span className="font-mono text-primary">{speed.toFixed(2)}x</span>
-                  </Label>
-                  <Slider min={0.6} max={1.8} step={0.05} value={[speed]} onValueChange={(value) => setSpeed(value[0])} className="mt-2" />
-                </div>
-                {!supported && <p className="text-xs text-muted-foreground">Speech synthesis is not supported in this browser.</p>}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <VoiceSettingsPopover triggerClassName="text-white/70 hover:bg-white/10 hover:text-white" />
+
           <Popover>
             <PopoverTrigger asChild>
               <Button
